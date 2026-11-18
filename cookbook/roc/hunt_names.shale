@@ -268,7 +268,9 @@
 --                 none, as for `List.map` (cookbook/roc/doc_names.shale).
 --                 An import is read the same way, and one whose names can't
 --                 be read leaves the file's bare names unjudged, as does a
---                 possessive before one (`roc-ray's`): it is another's.
+--                 possessive before one (`roc-ray's`): it is another's. A
+--                 platform's `provides` symbols (`roc_plan`) are its names,
+--                 and its bare `roc_` names (`roc_crashed`) the host's.
 --
 -- Each name is judged once: from its annotation when it has one, else from
 -- its definition. An effect that takes an effectful function (`map2!`,
@@ -921,11 +923,15 @@ function plant_doc_names()
   return known
 end
 const DOC_NAMES_SEEN = {known = SELF_TEST and plant_doc_names() or {}, by_module = {}, by_path = {}}
+-- Each file read is known by its path too, so `module_names` parses only
+-- a module beside one that the run didn't read.
 for file in parsed.files do
   local module = module_name(file.path)
   local names = get(DOC_NAMES_SEEN.by_module, module) or {}
-  for n in keys(names_in_tree(file.nodes)) do names[n] = true end
+  local own = names_in_tree(file.nodes)
+  for n in keys(own) do names[n] = true end
   DOC_NAMES_SEEN.by_module[module] = names
+  DOC_NAMES_SEEN.by_path[file.path] = {found = true, names = own}
 end
 for file in parsed.files do
   for found in stale_doc_findings(file.path, split(read(file.path), "\n"), file.nodes, DOC_NAMES_SEEN) do report(file.path, found.line, "stale_doc_name", found.why) end

@@ -53,12 +53,13 @@ function doc_names_in(src)
 end
 
 -- Every name a file's tree holds, as a set: what it declares, binds, calls,
--- and each record field and method it names, with and without an effect's
--- `!`.
+-- each record field and method it names, and each symbol a platform's
+-- `provides` gives the host (`"roc_plan": plan_for_host`), with and without
+-- an effect's `!`.
 function names_in_tree(nodes)
   local names = {}
   for n in nodes do
-    for key in {"raw", "name", "field", "method"} do
+    for key in {"raw", "name", "field", "method", "symbol"} do
       local v = get(n, key, "")
       if starts_with(v, ".") then v = sub(v, 2) end
       if v ~= "" then
@@ -110,7 +111,10 @@ end
 -- self-test's check names), and those of every module it imports
 -- (`module_names`), and is left when an import's names can't be known or a
 -- possessive names its owner; `Module.name` against that module's. The
--- file's own module may be named either way.
+-- file's own module may be named either way. A platform module's bare
+-- `roc_` name is the host's (`roc_crashed`, `roc_alloc`: the symbols Roc's
+-- host ABI has the host define, in Zig or C), which no Roc file holds, so
+-- it is not judged.
 function stale_doc_findings(path, src, nodes, seen)
   local out = {}
   local own = names_in_tree(nodes)
@@ -119,6 +123,10 @@ function stale_doc_findings(path, src, nodes, seen)
   local own_module = sub(base, 1, #base - 4)
   local imported = {}
   local all_imports_known = true
+  local is_platform = false
+  for n in nodes do
+    if n.kind == "platform" then is_platform = true end
+  end
   for module in imports_in_tree(nodes) do
     local names = module_names(dir, module, seen)
     if names == nil then all_imports_known = false else push(imported, names) end
@@ -127,7 +135,8 @@ function stale_doc_findings(path, src, nodes, seen)
   for d in doc_names_in(src) do
     local plain = ends_with(d.name, "!") and sub(d.name, 1, #d.name - 1) or d.name
     local names_something = false
-    local judged = not (d.module == "" and (d.others or not all_imports_known))
+    local host_symbol = is_platform and starts_with(plain, "roc_")
+    local judged = not (d.module == "" and (d.others or not all_imports_known or host_symbol))
     if d.module == "" or d.module == own_module then
       if has_key(own, d.name) or has_key(own, plain) or has_key(seen.known, plain) then names_something = true end
       if d.module == "" then
