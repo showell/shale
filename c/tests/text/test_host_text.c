@@ -183,15 +183,15 @@ TEST(flat_tree_reads_each_tools_header_as_its_own_and_refuses_another) {
                      "print(host(\"json_write\", host(\"roc_tree\", \"roc-ast flat 1\", \"whole\")), host(\"json_write\", host(\"roc_tree\", \"\", \"cut\")))\n"),
                ran_budgets());
     EXPECT_OK_IN(&x.r.ctx, x.ran);
-    EXPECT_STR(buf_view(&x.r.out), S("`roc_tree`: roc-ast's output line 1 is not a tree's: no `roc-ast flat 1` header: an older roc-ast, or not its --flat; Shale's `shale tools/roc_ast/install.shale` installs the one this Shale reads\n"
-                     "`roc_tree`: roc-ast's output line 1 is not a tree's: roc-ast's --flat is another format than 1, the one this Shale reads: Shale's `shale tools/roc_ast/install.shale` installs the matching roc-ast\n"
-                     "`roc_tree`: roc-ast's output line 1 is not a tree's: roc-ast's --flat is another format than 1, the one this Shale reads: Shale's `shale tools/roc_ast/install.shale` installs the matching roc-ast\n"
-                     "`roc_tree`: roc-ast's output line 3 is not a tree's: roc-ast's --flat is another format than 1, the one this Shale reads: Shale's `shale tools/roc_ast/install.shale` installs the matching roc-ast\n"
+    EXPECT_STR(buf_view(&x.r.out), S("`roc_tree`: roc-ast's output line 1 is not a tree's: no `roc-ast flat 1` header: an older roc-ast, or not its --flat; `shale install.shale` in a checkout of https://github.com/showell/roc-ast installs the one this Shale reads\n"
+                     "`roc_tree`: roc-ast's output line 1 is not a tree's: roc-ast's --flat is another format than 1, the one this Shale reads: `shale install.shale` in a checkout of https://github.com/showell/roc-ast installs the matching roc-ast\n"
+                     "`roc_tree`: roc-ast's output line 1 is not a tree's: roc-ast's --flat is another format than 1, the one this Shale reads: `shale install.shale` in a checkout of https://github.com/showell/roc-ast installs the matching roc-ast\n"
+                     "`roc_tree`: roc-ast's output line 3 is not a tree's: roc-ast's --flat is another format than 1, the one this Shale reads: `shale install.shale` in a checkout of https://github.com/showell/roc-ast installs the matching roc-ast\n"
                      "`go_tree`: go-ast's output line 1 is not a tree's: no `go-ast flat 1` header: an older go-ast, or not its --flat; Shale's `shale tools/go_ast/install.shale` installs the one this Shale reads\n"
                      "`go_tree`: go-ast's output line 1 is not a tree's: go-ast's --flat is another format than 1, the one this Shale reads: Shale's `shale tools/go_ast/install.shale` installs the matching go-ast\n"
                      "{\"files\":[{\"path\":\"/x/a.go\",\"nodes\":[{\"kind\":\"File\",\"depth\":0,\"parent\":0,\"kids\":[2],\"line\":1,\"col\":1,\"end_line\":3,\"end_col\":2},{\"kind\":\"Ident\",\"depth\":1,\"parent\":1,\"kids\":[],\"line\":1,\"col\":9,\"end_line\":1,\"end_col\":10,\"role\":\"Name\",\"name\":\"a\"}]}]}\n"
                      "{\"files\":[]}\t{\"files\":[]}\n"));
-    EXPECT_EQ(x.r.steps, 1786);
+    EXPECT_EQ(x.r.steps, 1906);
     ran_free(&x);
 }
 

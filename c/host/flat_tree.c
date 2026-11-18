@@ -2,8 +2,8 @@
 // The Linux prelude's `roc_tree(paths)` and `go_tree(paths)` run roc-ast or
 // go-ast and hand what it wrote to `host("roc_tree", out, ending)` or
 // `host("go_tree", out, ending)`; the two tools write one format, so one
-// reader takes both. The format's home is roc-ast's header
-// (tools/roc_ast/main.zig): a `<tool> flat 1 <version>` line, then `==
+// reader takes both. The format's home is roc-ast's FORMAT.md
+// (github.com/showell/roc-ast): a `<tool> flat 1 <version>` line, then `==
 // <path>` a file, and one fact a line, tab-separated, `n` a node (`parent`,
 // `kind` and its span) and `a` an attribute (its node, `name` and `value`),
 // with `\\`, `\t`, `\n` and `\r` escaped.
@@ -70,8 +70,8 @@ typedef struct {
 // The format this reader knows, as each tool's header says it.
 #define FLAT_FORMAT "1"
 
-// The tool's program, the builtin that reads it and the script that installs
-// it, as its messages name them: Zig's `Tool.program`, `builtin`, `install`.
+// The tool's program, the builtin that reads it and how it is installed, as
+// its messages name them: Zig's `Tool.program`, `builtin`, `install`.
 typedef struct {
     Str program;
     Str builtin;
@@ -82,12 +82,12 @@ static void flat_names(FlatTool tool, FlatNames *out) {
     if (tool == FLAT_ROC) {
         out->program = S("roc-ast");
         out->builtin = S("roc_tree");
-        out->install = S("tools/roc_ast/install.shale");
+        out->install = S("`shale install.shale` in a checkout of https://github.com/showell/roc-ast");
         return;
     }
     out->program = S("go-ast");
     out->builtin = S("go_tree");
-    out->install = S("tools/go_ast/install.shale");
+    out->install = S("Shale's `shale tools/go_ast/install.shale`");
 }
 
 // The names a node's own fields take, which no attribute may.
@@ -303,18 +303,18 @@ static STATUS_MUST_USE Status flat_header_why(Arena *a, FlatTool tool, bool anot
     Buf b = buf_make(a);
     if (another) {
         TRY(buf_str(&b, n.program));
-        TRY(buf_lit(&b, "'s --flat is another format than " FLAT_FORMAT ", the one this Shale reads: Shale's `shale "));
+        TRY(buf_lit(&b, "'s --flat is another format than " FLAT_FORMAT ", the one this Shale reads: "));
         TRY(buf_str(&b, n.install));
-        TRY(buf_lit(&b, "` installs the matching "));
+        TRY(buf_lit(&b, " installs the matching "));
         TRY(buf_str(&b, n.program));
     } else {
         TRY(buf_lit(&b, "no `"));
         TRY(buf_str(&b, n.program));
         TRY(buf_lit(&b, " flat " FLAT_FORMAT "` header: an older "));
         TRY(buf_str(&b, n.program));
-        TRY(buf_lit(&b, ", or not its --flat; Shale's `shale "));
+        TRY(buf_lit(&b, ", or not its --flat; "));
         TRY(buf_str(&b, n.install));
-        TRY(buf_lit(&b, "` installs the one this Shale reads"));
+        TRY(buf_lit(&b, " installs the one this Shale reads"));
     }
     *why = buf_view(&b);
     return OK;

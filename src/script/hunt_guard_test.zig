@@ -40,8 +40,8 @@ test "hunt guard: a skip anywhere, or a hunt outside the hunt files, is found wi
     try testing.expectEqual(@as(?Finding, null), finding("src/script/fuzz_test.zig", hunt_test ++ " fuzz: x\" {}\n", hunts));
 }
 
-/// A build's output, not a source: tools/roc_ast's own build fetches Roc and
-/// its packages beside it (zig-pkg) and caches there, as .gitignore says.
+/// A build's output, not a source: a tool's own Zig build fetches its
+/// packages beside it (zig-pkg) and caches there, as .gitignore says.
 fn buildOutput(path: []const u8) bool {
     var it = std.mem.splitScalar(u8, path, '/');
     while (it.next()) |part| {

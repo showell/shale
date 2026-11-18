@@ -1,12 +1,12 @@
 //! `roc_tree`'s and `go_tree`'s reading: the `--flat` output of roc-ast
-//! (Shale's tools/roc_ast, Roc's own parser's tree) or of go-ast (Shale's
+//! (github.com/showell/roc-ast, Roc's own parser's tree) or of go-ast (Shale's
 //! tools/go_ast, Go's go/parser), turned into nodes, so a recipe walks a
 //! list. The prelude's `roc_tree(paths)` and `go_tree(paths)` run the tool
 //! and call `host("roc_tree", out, ending)` or `host("go_tree", out, ending)` with what it
 //! wrote. The two tools write one format, so one reader takes both.
 //!
-//! **THE FORMAT** (tools/roc_ast/main.zig and tools/go_ast/main.go say how
-//! each is made): first `<tool> flat 1 <its version>`, the tool the one
+//! **THE FORMAT** (roc-ast's FORMAT.md, github.com/showell/roc-ast, and
+//! tools/go_ast/main.go say how each is made): first `<tool> flat 1 <its version>`, the tool the one
 //! called and the number the one this reader knows (`flat_format`), else
 //! refused, naming the fix; `== <path>` starts a file;
 //! then one fact a line, tab-separated:
@@ -101,7 +101,8 @@ fn unescape(a: std.mem.Allocator, s: []const u8) error{ OutOfMemory, Bad }![]con
 const flat_format = "1";
 
 /// A tool that writes the format: its name in the header, the builtin that
-/// reads it and the script that installs it.
+/// reads it and how it is installed: go-ast by Shale's own script, roc-ast
+/// from a checkout of its own repository.
 pub const Tool = enum {
     roc,
     go,
@@ -115,7 +116,10 @@ pub const Tool = enum {
     }
 
     inline fn install(comptime tool: Tool) []const u8 {
-        return "tools/" ++ @tagName(tool) ++ "_ast/install.shale";
+        return switch (tool) {
+            .roc => "`shale install.shale` in a checkout of https://github.com/showell/roc-ast",
+            .go => "Shale's `shale tools/go_ast/install.shale`",
+        };
     }
 };
 
@@ -144,9 +148,9 @@ pub fn parseFlat(a: std.mem.Allocator, text: []const u8, comptime tool: Tool, en
         if (!header) {
             // Whose format, before anything is read as a tree.
             const said = tool.program() ++ " flat ";
-            if (!std.mem.startsWith(u8, raw, said)) return .{ .bad = .{ .line = n, .why = "no `" ++ tool.program() ++ " flat 1` header: an older " ++ tool.program() ++ ", or not its --flat; Shale's `shale " ++ tool.install() ++ "` installs the one this Shale reads" } };
+            if (!std.mem.startsWith(u8, raw, said)) return .{ .bad = .{ .line = n, .why = "no `" ++ tool.program() ++ " flat 1` header: an older " ++ tool.program() ++ ", or not its --flat; " ++ tool.install() ++ " installs the one this Shale reads" } };
             var words = std.mem.splitScalar(u8, raw[said.len..], ' ');
-            if (!std.mem.eql(u8, words.first(), flat_format)) return .{ .bad = .{ .line = n, .why = tool.program() ++ "'s --flat is another format than 1, the one this Shale reads: Shale's `shale " ++ tool.install() ++ "` installs the matching " ++ tool.program() } };
+            if (!std.mem.eql(u8, words.first(), flat_format)) return .{ .bad = .{ .line = n, .why = tool.program() ++ "'s --flat is another format than 1, the one this Shale reads: " ++ tool.install() ++ " installs the matching " ++ tool.program() } };
             header = true;
             continue;
         }

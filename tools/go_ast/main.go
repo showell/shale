@@ -2,7 +2,7 @@
 // sees it, one fact a line for a program: Shale's `go_tree` reads it. The
 // paths come on stdin, one a line; the one argument is --flat.
 //
-// The format is roc-ast's --flat (tools/roc_ast/main.zig), so one reader in
+// The format is roc-ast's --flat (FORMAT.md in github.com/showell/roc-ast), so one reader in
 // Shale's host takes both. The first line says the format and whose parser:
 // `go-ast flat 1 <go version>`; a change a reader must know of is a new
 // number. Then, for each path, `== <path>` and its nodes:

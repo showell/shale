@@ -154,7 +154,7 @@
   grep_all(p, lit)  opts: -  host: -
   grep_tree_file(p, size, needle, regex, nocase)  opts: -  host: -
   grep_tree_skip(e, rest, exts, name_like)  opts: -  host: -
-  grep_tree(place, needle, opts?)  opts: -  host: -
+  grep_tree(place, needle, opts?)  opts: -  host: grep_tree
   path_under(dir, name)  opts: -  host: -
   fresh_dir(parent, prefix)  opts: -  host: -
   newest(p, n)  opts: -  host: -
@@ -799,7 +799,7 @@
   argument   a `for` with a step of 0 never ends
   type       a list cannot hold nil
   type       a map cannot hold nil
-### the preludes' `fail`s (74)
+### the preludes' `fail`s (75)
   fail  `assert`: its first argument must be true or false, not {expr}    [the prelude's assert]
   fail  `copy`: {expr} is a symbolic link, which the store never follows; nothing was copied    [the Linux prelude's copy]
   fail  `copy`: {expr} is already there, and a copy never overwrites (`remove_tree` it first)    [the Linux prelude's copy]
@@ -859,6 +859,7 @@
   fail  {expr}: conflicts in {expr}; the merge is undone    [the git prelude's git_merge]
   fail  {expr}: its repo is a path (a string), such as \"\" or \"repos:roc-chat\"    [the git prelude's git_real]
   fail  {expr}: no {expr}: Shale's `shale tools/{expr}_ast/install.shale` builds it    [the Linux prelude's flat_tool_trees]
+  fail  {expr}: no {expr}: `shale install.shale` in a checkout of https://github.com/showell/roc-ast installs it    [the Linux prelude's flat_tool_trees]
   fail  {expr}: {expr} exited 0 and printed past its trees: {expr}    [the Linux prelude's flat_tool_trees]
   fail  {expr}: {expr} exited 0 with {expr} paths unread    [the Linux prelude's flat_tool_trees]
   fail  {expr}: {expr} is not a folder    [the git prelude's git_real]
@@ -1249,4 +1250,4 @@
 
 ## The counts
   builtins 77, host calls 22, prelude functions 93
-  stop texts 602, refusal texts 66, budgets 16 (15 a stop names), flags 11
+  stop texts 603, refusal texts 66, budgets 16 (15 a stop names), flags 11

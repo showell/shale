@@ -315,9 +315,10 @@ run on their own.
 
 ## Tools the recipes need
 
-- roc-ast, Roc's own parser, gives the recipes their syntax trees through
-  Shale's `roc_tree`. Install it with `shale tools/roc_ast/install.shale`,
-  run from the shale checkout.
+- [roc-ast](https://github.com/showell/roc-ast), Roc's own parser, gives
+  the recipes their syntax trees through Shale's `roc_tree`. Its source is
+  a repo of its own; install it by running `shale install.shale` in a
+  checkout of that repo. It lands at `~/tools/roc-ast/bin/roc-ast`.
 - [roc-types](https://github.com/showell/roc-types) gives the types. Its
   source is a repo of its own; install it by running `shale install.shale`
   in a checkout of that repo. It lands at `~/tools/roc-types/bin/roc-types`.

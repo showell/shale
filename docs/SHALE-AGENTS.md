@@ -384,8 +384,9 @@ has none of it):
   or the program `SHALE_ZIG_AST` names, as Shale's own tests do; without
   either a Zig call stops, saying how to install it.
   `roc_tree(paths)` is Roc's own parser's tree of each file, in order:
-  `{path, nodes, err}`, from roc-ast (Shale's `tools/roc_ast`,
-  installed under the `tools` mount as `roc-ast/bin/roc-ast`), its `--flat`
+  `{path, nodes, err}`, from [roc-ast](https://github.com/showell/roc-ast),
+  a repo of its own whose FORMAT.md is the format's home (installed by that
+  repo's install.shale under the `tools` mount as `roc-ast/bin/roc-ast`), its `--flat`
   lines read in the host, every string whole however it is quoted. A node is
   `{kind, depth, parent, kids, line, col, end_line, end_col}` and the
   attributes Roc's tree gives it, by their names (`raw`, `name`, `method`,

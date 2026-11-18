@@ -57,10 +57,10 @@ runs:
         echo "$HOME/zig-${{ steps.zig.outputs.version }}" >> "$GITHUB_PATH"
 
     # The roc_tree tests and the Roc recipes' self-tests read Roc's parser's
-    # tree from ~/tools/roc-ast/bin/roc-ast (its --flat): roc-apps's release
-    # asset, built from Shale's tools/roc_ast at roc-chat's pin (8 MB,
-    # static, baseline CPU), its checksum checked, so it always runs here;
-    # without it the tests fail, never skip.
+    # tree from ~/tools/roc-ast/bin/roc-ast (its --flat): the asset that
+    # github.com/showell/roc-ast's `release` names, published in roc-apps's
+    # toolchain release (8 MB, static, baseline CPU), its checksum checked,
+    # so it always runs here; without it the tests fail, never skip.
     - name: Install roc-ast
       shell: bash
       run: |
