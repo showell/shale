@@ -261,7 +261,7 @@ TEST(secrets_mounts_the_mounts_file_s_mistakes_name_the_line_and_the_mount_never
         Mounts out;
         EXPECT_EQ(mounts_parse(&a, sx_cs(at(bads, i).text), S("/home/x"), &out, &why), MOUNTS_MALFORMED);
         EXPECT_STR(why, sx_cs(at(bads, i).says));
-        EXPECT(memmem(why.ptr, why.len, "planted", strlen("planted")) == NULL);
+        EXPECT(mem_find(why.ptr, why.len, "planted", strlen("planted")) == SIZE_MAX);
     }
     arena_deinit(&a);
 }
@@ -352,9 +352,9 @@ TEST(an_absolute_path_s_stop_a_path_in_a_secrets_mount_s_folder_names_neither_th
         EXPECT(fx_stopped(&f, s, CLASS_ARGUMENT, S(PLAIN)));
         Str m = f.ctx.stop.message;
         EXPECT(str_eq(str_sub(m, m.len - strlen(PLAIN), m.len), S(PLAIN)));
-        EXPECT(memmem(m.ptr, m.len, "vault", 5) == NULL);
-        EXPECT(memmem(m.ptr, m.len, "outer", 5) == NULL);
-        EXPECT(memmem(m.ptr, m.len, "so write", 8) == NULL);
+        EXPECT(mem_find(m.ptr, m.len, "vault", 5) == SIZE_MAX);
+        EXPECT(mem_find(m.ptr, m.len, "outer", 5) == SIZE_MAX);
+        EXPECT(mem_find(m.ptr, m.len, "so write", 8) == SIZE_MAX);
     }
     // Beside the secrets folder, the mount above it is named as ever.
     EXPECT(fx_said(&f, fx_look(&f, "read", SAYS("R/scr/notes.txt")), CLASS_ARGUMENT, SAYS("`read`: \"R/scr/notes.txt\" is absolute: it's under the mount `outer:`, so write \"outer:notes.txt\"")));
@@ -485,7 +485,7 @@ TEST(the_store_follows_no_link_to_a_file_to_a_folder_in_the_middle_in_a_mount_ou
 static bool fx_names_keys(Fx *f) {
     Str dir = sx_at(&f->base, "keys");
     Str m = f->ctx.stop.message;
-    return memmem(m.ptr, m.len, dir.ptr, dir.len) != NULL;
+    return mem_find(m.ptr, m.len, dir.ptr, dir.len) != SIZE_MAX;
 }
 
 TEST(secrets_mounts_no_read_listing_change_path_or_argument_reaches_a_token_by_the_mount_or_another_way) {
@@ -838,7 +838,7 @@ TEST(undo_the_journal_s_own_allocations_failing_at_each_stop_the_run_on_memory) 
             done = true;
         } else if (f.ctx.stop.cls == CLASS_STORE) {
             // A failed read of a.txt's bytes is the store's, named.
-            EXPECT(memmem(f.ctx.stop.message.ptr, f.ctx.stop.message.len, "a.txt cannot be read (OutOfMemory)", 34) != NULL);
+            EXPECT(mem_find(f.ctx.stop.message.ptr, f.ctx.stop.message.len, "a.txt cannot be read (OutOfMemory)", 34) != SIZE_MAX);
             store_stops++;
         } else {
             // Any other failure is the arena's budget.

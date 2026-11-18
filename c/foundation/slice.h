@@ -158,7 +158,7 @@ static inline uint8_t str_byte(Str s, size_t i) {
 // A mem* call on a NULL pointer is undefined in C17 even for 0 bytes, and
 // glibc marks the arguments nonnull, so GCC may take the pointer as not NULL
 // and delete a later check of it. An empty Str or slice may hold NULL, so
-// no code outside c/foundation calls memcpy, memmove, memcmp or memchr
+// no code outside c/foundation calls memcpy, memmove, memcmp, memchr or memmem
 // (c/check_discipline.shale's `raw mem` rule): it calls these, which make no
 // call for 0 bytes, and each raw call left in c/foundation has a DRAGON.
 
@@ -195,6 +195,27 @@ static inline const char *mem_find_byte(const void *p, int c, size_t n) {
     // REMEDY: as mem_copy's, a call for 0 bytes returns above.
     return memchr(p, c, n);
 }
+
+// memmem is a GNU extension, declared only to a unit that defines
+// _GNU_SOURCE before its first include, as every unit that searches for a
+// run of bytes does (c/shale.c, c/tests/ran_tests.c, the host's tests).
+#ifdef _GNU_SOURCE
+// Where the `needle_len` bytes at `needle` first are in the `hay_len` bytes
+// at `hay`, as an offset from `hay`, or SIZE_MAX when they are not there. An
+// empty needle is at 0, in an empty haystack too, as memmem finds one; a
+// needle longer than the haystack is nowhere. Either may be NULL when its
+// length is 0.
+static inline size_t mem_find(const void *hay, size_t hay_len, const void *needle, size_t needle_len) {
+    if (needle_len == 0) return 0;
+    if (needle_len > hay_len) return SIZE_MAX;
+    // DRAGON: NULL pointers. memmem is undefined on a NULL pointer, and glibc
+    // marks its arguments nonnull.
+    // REMEDY: both lengths are past 0 here, as mem_copy's are, so neither
+    // pointer is NULL.
+    const char *hit = memmem(hay, hay_len, needle, needle_len);
+    return hit == NULL ? SIZE_MAX : (size_t)(hit - (const char *)hay);
+}
+#endif
 
 static inline bool str_eq(Str a, Str b) {
     // DRAGON: NULL pointers. An empty Str may hold NULL, which memcmp may

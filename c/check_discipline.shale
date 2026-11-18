@@ -12,9 +12,10 @@
 --               c/foundation/, where each such call has a `DRAGON:` in the
 --               comment block above it; a checked part (`&at(s, i)`, a
 --               SLICE_SUB's `ptr`) needs neither;
---   raw mem:    no `memcpy(`, `memmove(`, `memcmp(` or `memchr(` outside
---               c/foundation/: slice.h's mem_copy, mem_move, mem_compare,
---               mem_find_byte and str_find_byte make no call for 0 bytes, so
+--   raw mem:    no `memcpy(`, `memmove(`, `memcmp(`, `memchr(` or `memmem(`
+--               outside c/foundation/: slice.h's mem_copy, mem_move,
+--               mem_compare, mem_find_byte, str_find_byte and mem_find make
+--               no call for 0 bytes, so
 --               no NULL an empty Str holds reaches one (undefined in C17, and
 --               glibc's nonnull lets GCC delete a later NULL check); inside
 --               it, each raw call has a `DRAGON:` in the comment block above;
@@ -113,8 +114,8 @@ const ALLOC = [=[\b(malloc|free|calloc|realloc|aligned_alloc|strdup|strndup)\s*\
 const INDEX = [=[[\w)\]]\s*\[]=]
 const PTR_SUM = [=[\*\s*\(\s*[A-Za-z_][A-Za-z0-9_.>-]*ptr\s*\+]=]
 const ARRAY_DECL = [=[\b(int|char|bool|size_t|uintptr_t|u?int\d+_t|[A-Z]\w*)(\s+\**\s*(?:const\s+)?\w+)\s*\[[^\]]*\]]=]
-const MEM_CALL = [=[\bmem(cpy|move|set|cmp|_copy|_move|_compare)\s*\(]=]
-const RAW_MEM = [=[\bmem(cpy|move|cmp|chr)\s*\(]=]
+const MEM_CALL = [=[\bmem(cpy|move|set|cmp|mem|_copy|_move|_compare|_find)\s*\(]=]
+const RAW_MEM = [=[\bmem(cpy|move|cmp|chr|mem)\s*\(]=]
 const SLICE_CALL = [=[\bSLICE_SUB\s*\(]=]
 const STATUS_FN = [=[\bstatic\s+(inline\s+)?Status\s+[\w#]+\s*\(]=]
 const CHAR_PARAM = [=[[(,]\s*(const\s+)?char\s*\*\s*\w+\s*[,)]]=]
@@ -1072,7 +1073,7 @@ TEST_MAIN(
     "11 brace", "11 top level", "12 brace", "13 tab", "13 top level", "14 comment", "15 top level", "16 top level", "16 inline", "17 one per line", "17 wrapped"}
   caught = caught + plants_hold(p, false, want)
   local outside = dir .. "/outside.h"
-  create(outside, [=[// outside.h: the plants: lines 4 to 11 and 22 to 24 break one or two each.
+  create(outside, [=[// outside.h: the plants: lines 4 to 11 and 22 to 26 break one or two each.
 #ifndef SHALE_OUTSIDE_H
 #define SHALE_OUTSIDE_H
 static inline uint32_t first_slot(MapCore *m) { return m->index[0]; }
@@ -1096,14 +1097,16 @@ static inline char declared(void) { char cs[4] = {0}; Bytes all = {cs, 4}; retur
 static inline bool raw_find(Str s) { return memchr(s.ptr, 'x', s.len) != NULL; }
 static inline int raw_compare(Str a, Str b) { return memcmp(a.ptr, b.ptr, a.len); }
 static inline void raw_copy(Bytes d, Str s) { memcpy(d.ptr, s.ptr, s.len); }
-static inline bool guarded(Str s) { return mem_find_byte(s.ptr, 'x', s.len) != NULL && mem_compare(s.ptr, s.ptr, s.len) == 0; }
+static inline bool raw_search(Str a, Str b) { return memmem(a.ptr, a.len, b.ptr, b.len) != NULL; }
+static inline size_t found_past(Str a, Str b) { return mem_find(a.ptr + 1, a.len - 1, b.ptr, b.len); }
+static inline bool guarded(Str s) { return mem_find_byte(s.ptr, 'x', s.len) != NULL && mem_compare(s.ptr, s.ptr, s.len) == 0 && mem_find(s.ptr, s.len, "x", 1) != SIZE_MAX; }
 // A comment's memcpy(a, b, n) and a string's are no call: "memchr(p, 0, n)".
 static inline Str said_mem(void) { return S("memmove(a, b, n)"); }
 #endif
 ]=])
-  caught = caught + plants_hold(outside, false, {"4 raw index", "5 raw index", "6 mem arithmetic", "6 raw mem", "7 slice args", "8 slice args", "9 slice args", "10 must use", "11 fail brace", "22 raw mem", "23 raw mem", "24 raw mem"})
+  caught = caught + plants_hold(outside, false, {"4 raw index", "5 raw index", "6 mem arithmetic", "6 raw mem", "7 slice args", "8 slice args", "9 slice args", "10 must use", "11 fail brace", "22 raw mem", "23 raw mem", "24 raw mem", "25 raw mem", "26 mem arithmetic"})
   local inside = dir .. "/inside.h"
-  create(inside, [=[// inside.h: the foundation's mem plants: lines 4 and 8 break, 7 passes.
+  create(inside, [=[// inside.h: the foundation's mem plants: lines 4, 8 and 9 break, 7 passes.
 #ifndef SHALE_INSIDE_H
 #define SHALE_INSIDE_H
 static inline void shift(uint64_t *xs, size_t n) { memmove(xs, xs + 1, n); }
@@ -1111,9 +1114,10 @@ static inline void shift(uint64_t *xs, size_t n) { memmove(xs, xs + 1, n); }
 // REMEDY: the self-test writes it, and nothing calls it.
 static inline void marked(uint64_t *xs, size_t n) { memmove(xs, xs + 1, n); }
 static inline void unmarked(uint64_t *xs, size_t n) { memcpy(xs, xs, n); }
+static inline bool unmarked_search(Str a, Str b) { return memmem(a.ptr, a.len, b.ptr, b.len) != NULL; }
 #endif
 ]=])
-  caught = caught + plants_hold(inside, true, {"4 mem arithmetic", "4 raw mem", "8 raw mem"})
+  caught = caught + plants_hold(inside, true, {"4 mem arithmetic", "4 raw mem", "8 raw mem", "9 raw mem"})
   local statics = dir .. "/statics.c"
   create(statics, [=[// statics.c: the static-state rule's plants: lines 2, 3, 4, 6 and 9 break it.
 static int count;

@@ -206,8 +206,9 @@ static STATUS_MUST_USE Status change_replaced(Run *r, Pos pos, Spans *spans, siz
 static size_t change_index_of(Str hay, size_t from, Str needle) {
     if (from > hay.len || needle.len > hay.len - from) return SIZE_MAX;
     if (needle.len == 0) return from;
-    const char *hit = memmem(&at(hay, from), hay.len - from, needle.ptr, needle.len);
-    return hit != NULL ? (size_t)(hit - hay.ptr) : SIZE_MAX;
+    Str rest = str_sub(hay, from, hay.len);
+    size_t hit = mem_find(rest.ptr, rest.len, needle.ptr, needle.len);
+    return hit != SIZE_MAX ? from + hit : SIZE_MAX;
 }
 
 static Str change_trim(Str s) {

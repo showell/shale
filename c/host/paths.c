@@ -596,7 +596,7 @@ typedef enum {
 // Each spelling tried is charged a step.
 static STATUS_MUST_USE Status paths_names_folder(PathRun *r, Pos pos, Str arg, Str cwd, Str dir, PathsNames *out) {
     *out = PATHS_NAMES_NONE;
-    if (dir.len == 0 || memmem(arg.ptr, arg.len, dir.ptr, dir.len) != NULL) {
+    if (dir.len == 0 || mem_find(arg.ptr, arg.len, dir.ptr, dir.len) != SIZE_MAX) {
         *out = PATHS_NAMES_INSIDE;
         return OK;
     }

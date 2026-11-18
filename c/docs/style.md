@@ -145,9 +145,11 @@ and its self-test plants a break of each one.
 - **Held:** a `mem*` call has no `+` or `-` in its arguments outside
   `c/foundation/`, and inside it only under a `DRAGON:` comment. A checked
   part, `&at(s, i)` or a `SLICE_SUB`'s `ptr`, needs neither.
-- **Held:** no `memcpy(`, `memmove(`, `memcmp(` or `memchr(` outside
-  `c/foundation/`: slice.h's `mem_copy`, `mem_move`, `mem_compare`,
-  `mem_find_byte` and `str_find_byte` make no call for 0 bytes. A mem* call
+- **Held:** no `memcpy(`, `memmove(`, `memcmp(`, `memchr(` or `memmem(`
+  outside `c/foundation/`: slice.h's `mem_copy`, `mem_move`, `mem_compare`,
+  `mem_find_byte`, `str_find_byte` and `mem_find` make no call for 0 bytes.
+  `mem_find`, memmem's, is there only for a unit that defines `_GNU_SOURCE`
+  before its first include, since memmem is a GNU extension. A mem* call
   on NULL is undefined in C17 even for 0 bytes, an empty Str may hold NULL,
   and glibc marks the arguments nonnull, so GCC may delete a later NULL
   check. Inside the foundation each raw call has a `DRAGON:` above it.

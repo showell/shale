@@ -133,7 +133,7 @@ static bool fx_stopped(Fx *f, Status s, StopClass cls, Str says) {
         return false;
     }
     Str m = f->ctx.stop.message;
-    bool holds = says.len == 0 || memmem(m.ptr, m.len, says.ptr, says.len) != NULL;
+    bool holds = says.len == 0 || mem_find(m.ptr, m.len, says.ptr, says.len) != SIZE_MAX;
     Str cname = stop_class_name(f->ctx.stop.cls);
     if (f->ctx.stop.cls != cls || !holds) {
         fprintf(stderr, "  stopped as %.*s: %.*s\n  wanted: %.*s\n", (int)cname.len, cname.ptr, (int)m.len, m.ptr, (int)says.len, says.ptr);

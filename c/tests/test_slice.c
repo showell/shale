@@ -2,6 +2,9 @@
 // build, and evaluates its index once; `str_sub` holds both ends; the Str
 // helpers answer both ways.
 
+// mem_find is memmem's guard, and memmem is declared only under
+// _GNU_SOURCE, before the first include.
+#define _GNU_SOURCE
 #include "test.h"
 
 #include "slice.h"
@@ -153,6 +156,24 @@ TEST(str_find_byte_finds_the_first_and_never_searches_a_null) {
     EXPECT(str_find_byte(S(""), 'a') == NULL);
 }
 
+TEST(mem_find_finds_the_first_and_never_searches_a_null) {
+    Str s = S("abcabc");
+    EXPECT_EQ(mem_find(s.ptr, s.len, "bc", 2), 1);
+    EXPECT_EQ(mem_find(s.ptr, s.len, "abc", 3), 0);
+    EXPECT_EQ(mem_find(s.ptr, s.len, "cab", 3), 2);
+    EXPECT_EQ(mem_find(s.ptr, s.len, "abcabc", 6), 0);
+    EXPECT_EQ(mem_find(s.ptr, s.len, "abcabcd", 7), SIZE_MAX);
+    EXPECT_EQ(mem_find(s.ptr, s.len, "x", 1), SIZE_MAX);
+    EXPECT_EQ(mem_find("a\0b", 3, "\0b", 2), 1);
+    // An empty needle is at 0, as memmem finds one, in an empty haystack
+    // too; and memmem on NULL is undefined even for 0 bytes, which UBSan
+    // flags: an empty Str may hold NULL, so the guard never searches one.
+    EXPECT_EQ(mem_find(s.ptr, s.len, NULL, 0), 0);
+    EXPECT_EQ(mem_find(NULL, 0, NULL, 0), 0);
+    EXPECT_EQ(mem_find(NULL, 0, "a", 1), SIZE_MAX);
+    EXPECT_EQ(mem_find("", 0, "a", 1), SIZE_MAX);
+}
+
 TEST(str_byte_reads_bytes_unsigned) {
     EXPECT_EQ(str_byte(S("\xff"), 0), 255);
     EXPECT_TRAPS((void)str_byte(S("a"), 1));
@@ -183,6 +204,7 @@ TEST_MAIN(
     TEST_CASE(SLICE_SUB_keeps_the_type_and_its_bounds),
     TEST_CASE(str_eq_and_starts_with_answer_both_ways),
     TEST_CASE(str_find_byte_finds_the_first_and_never_searches_a_null),
+    TEST_CASE(mem_find_finds_the_first_and_never_searches_a_null),
     TEST_CASE(str_byte_reads_bytes_unsigned),
     TEST_CASE(c_bug_ends_the_process_and_a_count_below_zero_is_one)
 )

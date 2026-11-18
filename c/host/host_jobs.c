@@ -390,7 +390,7 @@ static STATUS_MUST_USE Status host_scan_look(HostScan *s, Arena *sa, Run *r, Pos
             close(fd);
             return charged;
         }
-        if (n >= c.len && memmem(s->buf.ptr, n, c.ptr, c.len) != NULL) {
+        if (n >= c.len && mem_find(s->buf.ptr, n, c.ptr, c.len) != SIZE_MAX) {
             close(fd);
             *found = true;
             return OK;
