@@ -68,8 +68,9 @@
 -- It reads each compiler's version first. A compiler that is missing fails the
 -- run, loud, after everything it can run has run.
 --
--- `binary=release|tcc to=<OS path>` builds the C `shale` alone, no tier
--- (c/build/binary.shale): what bench/baseline.shale times.
+-- `binary=release|tcc to=<path>` builds the C `shale` alone, no tier
+-- (c/build/binary.shale): what bench/baseline.shale times. `to` is a Shale
+-- path (`scratch:x/shale`, `c/out/x/shale`), or an absolute OS path.
 --
 -- `refreeze=<block>/<name>,...` (or `<block>`) writes the named scripts'
 -- frozen outputs (c/tests/frozen, lib.shale's "Frozen outputs") from the
@@ -206,14 +207,21 @@ function run_block(b, args, mounts, quiet)
 end
 
 -- `binary=release` or `binary=tcc` builds the C `shale` alone, installed at
--- `to` (an OS path), and runs no tier: bench/baseline.shale's release and
--- debug builds (c/build/binary.shale).
+-- `to`, and runs no tier: bench/baseline.shale's release and debug builds
+-- (c/build/binary.shale). `to` is a Shale path, through this run's mounts
+-- (the block's own are only `build`, `cookbook` and `tools`), or an absolute
+-- OS path, as bench/baseline.shale's `{prefix}` is; the block is handed the
+-- OS path.
 local binary = arg("binary", "")
+local to = arg("to", "")
 if binary ~= "" then
   if binary == "tcc" and tcc == nil then fail("binary=tcc: tcc is not installed (`sudo apt install tcc`)") end
-  run_block("binary", {"build=" .. binary, "to=" .. arg("to", "")}, mounts, false)
+  if to == "" then fail("binary=" .. binary .. ": `to=` names where the binary goes, a Shale path (`scratch:x/shale`) or an absolute OS path") end
+  if not starts_with(to, "/") then to = real(to) end
+  run_block("binary", {"build=" .. binary, "to=" .. to}, mounts, false)
   return nil
 end
+if to ~= "" then fail("to=" .. to .. ": only with `binary=release` or `binary=tcc`") end
 
 local said_full = "0"
 if full then said_full = "1" end

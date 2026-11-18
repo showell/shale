@@ -4,7 +4,8 @@
 -- `binary=`, with the `build` mount that `use` below reads.
 --
 -- `build` is `release` (GCC -O2) or `tcc`; `to` is the OS path the binary is
--- copied to, its folders made. The preludes are written first, as the
+-- copied to, its folders made: c/build.shale turns its own `to=`, a Shale
+-- path or an absolute one, into it. The preludes are written first, as the
 -- command's block writes them, and the compile is that block's own argv
 -- (lib.shale's `command_argv`), so the binary is the one the build makes.
 -- budget: programs=20
