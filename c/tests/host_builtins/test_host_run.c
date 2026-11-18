@@ -233,7 +233,26 @@ TEST(job_calls_refuse_each_bad_call_with_its_message) {
     ran_free(&x);
 }
 
-TEST_PART(host_run, TEST_CASE(run_keeps_the_head_and_tail_and_answers_every_field), TEST_CASE(run_charges_its_output_a_step_per_16_bytes),
+TEST(run_keeps_a_line_of_4096_bytes_whole_unset_and_cuts_one_past_it) {
+    // The default width, 4 KiB: a line exactly that long comes back whole,
+    // one byte longer keeps both ends and says the byte left out, and a
+    // `width` given still cuts where it says.
+    static Ran x;
+    ran_source(&x, S("local s = \"\"\nfor i = 1, 4095 do s = s .. \"x\" end\ns = s .. \"P\"\n"
+                     "local a = host(\"run\", {\"printf\", s}, {timeout_ms = 5000, tail = 1}).out\n"
+                     "local b = host(\"run\", {\"printf\", s .. \"Q\"}, {timeout_ms = 5000, tail = 1}).out\n"
+                     "local c = host(\"run\", {\"printf\", \"0123456789AB\"}, {timeout_ms = 5000, tail = 1, width = 10}).out\n"
+                     "print(#a, sub(a, -3), #b, sub(b, 2047, 2075), sub(b, -4))\nprint(c)\n"),
+               ran_budgets());
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(host_text_of(&x), S("4097\txP\n\t4122\txx \xe2\x80\xa6 1 byte left out \xe2\x80\xa6 xx\txPQ\n\n"
+                                   "01234 \xe2\x80\xa6 2 bytes left out \xe2\x80\xa6 789AB\n\n"));
+    EXPECT_EQ(x.r.host_runs, 3);
+    ran_free(&x);
+}
+
+TEST_PART(host_run, TEST_CASE(run_keeps_a_line_of_4096_bytes_whole_unset_and_cuts_one_past_it),
+          TEST_CASE(run_keeps_the_head_and_tail_and_answers_every_field), TEST_CASE(run_charges_its_output_a_step_per_16_bytes),
           TEST_CASE(run_refuses_each_bad_call_with_its_message), TEST_CASE(a_stream_past_the_arena_budget_stops_on_it_and_the_program_is_ended),
           TEST_CASE(a_cpu_budget_stops_naming_the_stage_and_how_the_program_ended),
           TEST_CASE(the_scrubber_holds_back_a_secret_split_across_reads_and_widens_an_overlap),

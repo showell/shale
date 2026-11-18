@@ -194,7 +194,12 @@ has none of it):
   **A line longer than `width` keeps both ends**, its middle said as `… N
   bytes left out …` (`c/host/keep.c`'s `keep_cut`): a child `shale`'s stop
   says where at its start and why at its end, and a cut at the end alone
-  hid the why. Shale itself never cuts a stop, nor `attempt`'s `error`. Its
+  hid the why. Shale itself never cuts a stop, nor `attempt`'s `error`.
+  **`width` is 4096 bytes unset**, so only a runaway line (minified code,
+  a blob) is cut: it bounds the keep's memory (a kept line takes at most
+  about twice it, so `tail = 1000` fits the arena), while the output
+  budget already bounds what reaches your context. It was 200, which cut
+  a test's PASS line and a child's stop. Its
   `cwd` is a path as every path is: under the root, or through a mount
   (`cwd = "repos:shale"` runs a sibling repo's step from another's
   checkout); `..` and an absolute path are refused. **What `run` refuses**

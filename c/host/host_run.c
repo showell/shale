@@ -241,9 +241,6 @@ static STATUS_MUST_USE Status host_bool_opt(Run *r, Pos pos, Str k, const Value 
 // INT64_MAX, so no option given is this.
 #define HOST_UNSET UINT64_MAX
 
-// The width a kept line is cut to when the script gives none.
-enum { HOST_WIDTH_DEFAULT = 200 };
-
 // `run`'s options, as the script gives them. An integer option not given is
 // HOST_UNSET, a value option nil (a script's map never holds nil), and a
 // table option NULL. `before`, `after` and `nocase` are 0 or false unset.
@@ -1161,7 +1158,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
         keep_options_default(&ko);
         ko.head = o->head == HOST_UNSET ? 0 : (size_t)o->head;
         ko.tail = o->tail == HOST_UNSET ? 0 : (size_t)o->tail;
-        ko.width = o->width == HOST_UNSET ? HOST_WIDTH_DEFAULT : (size_t)o->width;
+        ko.width = o->width == HOST_UNSET ? KEEP_WIDTH_DEFAULT : (size_t)o->width;
         ko.before = (size_t)o->before;
         ko.after = (size_t)o->after;
         for (size_t i = 0; i < 2; i++) {

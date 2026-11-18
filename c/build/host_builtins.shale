@@ -16,7 +16,7 @@ use("build:lib.shale")
 -- faults below planted in a copy of c/ (`run_plants`), each caught by its
 -- `aim` tests.
 
-const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 11, ["c/tests/host_builtins/test_run_guards.c"] = 7}
+const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 12, ["c/tests/host_builtins/test_run_guards.c"] = 7}
 const HOST_BUILTINS_PLANTS = {
   {name = "a secret's start at a read's end is passed on raw", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_host_run",
    aim = "the_scrubber_holds_back_a_secret_split_across_reads_and_widens_an_overlap",

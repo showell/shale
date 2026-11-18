@@ -50,9 +50,18 @@ typedef struct {
     size_t width;
 } KeepOptions;
 
+// The width a kept line is held to when the script gives none: 4 KiB. It
+// bounds memory, not the context: each kept line's slot holds at most about
+// twice it, so a `tail = 1000` keep holds at most about 8 MiB, under the
+// arena's 16 MiB, while the output budget (64 KiB unset) already bounds
+// what a script prints. So only a runaway line (minified code, a JSON or
+// base64 blob) is cut, and a test's PASS line or a child's stop comes back
+// whole. It was 200 bytes until 2026-11-18, which cut those.
+enum { KEEP_WIDTH_DEFAULT = 4096 };
+
 static void keep_options_default(KeepOptions *o) {
     memset(o, 0, sizeof *o);
-    o->width = 200;
+    o->width = KEEP_WIDTH_DEFAULT;
 }
 
 // What was kept, and the counts.
