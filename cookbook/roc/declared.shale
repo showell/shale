@@ -513,11 +513,12 @@ end
 -- participles, ed_verbs, terms}`, as hunt_names loads them.
 
 -- Whether a field of one letter is a coordinate (`x`, `y`, `z`, and `w`
--- beside `x` and `y`) or a colour's channel (`r`, `g`, `b`, and `a` beside
--- them), by `siblings`, the set of its record's fields: hunt_names'
--- `short_name` passes these.
+-- beside `x` and `y`), a colour's channel (`r`, `g`, `b`, and `a` beside
+-- them) or a triangle's corner (`a`, `b` and `c`, all three), by `siblings`,
+-- the set of its record's fields: hunt_names' `short_name` passes these.
 function is_letter_of_set(name, siblings)
   if has_item({"x", "y", "z"}, name) or (name == "w" and has_key(siblings, "x") and has_key(siblings, "y")) then return true end
+  if has_item({"a", "b", "c"}, name) and has_key(siblings, "a") and has_key(siblings, "b") and has_key(siblings, "c") then return true end
   return has_item({"r", "g", "b", "a"}, name) and has_key(siblings, "r") and has_key(siblings, "g") and has_key(siblings, "b")
 end
 

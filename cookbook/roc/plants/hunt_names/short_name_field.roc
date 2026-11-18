@@ -7,3 +7,5 @@ move_total : { k : U64, stop : U64 } -> U64
 move_total = |{ k, stop }| k + stop
 
 Size : { w : F64, h : F64 }
+
+Edge : { a : Point, b : Point }

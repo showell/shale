@@ -123,8 +123,9 @@
 --                 letter (`w : F64`, `{ k : U64 }`). It is read far from where
 --                 it is defined, and a local of the same letter shadows it. A
 --                 field may be a coordinate (`x`, `y`, `z`, and `w` beside `x`
---                 and `y`) or a colour's channel (`r`, `g`, `b`, and `a`
---                 beside them). Locals and lambda parameters are not checked.
+--                 and `y`), a colour's channel (`r`, `g`, `b`, and `a`
+--                 beside them) or a triangle's corner (`a`, `b` and `c`, all
+--                 three). Locals and lambda parameters are not checked.
 --   worker_name   A name whose last word says only that it is a helper:
 --                 `_acc`, `_loop`, `_inner`, `_helper` or `_rec`
 --                 (`count_acc`). Name a recursive worker for the parameter
