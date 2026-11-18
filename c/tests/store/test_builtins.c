@@ -203,6 +203,20 @@ TEST(edit_says_a_diff_as_one_line_without_verbose) {
     ran_free(&x);
 }
 
+// Word mode holds an edge only where `old`'s own edge is a word byte: `f(`
+// is whole before `x`, which it was not before (the call stopped: "not in
+// w.txt as a whole word"), and still not after the `a` of `af(`.
+TEST(edit_word_holds_only_the_edges_where_old_ends_in_a_word_byte) {
+    static Ran x;
+    RanOpts o = {NULL, false, false};
+    ran_init(&x, o);
+    ran_run(&x, S("replace(\"w.txt\", \"f(x) af(y) f(z)\\n(x)\\n\")\nprint(edit(\"w.txt\", \"f(\", \"g(\", {all = true, word = true}))\nprint(edit(\"w.txt\", \"(x)\\n\", \"[x]\\n\", {word = true}))\n"), bt_budgets());
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("edit w.txt: 1 hunk, -1 +1 lines\n2\nedit w.txt: 1 hunk, -1 +1 lines\n1\n"));
+    EXPECT(bt_holds(&x, "w.txt", "g(x) af(y) g(z)\n[x]\n"));
+    ran_free(&x);
+}
+
 TEST(edits_write_writes_every_file_or_none_and_refuses_one_named_twice) {
     static Ran x;
     ran_init(&x, bt_verbose());
@@ -294,6 +308,7 @@ TEST_PART(builtins, TEST_CASE(ls_stat_exists_and_is_dir_look_without_changing_an
           TEST_CASE(walk_in_parts_ends_each_with_more_and_keep_reads_reads_nothing), TEST_CASE(every_change_is_logged_with_its_outcome_a_failed_one_too),
           TEST_CASE(the_change_bytes_budget_stops_a_change_before_it_is_written), TEST_CASE(the_changes_budget_stops_the_change_past_it),
           TEST_CASE(edit_prints_its_diff_holds_word_and_all_and_says_where_old_parts), TEST_CASE(edit_says_a_diff_as_one_line_without_verbose),
+          TEST_CASE(edit_word_holds_only_the_edges_where_old_ends_in_a_word_byte),
           TEST_CASE(edits_write_writes_every_file_or_none_and_refuses_one_named_twice), TEST_CASE(a_yield_keeps_the_effects_log),
           TEST_CASE(attack_a_change_through_a_read_only_mount_is_refused_before_it_is_written), TEST_CASE(undo_on_stop_puts_back_a_file_changed_and_deletes_one_made),
           TEST_CASE(many_creates_hold_under_1100_bytes_of_the_arena_each));

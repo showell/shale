@@ -287,8 +287,11 @@ static STATUS_MUST_USE Status change_plan(Run *r, Pos pos, const StorePath *p, E
             size_t i = change_index_of(now, from, e.old);
             if (i == SIZE_MAX) break;
             from = i + e.old.len;
-            bool before = i > 0 && change_word_byte(str_byte(now, i - 1));
-            bool after = from < now.len && change_word_byte(str_byte(now, from));
+            // A whole word's edge is held only where `old`'s own edge is a
+            // word byte, as `\b` would be: `f(` is whole after a space and
+            // before anything.
+            bool before = i > 0 && change_word_byte(str_byte(e.old, 0)) && change_word_byte(str_byte(now, i - 1));
+            bool after = from < now.len && change_word_byte(str_byte(e.old, e.old.len - 1)) && change_word_byte(str_byte(now, from));
             if (e.word && (before || after)) {
                 from = i + 1;
                 continue;
