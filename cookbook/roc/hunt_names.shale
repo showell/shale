@@ -122,8 +122,9 @@
 --   short_name    A top-level or member name, or a record field, of one
 --                 letter (`w : F64`, `{ k : U64 }`). It is read far from where
 --                 it is defined, and a local of the same letter shadows it. A
---                 field may be a coordinate, `x`, `y` or `z`. Locals and
---                 lambda parameters are not checked.
+--                 field may be a coordinate (`x`, `y`, `z`, and `w` beside `x`
+--                 and `y`) or a colour's channel (`r`, `g`, `b`, and `a`
+--                 beside them). Locals and lambda parameters are not checked.
 --   worker_name   A name whose last word says only that it is a helper:
 --                 `_acc`, `_loop`, `_inner`, `_helper` or `_rec`
 --                 (`count_acc`). Name a recursive worker for the parameter
@@ -196,9 +197,9 @@
 --                 A definition with no annotation shows none of this, so it
 --                 is reported unless `types=1` supplies its type. A list that
 --                 is no function, a value, a field or a parameter, named from
---                 a preposition (`by_slot : List(List(Stop))`) is reported
---                 here, not by `singular_list`: its plural (`by_slots`) would
---                 still hide what it holds.
+--                 a preposition, that `singular_list` would report
+--                 (`by_slot : List(List(Stop))`) is reported here instead: it
+--                 wants its noun (`routes_by_slot`), not a plural.
 --   singular_list  A name that holds or gives a `List(...)`, or a `Try` of
 --                 one, but reads as one thing: `triangle : List(Shape)`. The
 --                 name ends in a plural of what the list holds (`triangles`,
@@ -261,8 +262,12 @@
 --                 (`for`, `fold`) is often the language's or the prose's; a
 --                 `Module.name` (`Route.two_opt`, a call's parentheses
 --                 allowed) is judged against `Module.roc` beside the file,
---                 and left when there is none, as for `List.map`
---                 (cookbook/roc/doc_names.shale).
+--                 else a module of that name among the files read (a
+--                 package's, `import game.SunPath`), and left when there is
+--                 none, as for `List.map` (cookbook/roc/doc_names.shale).
+--                 An import is read the same way, and one whose names can't
+--                 be read leaves the file's bare names unjudged, as does a
+--                 possessive before one (`roc-ray's`): it is another's.
 --
 -- Each name is judged once: from its annotation when it has one, else from
 -- its definition. An effect that takes an effectful function (`map2!`,
@@ -360,8 +365,6 @@ const WORLD_VERBS = word_set("cookbook:words/world_verbs.txt")
 const PLAIN_ELEMENTS = set_of({"U16", "U32", "U64", "I16", "I32", "I64", "F32", "F64", "Dec", "Str", "Bool"})
 -- A field of one of these holds one plain value, so `container` passes it.
 const SCALAR_TYPES = set_of({"U8", "U16", "U32", "U64", "U128", "I8", "I16", "I32", "I64", "I128", "F32", "F64", "Dec", "Str", "Bool"})
--- The coordinates, which `short_name` lets a field be named.
-const COORDINATES = set_of({"x", "y", "z"})
 const TERMS = project_terms(SELF_TEST and (PLANTS .. "terms.txt") or arg("terms", ""))
 -- The tables `singular_list` reads (cookbook/roc/declared.shale's
 -- `list_name_finding`).
@@ -606,6 +609,9 @@ function read_definitions(parsed_files)
         local field = attribute(tree, i, "name")
         if at ~= "" and field ~= "" then
           local named = {path = path, line = tostring(node.line), name = field, words = name_words(field), is_field = true, doc = doc_above(src, tonumber(at))}
+          local siblings = {}
+          for k in children(tree, node.parent) do siblings[attribute(tree, k, "name")] = true end
+          named.letter_of_set = is_letter_of_set(field, siblings)
           local field_type = children(tree, i)[1]
           named.gives = render_type(tree, field_type)
           named.is_function = tree[field_type].kind == "ty-fn"
@@ -913,10 +919,15 @@ function plant_doc_names()
   known.hunt_names = true
   return known
 end
-const KNOWN_DOC_NAMES = SELF_TEST and plant_doc_names() or {}
-const DOC_MODULES = {}
+const DOC_NAMES_SEEN = {known = SELF_TEST and plant_doc_names() or {}, by_module = {}, by_path = {}}
 for file in parsed.files do
-  for found in stale_doc_findings(file.path, split(read(file.path), "\n"), file.nodes, KNOWN_DOC_NAMES, DOC_MODULES) do report(file.path, found.line, "stale_doc_name", found.why) end
+  local module = module_name(file.path)
+  local names = get(DOC_NAMES_SEEN.by_module, module) or {}
+  for n in keys(names_in_tree(file.nodes)) do names[n] = true end
+  DOC_NAMES_SEEN.by_module[module] = names
+end
+for file in parsed.files do
+  for found in stale_doc_findings(file.path, split(read(file.path), "\n"), file.nodes, DOC_NAMES_SEEN) do report(file.path, found.line, "stale_doc_name", found.why) end
 end
 
 -- Whether a doc says whose a container word is (`a folder's entry`, `a
@@ -941,7 +952,7 @@ for named in TYPE_AND_FIELD_NAMES do
   end
   -- A field of a plain value (`entry : F64`) holds nothing a container could.
   local is_scalar = named.is_field and not named.is_function and has_key(SCALAR_TYPES, named.gives)
-  if named.is_field and #named.name == 1 and not has_key(COORDINATES, named.name) then report(named.path, named.line, "short_name", "the field `" .. named.name .. "` is one letter, read far from where it is set: name what it holds") end
+  if named.is_field and #named.name == 1 and not named.letter_of_set then report(named.path, named.line, "short_name", "the field `" .. named.name .. "` is one letter, read far from where it is set: name what it holds") end
   if only_container_words and not doc_owns_it and not is_scalar then report(named.path, named.line, "container", (named.is_field and "the field `" or "the type `") .. named.name .. "` is only container words: name it for what it holds, or say whose it is in its doc (`## A folder's entry`)") end
   if named.is_field then judge_list_name({path = named.path, line = named.line, name = named.name, kind = "field", is_function = named.is_function, first = named.first, gives = named.gives}) end
 end

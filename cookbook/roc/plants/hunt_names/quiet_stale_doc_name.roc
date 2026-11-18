@@ -13,4 +13,6 @@ width = {
 }
 
 ## Its own effect, `read_shelf!`, with or without the `!`: `read_shelf`.
+## Not roc-ray's `wheel_delta`, nor the rules' own `end_locations`, but
+## as `QuietDocShelf.roc` says.
 read_shelf! : U64 => U64

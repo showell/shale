@@ -134,6 +134,9 @@ steps left for the writer.
   test lines and `expect`s, for each folder given. `cd ~/showell_repos && shale cookbook:roc/count_roc.shale in=roc-apps/basic skip=/tutorial/`
 - `roc/declared.shale` (library): what a file declares, and a name's words,
   read from its parse tree. `use("cookbook:roc/declared.shale")`
+- `roc/doc_names.shale` (library): the backticked names in a file's comments,
+  and whether each still names something (`hunt_names`' `stale_doc_name`).
+  `use("cookbook:roc/doc_names.shale")`
 - `roc/find_bare_floats.shale`: finds bare `F64`s in declarations, against a
   table of exceptions. `shale cookbook:roc/find_bare_floats.shale table=bare_floats.txt`
 - `roc/find_deep_calls.shale`: finds calls nested three or more deep.
@@ -157,6 +160,8 @@ steps left for the writer.
   counts each member's uses. `use("cookbook:roc/member_uses.shale")`
 - `roc/module_family.shale` (library): how the type printer walks sibling
   modules as one family. `use("cookbook:roc/module_family.shale")`
+- `roc/naming_plants.shale` (library): `hunt_names`' self-test, which check
+  each plant is for. `use("cookbook:roc/naming_plants.shale")`
 - `roc/parsed.shale` (library): parses a tree's .roc files and fails on the
   ones that don't parse. `use("cookbook:roc/parsed.shale")`
 - `roc/pinned.shale` (library): the Roc compiler a repo's `roc-version`

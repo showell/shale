@@ -28,6 +28,8 @@
 --   project_terms(path), list_name_finding(subject, w)
 --                                 hunt_names' `singular_list`: a project's
 --                                 terms, and what a list's name says
+--   is_letter_of_set(name, siblings)
+--                                 a field's letter that `short_name` passes
 
 -- The kinds of node a definition may sit in and still be top-level or a
 -- module type's member, which `associated` holds. Inside any other kind,
@@ -510,6 +512,15 @@ end
 -- tables come in as `w`, `{list_names, taken, verbs, prepositions, plain,
 -- participles, ed_verbs, terms}`, as hunt_names loads them.
 
+-- Whether a field of one letter is a coordinate (`x`, `y`, `z`, and `w`
+-- beside `x` and `y`) or a colour's channel (`r`, `g`, `b`, and `a` beside
+-- them), by `siblings`, the set of its record's fields: hunt_names'
+-- `short_name` passes these.
+function is_letter_of_set(name, siblings)
+  if has_item({"x", "y", "z"}, name) or (name == "w" and has_key(siblings, "x") and has_key(siblings, "y")) then return true end
+  return has_item({"r", "g", "b", "a"}, name) and has_key(siblings, "r") and has_key(siblings, "g") and has_key(siblings, "b")
+end
+
 -- Whether a word reads as a past participle: an irregular one of
 -- participles.txt, or a word past three letters ending in `ed` that
 -- ed_verbs.txt doesn't list.
@@ -636,8 +647,6 @@ function list_name_finding(subject, w)
   local ws = joined_terms(split(bare, "_"), w.terms)
   local says = subject.is_function and "gives" or "holds"
   local opening = "the " .. subject.kind .. " `" .. subject.name .. "` " .. says .. " `" .. subject.gives .. "`"
-  -- A function that starts so is judged at its definition.
-  if has_key(w.prepositions, ws[1]) and not subject.is_function then return {check = "phrase_name", why = opening .. " and starts with a preposition, `" .. ws[1] .. "`: bare, it hides what it holds; name the thing (`trees_in_view`, not `in_view`)"} end
   local at = head_word_at(ws, w)
   local head = ws[at]
   if head == "list" or reads_as_plural(head, w) then return nil end
@@ -656,6 +665,9 @@ function list_name_finding(subject, w)
     if get(w.list_names, head, "") == "many" or reads_as_participle(head, w.participles, w.ed_verbs) then return nil end
     if is_changed_copy or (starts_with_act and #ws == 1) then return nil end
   end
+  -- A list named from a preposition needs its noun, not a plural: a
+  -- function so named is judged at its definition.
+  if has_key(w.prepositions, ws[1]) and not subject.is_function then return {check = "phrase_name", why = opening .. " and starts with a preposition, `" .. ws[1] .. "`: bare, it hides what it holds; name the thing (`trees_in_view`, not `in_view`)"} end
   if get(w.list_names, head, "") == "adjective" then
     local held = held_plural(element, w)
     local example = held ~= "" and (" (`" .. head .. "_" .. held .. "`)") or ""
