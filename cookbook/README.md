@@ -193,6 +193,9 @@ finders are built on it. It reads Shale's C, not C at large.
 - `c/find_dead_code.shale`: finds the functions and generators no program
   reaches, and those only tests reach, from every item's names.
   `shale cookbook:c/find_dead_code.shale dir=c`
+- `c/list_long_functions.shale`: lists the functions past a length in lines of
+  code (comments and blank lines counted apart), by default past the tree's
+  95th percentile, with the distribution. `shale cookbook:c/list_long_functions.shale over=60`
 
 ## go/: Go code ([README](go/README.md))
 
