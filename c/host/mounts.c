@@ -140,7 +140,7 @@ typedef enum {
 static MountsResult mounts_malformed(Arena *a, Str *why, size_t n, Str fmt, MsgArgs args) {
     MsgNum num;
     Buf b = buf_make(a);
-    if (buf_lit(&b, "line ") != OK || buf_str(&b, msg_num(&num, n)) != OK || buf_lit(&b, ": ") != OK || msg_format(&b, fmt, args) != OK) return MOUNTS_OUT_OF_MEMORY;
+    if (buf_lit(&b, "line ") != OK || buf_str(&b, message_num(&num, n)) != OK || buf_lit(&b, ": ") != OK || message_format(&b, fmt, args) != OK) return MOUNTS_OUT_OF_MEMORY;
     *why = buf_view(&b);
     return MOUNTS_MALFORMED;
 }

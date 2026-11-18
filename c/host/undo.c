@@ -28,31 +28,31 @@ static STATUS_MUST_USE Status undo_changes(Paths *h, Buf *w, bool *all) {
             if (e == FILE_SYSTEM_IS_DIR) {
                 FileSystemErr de = file_system_delete_tree(a, abs);
                 if (de != FILE_SYSTEM_OK) {
-                    TRY(msg_format(w, S("── not put back: {s}: the folder the run made ({t})\n"), MSG_ARGS(MSG_FROM_HOST(p->abs), MSG_FROM_HOST(file_system_err_name(de)))));
+                    TRY(message_format(w, S("── not put back: {s}: the folder the run made ({t})\n"), MSG_ARGS(MSG_FROM_HOST(p->abs), MSG_FROM_HOST(file_system_err_name(de)))));
                     *all = false;
                 }
             } else if (e != FILE_SYSTEM_OK && e != FILE_SYSTEM_FILE_NOT_FOUND) {
-                TRY(msg_format(w, S("── not put back: {s}: what the run made ({t})\n"), MSG_ARGS(MSG_FROM_HOST(p->abs), MSG_FROM_HOST(file_system_err_name(e)))));
+                TRY(message_format(w, S("── not put back: {s}: what the run made ({t})\n"), MSG_ARGS(MSG_FROM_HOST(p->abs), MSG_FROM_HOST(file_system_err_name(e)))));
                 *all = false;
             }
         } else if (p->was == PRIOR_FILE) {
             FileSystemErr e = file_system_write_file(abs, p->bytes, p->mode);
             if (e != FILE_SYSTEM_OK) {
-                TRY(msg_format(w, S("── not put back: {s} ({t})\n"), MSG_ARGS(MSG_FROM_HOST(p->abs), MSG_FROM_HOST(file_system_err_name(e)))));
+                TRY(message_format(w, S("── not put back: {s} ({t})\n"), MSG_ARGS(MSG_FROM_HOST(p->abs), MSG_FROM_HOST(file_system_err_name(e)))));
                 *all = false;
             }
         } else {
             struct stat st;
             FileSystemErr e = file_system_stat_exact(abs, false, &st);
             if (e == FILE_SYSTEM_FILE_NOT_FOUND) {
-                TRY(msg_format(w, S("── not put back: {s}: a folder removed whole, and its files with it\n"), MSG_ARGS(MSG_FROM_HOST(p->abs))));
+                TRY(message_format(w, S("── not put back: {s}: a folder removed whole, and its files with it\n"), MSG_ARGS(MSG_FROM_HOST(p->abs))));
                 *all = false;
             } else if (e != FILE_SYSTEM_OK) {
-                TRY(msg_format(w, S("── not put back: {s}: the folder cannot be looked at ({t})\n"), MSG_ARGS(MSG_FROM_HOST(p->abs), MSG_FROM_HOST(file_system_err_name(e)))));
+                TRY(message_format(w, S("── not put back: {s}: the folder cannot be looked at ({t})\n"), MSG_ARGS(MSG_FROM_HOST(p->abs), MSG_FROM_HOST(file_system_err_name(e)))));
                 *all = false;
             }
         }
     }
     MsgNum n;
-    return msg_format(w, S("── undone: {d} path(s) the run changed put back{s}\n"), MSG_ARGS(MSG_FROM_HOST(msg_num(&n, h->journal.len)), MSG_FROM_HOST(*all ? S("") : S(", but not all (above)"))));
+    return message_format(w, S("── undone: {d} path(s) the run changed put back{s}\n"), MSG_ARGS(MSG_FROM_HOST(message_num(&n, h->journal.len)), MSG_FROM_HOST(*all ? S("") : S(", but not all (above)"))));
 }

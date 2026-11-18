@@ -776,15 +776,15 @@ static STATUS_MUST_USE Status host_zig_move_in(Paths *h, HostZigProc *z, Arena *
     if (host_zig_rewrite(r, pos, &p, from_src, from_now, from_spans) != OK) {
         Stop *s = &r->ctx.stop;
         Msg m;
-        msg_init(&m, r->ctx.values);
-        msg_str(&m, s->message);
-        msg_str(&m, S("; `zig_move` wrote "));
-        msg_str(&m, q.rel);
-        msg_str(&m, S(" first, so it holds the moved declarations, which "));
-        msg_str(&m, p.rel);
-        msg_str(&m, S(" still has: take "));
-        msg_str(&m, q.rel);
-        msg_str(&m, S(" back (`git checkout --`) before moving again"));
+        message_init(&m, r->ctx.values);
+        message_str(&m, s->message);
+        message_str(&m, S("; `zig_move` wrote "));
+        message_str(&m, q.rel);
+        message_str(&m, S(" first, so it holds the moved declarations, which "));
+        message_str(&m, p.rel);
+        message_str(&m, S(" still has: take "));
+        message_str(&m, q.rel);
+        message_str(&m, S(" back (`git checkout --`) before moving again"));
         if (m.s == OK) s->message = buf_view(&m.b);
         return STOP;
     }

@@ -239,7 +239,7 @@ typedef struct {
 } Sf;
 
 // `lit` with each `@` the root's path.
-static Str sf_at(Sf *f, const char *lit) { // cstr: a test's literal
+static Str secrets_fixture_at(Sf *f, const char *lit) { // cstr: a test's literal
     Buf b = buf_make(&f->a);
     for (const char *p = lit; *p != 0; p++) {
         Status s = *p == '@' ? buf_str(&b, f->root) : buf_byte(&b, *p);
@@ -249,13 +249,13 @@ static Str sf_at(Sf *f, const char *lit) { // cstr: a test's literal
 }
 
 // The root's `rel`, NUL-ended for the kernel.
-static const char *sf_path(Sf *f, const char *rel) { // cstr: a test's literal, and the kernel's path
+static const char *secrets_fixture_path(Sf *f, const char *rel) { // cstr: a test's literal, and the kernel's path
     Buf b = buf_make(&f->a);
     if (buf_str(&b, f->root) != OK || buf_byte(&b, '/') != OK || buf_str(&b, test_cs(rel)) != OK || buf_byte(&b, 0) != OK) abort();
     return b.ptr;
 }
 
-static void sf_init(Sf *f, const char *mounts) { // cstr: a test's literal
+static void secrets_fixture_init(Sf *f, const char *mounts) { // cstr: a test's literal
     // This unit makes no file system call, so nothing calls
     // path_file_system_failed, which cannot be `static inline` as other
     // functions this unit leaves alone are: TCC 0.9.27 then refuses
@@ -269,54 +269,54 @@ static void sf_init(Sf *f, const char *mounts) { // cstr: a test's literal
     char tmpl[] = "c/out/secrets-tmp/t.XXXXXX";
     if (mkdtemp(tmpl) == NULL || realpath(tmpl, f->root_bytes) == NULL) abort();
     f->root = test_cs(f->root_bytes);
-    if (mkdir(sf_path(f, "keys"), 0700) != 0 || mkdir(sf_path(f, "vault"), 0700) != 0) abort();
-    if (mkdir(sf_path(f, "plain"), 0777) != 0 || mkdir(sf_path(f, "home"), 0777) != 0) abort();
+    if (mkdir(secrets_fixture_path(f, "keys"), 0700) != 0 || mkdir(secrets_fixture_path(f, "vault"), 0700) != 0) abort();
+    if (mkdir(secrets_fixture_path(f, "plain"), 0777) != 0 || mkdir(secrets_fixture_path(f, "home"), 0777) != 0) abort();
     Mounts ms;
     Str why = S("");
-    if (mounts_parse(&f->a, sf_at(f, mounts), sf_at(f, "@/home"), &ms, &why) != MOUNTS_OK) {
+    if (mounts_parse(&f->a, secrets_fixture_at(f, mounts), secrets_fixture_at(f, "@/home"), &ms, &why) != MOUNTS_OK) {
         fprintf(stderr, "mounts: %.*s\n", (int)why.len, why.ptr);
         abort();
     }
-    Secrets m = {&f->a, {-1, -1, -1}, sf_at(f, "@/home"), f->root, Mounts_items(&ms), S("the planted mounts")};
+    Secrets m = {&f->a, {-1, -1, -1}, secrets_fixture_at(f, "@/home"), f->root, Mounts_items(&ms), S("the planted mounts")};
     f->m = m;
 }
 
-static int sf_remove_one(const char *p, const struct stat *st, int kind, struct FTW *w) { // cstr: nftw's path
+static int secrets_fixture_remove_one(const char *p, const struct stat *st, int kind, struct FTW *w) { // cstr: nftw's path
     (void)st;
     (void)w;
     return kind == FTW_DP ? rmdir(p) : unlink(p);
 }
 
 // Removes the planted root and everything in it, then the arena.
-static void sf_deinit(Sf *f) {
-    if (nftw(f->root_bytes, sf_remove_one, 16, FTW_DEPTH | FTW_PHYS) != 0) abort();
+static void secrets_fixture_deinit(Sf *f) {
+    if (nftw(f->root_bytes, secrets_fixture_remove_one, 16, FTW_DEPTH | FTW_PHYS) != 0) abort();
     arena_deinit(&f->a);
 }
 
-static void sf_put(Sf *f, const char *rel, const char *text) { // cstr: test literals
-    int fd = open(sf_path(f, rel), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+static void secrets_fixture_put(Sf *f, const char *rel, const char *text) { // cstr: test literals
+    int fd = open(secrets_fixture_path(f, rel), O_WRONLY | O_CREAT | O_TRUNC, 0644);
     Str s = test_cs(text);
     if (fd < 0 || write(fd, s.ptr, s.len) != (ssize_t)s.len) abort();
     close(fd);
 }
 
 // The file's bytes, or "<none>" when it is not there.
-static Str sf_read(Sf *f, const char *rel) { // cstr: a test's literal
+static Str secrets_fixture_read(Sf *f, const char *rel) { // cstr: a test's literal
     Str out = S("");
     Str why = S("");
-    secrets_read_file(&f->a, test_cs(sf_path(f, rel)), (size_t)1 << 20, &out, &why);
+    secrets_read_file(&f->a, test_cs(secrets_fixture_path(f, rel)), (size_t)1 << 20, &out, &why);
     return why.len > 0 ? S("<none>") : out;
 }
 
-static unsigned sf_mode(Sf *f, const char *rel) { // cstr: a test's literal
+static unsigned secrets_fixture_mode(Sf *f, const char *rel) { // cstr: a test's literal
     struct stat st;
-    if (stat(sf_path(f, rel), &st) != 0) return 0;
+    if (stat(secrets_fixture_path(f, rel), &st) != 0) return 0;
     return (unsigned)(st.st_mode & 07777);
 }
 
 // How many entries a folder holds, `.` and `..` left out.
-static size_t sf_count(Sf *f, const char *rel) { // cstr: a test's literal
-    DIR *d = opendir(sf_path(f, rel));
+static size_t secrets_fixture_count(Sf *f, const char *rel) { // cstr: a test's literal
+    DIR *d = opendir(secrets_fixture_path(f, rel));
     if (d == NULL) return SIZE_MAX;
     size_t n = 0;
     for (struct dirent *e = readdir(d); e != NULL; e = readdir(d)) {
@@ -432,7 +432,7 @@ static bool tty_said(Tty *t, const char *text) { // cstr: a test's literal
 
 TEST(the_mode_refuses_unless_stdin_and_stdout_are_both_a_terminal) {
     Sf f;
-    sf_init(&f, ONE_SECRETS_MOUNT);
+    secrets_fixture_init(&f, ONE_SECRETS_MOUNT);
     // Each pipe's read end, then its write end.
     SLICE_TYPE(Fds, int);
     int in_fds[2];
@@ -463,33 +463,33 @@ TEST(the_mode_refuses_unless_stdin_and_stdout_are_both_a_terminal) {
     EXPECT_STR(s, secrets_cat(&f.m, line, line, S("")));
     // Nothing went to stdout, and nothing was made.
     EXPECT_EQ(read(at(out, 0), said, sizeof said), 0);
-    EXPECT_EQ(sf_count(&f, "keys"), 0);
-    EXPECT_EQ(sf_count(&f, "home"), 0);
+    EXPECT_EQ(secrets_fixture_count(&f, "keys"), 0);
+    EXPECT_EQ(secrets_fixture_count(&f, "home"), 0);
     close(master);
     close(slave);
-    sf_deinit(&f);
+    secrets_fixture_deinit(&f);
 }
 
 TEST(the_menu_refuses_a_choice_it_does_not_offer_and_mounts_with_no_secrets_mount) {
     Sf f;
-    sf_init(&f, ONE_SECRETS_MOUNT);
+    secrets_fixture_init(&f, ONE_SECRETS_MOUNT);
     Tty t;
     tty_start(&t, &f);
     EXPECT(tty_expect(&t, "  1. where: show each secrets mount's folder\n  2. store: store a new secret\n  3. deny: add the deny rules to Claude Code's settings\nWhich one (1, 2 or 3)? "));
     tty_send(&t, "4");
     EXPECT_EQ(tty_end(&t), 2);
     EXPECT(tty_said(&t, "shale --secrets: `4` is not 1, 2 or 3\n"));
-    sf_deinit(&f);
-    sf_init(&f, "plain = @/plain\n");
+    secrets_fixture_deinit(&f);
+    secrets_fixture_init(&f, "plain = @/plain\n");
     tty_start(&t, &f);
     EXPECT_EQ(tty_end(&t), 2);
     EXPECT_STR(buf_view(&t.seen), S("shale --secrets: no mount is a `secrets` mount (the planted mounts): add a line such as `keys = ~/.shale-keys secrets` first\n"));
-    sf_deinit(&f);
+    secrets_fixture_deinit(&f);
 }
 
 TEST(where_names_each_secrets_mount_and_its_folder_and_no_other_mount) {
     Sf f;
-    sf_init(&f, "keys = @/keys secrets\nplain = @/plain\nvault = @/vault/ secrets\n");
+    secrets_fixture_init(&f, "keys = @/keys secrets\nplain = @/plain\nvault = @/vault/ secrets\n");
     Tty t;
     tty_start(&t, &f);
     EXPECT(tty_expect(&t, "Which one (1, 2 or 3)? "));
@@ -498,14 +498,14 @@ TEST(where_names_each_secrets_mount_and_its_folder_and_no_other_mount) {
     Str seen = buf_view(&t.seen);
     Str tail = str_sub(seen, t.from, seen.len);
     // The answer echoed, then the two mounts, nothing else.
-    EXPECT_STR(tail, sf_at(&f, "1\n  keys: @/keys\n  vault: @/vault\n"));
-    EXPECT_EQ(sf_count(&f, "home"), 0);
-    sf_deinit(&f);
+    EXPECT_STR(tail, secrets_fixture_at(&f, "1\n  keys: @/keys\n  vault: @/vault\n"));
+    EXPECT_EQ(secrets_fixture_count(&f, "home"), 0);
+    secrets_fixture_deinit(&f);
 }
 
 TEST(store_writes_the_value_0600_says_its_bytes_never_the_value_then_adds_the_deny_rules) {
     Sf f;
-    sf_init(&f, ONE_SECRETS_MOUNT);
+    secrets_fixture_init(&f, ONE_SECRETS_MOUNT);
     Tty t;
     tty_start(&t, &f);
     EXPECT(tty_expect(&t, "Which one (1, 2 or 3)? "));
@@ -516,7 +516,7 @@ TEST(store_writes_the_value_0600_says_its_bytes_never_the_value_then_adds_the_de
     tty_send(&t, "s3cret-VALUE-9x");
     EXPECT(tty_expect(&t, "stored keys:tok (15 bytes)\n"));
     EXPECT(tty_expect(&t, "they go in ~/.claude/settings.json's `permissions.deny`:\n"));
-    Str rules = sf_at(&f, "  Read(/@/keys/\x2a\x2a)\n  Edit(/@/keys/\x2a\x2a)\nAdd them? [y/n] ");
+    Str rules = secrets_fixture_at(&f, "  Read(/@/keys/\x2a\x2a)\n  Edit(/@/keys/\x2a\x2a)\nAdd them? [y/n] ");
     char rules_c[PATH_MAX * 3];
     EXPECT(rules.len < sizeof rules_c);
     snprintf(rules_c, sizeof rules_c, "%.*s", (int)rules.len, rules.ptr);
@@ -528,31 +528,31 @@ TEST(store_writes_the_value_0600_says_its_bytes_never_the_value_then_adds_the_de
     EXPECT((t.lflag & ECHO) != 0);
     EXPECT((t.lflag & ICANON) != 0);
     // The secret: its bytes alone, mode 0600, and no temporary file beside it.
-    EXPECT_STR(sf_read(&f, "keys/tok"), S("s3cret-VALUE-9x"));
-    EXPECT_EQ(sf_mode(&f, "keys/tok"), 0600);
-    EXPECT_EQ(sf_count(&f, "keys"), 1);
+    EXPECT_STR(secrets_fixture_read(&f, "keys/tok"), S("s3cret-VALUE-9x"));
+    EXPECT_EQ(secrets_fixture_mode(&f, "keys/tok"), 0600);
+    EXPECT_EQ(secrets_fixture_count(&f, "keys"), 1);
     // The settings file, made with its folder; there was no old one to keep.
-    EXPECT_STR(sf_read(&f, "home/.claude/settings.json"), sf_at(&f, DENY_ONLY));
-    EXPECT_STR(sf_read(&f, "home/.claude/settings.json.bak"), S("<none>"));
-    EXPECT_EQ(sf_count(&f, "home/.claude"), 1);
+    EXPECT_STR(secrets_fixture_read(&f, "home/.claude/settings.json"), secrets_fixture_at(&f, DENY_ONLY));
+    EXPECT_STR(secrets_fixture_read(&f, "home/.claude/settings.json.bak"), S("<none>"));
+    EXPECT_EQ(secrets_fixture_count(&f, "home/.claude"), 1);
     // The value was never echoed nor printed.
     EXPECT(!tty_said(&t, "s3cret"));
     EXPECT(!tty_said(&t, "VALUE-9x"));
-    sf_deinit(&f);
+    secrets_fixture_deinit(&f);
 }
 
 TEST(store_over_a_secret_asks_first_a_no_keeps_it_a_yes_replaces_it) {
     Sf f;
-    sf_init(&f, "keys = @/keys secrets\nvault = @/vault secrets\n");
-    sf_put(&f, "keys/tok", "old-bytes");
+    secrets_fixture_init(&f, "keys = @/keys secrets\nvault = @/vault secrets\n");
+    secrets_fixture_put(&f, "keys/tok", "old-bytes");
     // Both mounts' rules are there already, so no deny question follows.
-    if (mkdir(sf_path(&f, "home/.claude"), 0700) != 0) abort();
-    Str settings = sf_at(&f, "{\"permissions\":{\"deny\":[\"Read(/@/keys/\x2a\x2a)\",\"Edit(/@/keys/\x2a\x2a)\",\"Read(/@/vault/\x2a\x2a)\",\"Edit(/@/vault/\x2a\x2a)\"]}}");
+    if (mkdir(secrets_fixture_path(&f, "home/.claude"), 0700) != 0) abort();
+    Str settings = secrets_fixture_at(&f, "{\"permissions\":{\"deny\":[\"Read(/@/keys/\x2a\x2a)\",\"Edit(/@/keys/\x2a\x2a)\",\"Read(/@/vault/\x2a\x2a)\",\"Edit(/@/vault/\x2a\x2a)\"]}}");
     char settings_c[PATH_MAX * 5];
     snprintf(settings_c, sizeof settings_c, "%.*s", (int)settings.len, settings.ptr);
-    sf_put(&f, "home/.claude/settings.json", settings_c);
+    secrets_fixture_put(&f, "home/.claude/settings.json", settings_c);
     struct stat before;
-    EXPECT(stat(sf_path(&f, "home/.claude/settings.json"), &before) == 0);
+    EXPECT(stat(secrets_fixture_path(&f, "home/.claude/settings.json"), &before) == 0);
     Tty t;
     tty_start(&t, &f);
     EXPECT(tty_expect(&t, "Which one (1, 2 or 3)? "));
@@ -566,8 +566,8 @@ TEST(store_over_a_secret_asks_first_a_no_keeps_it_a_yes_replaces_it) {
     EXPECT(tty_expect(&t, "Nothing is stored.\n"));
     EXPECT_EQ(tty_end(&t), 0);
     EXPECT(!tty_said(&t, "The value"));
-    EXPECT_STR(sf_read(&f, "keys/tok"), S("old-bytes"));
-    EXPECT_EQ(sf_count(&f, "keys"), 1);
+    EXPECT_STR(secrets_fixture_read(&f, "keys/tok"), S("old-bytes"));
+    EXPECT_EQ(secrets_fixture_count(&f, "keys"), 1);
     // A yes replaces it.
     tty_start(&t, &f);
     EXPECT(tty_expect(&t, "Which one (1, 2 or 3)? "));
@@ -582,22 +582,22 @@ TEST(store_over_a_secret_asks_first_a_no_keeps_it_a_yes_replaces_it) {
     tty_send(&t, "new-PASS-77");
     EXPECT(tty_expect(&t, "stored keys:tok (11 bytes)\n"));
     EXPECT_EQ(tty_end(&t), 0);
-    EXPECT_STR(sf_read(&f, "keys/tok"), S("new-PASS-77"));
-    EXPECT_EQ(sf_mode(&f, "keys/tok"), 0600);
-    EXPECT_EQ(sf_count(&f, "keys"), 1);
-    EXPECT_EQ(sf_count(&f, "vault"), 0);
+    EXPECT_STR(secrets_fixture_read(&f, "keys/tok"), S("new-PASS-77"));
+    EXPECT_EQ(secrets_fixture_mode(&f, "keys/tok"), 0600);
+    EXPECT_EQ(secrets_fixture_count(&f, "keys"), 1);
+    EXPECT_EQ(secrets_fixture_count(&f, "vault"), 0);
     EXPECT(!tty_said(&t, "new-PASS"));
     EXPECT(!tty_said(&t, "Add them"));
     // The settings file, already right, was not written: its bytes, its
     // inode and its time are as they were, and there is no .bak.
     struct stat after;
-    EXPECT(stat(sf_path(&f, "home/.claude/settings.json"), &after) == 0);
-    EXPECT_STR(sf_read(&f, "home/.claude/settings.json"), settings);
+    EXPECT(stat(secrets_fixture_path(&f, "home/.claude/settings.json"), &after) == 0);
+    EXPECT_STR(secrets_fixture_read(&f, "home/.claude/settings.json"), settings);
     EXPECT_EQ(after.st_ino, before.st_ino);
     EXPECT_EQ(after.st_mtim.tv_sec, before.st_mtim.tv_sec);
     EXPECT_EQ(after.st_mtim.tv_nsec, before.st_mtim.tv_nsec);
-    EXPECT_EQ(sf_count(&f, "home/.claude"), 1);
-    sf_deinit(&f);
+    EXPECT_EQ(secrets_fixture_count(&f, "home/.claude"), 1);
+    secrets_fixture_deinit(&f);
 }
 
 TEST(store_refuses_a_name_that_is_not_a_file_directly_in_the_mount) {
@@ -616,8 +616,8 @@ TEST(store_refuses_a_name_that_is_not_a_file_directly_in_the_mount) {
     Bads all = {bad, sizeof bad / sizeof *bad};
     for (size_t i = 0; i < all.len; i++) {
         Sf f;
-        sf_init(&f, ONE_SECRETS_MOUNT);
-        if (mkdir(sf_path(&f, "keys/sub"), 0700) != 0) abort();
+        secrets_fixture_init(&f, ONE_SECRETS_MOUNT);
+        if (mkdir(secrets_fixture_path(&f, "keys/sub"), 0700) != 0) abort();
         Tty t;
         tty_start(&t, &f);
         EXPECT(tty_expect(&t, "Which one (1, 2 or 3)? "));
@@ -628,10 +628,10 @@ TEST(store_refuses_a_name_that_is_not_a_file_directly_in_the_mount) {
         EXPECT(tty_expect(&t, at(all, i).says));
         EXPECT(!tty_said(&t, "The value"));
         EXPECT(!tty_said(&t, "stdout_secret"));
-        EXPECT_EQ(sf_count(&f, "keys"), 1);
-        EXPECT_EQ(sf_count(&f, "keys/sub"), 0);
-        EXPECT_EQ(sf_count(&f, "home"), 0);
-        sf_deinit(&f);
+        EXPECT_EQ(secrets_fixture_count(&f, "keys"), 1);
+        EXPECT_EQ(secrets_fixture_count(&f, "keys/sub"), 0);
+        EXPECT_EQ(secrets_fixture_count(&f, "home"), 0);
+        secrets_fixture_deinit(&f);
     }
 }
 
@@ -657,7 +657,7 @@ static Str long_value(Sf *f, size_t n) {
 
 TEST(store_reads_a_value_past_the_terminals_line_limit_whole_and_refuses_one_past_64_KiB) {
     Sf f;
-    sf_init(&f, ONE_SECRETS_MOUNT);
+    secrets_fixture_init(&f, ONE_SECRETS_MOUNT);
     // Past the 4096 bytes a terminal's line holds in canonical mode.
     Str v = long_value(&f, 5000);
     Tty t;
@@ -668,8 +668,8 @@ TEST(store_reads_a_value_past_the_terminals_line_limit_whole_and_refuses_one_pas
     EXPECT(tty_expect(&t, "Add them? [y/n] "));
     tty_send(&t, "n");
     EXPECT_EQ(tty_end(&t), 0);
-    EXPECT_STR(sf_read(&f, "keys/long"), v);
-    EXPECT_EQ(sf_mode(&f, "keys/long"), 0600);
+    EXPECT_STR(secrets_fixture_read(&f, "keys/long"), v);
+    EXPECT_EQ(secrets_fixture_mode(&f, "keys/long"), 0600);
     EXPECT(!tty_said(&t, "Qz7kW2xRQz7k"));
     // 64 KiB exactly is stored; one byte past it is refused, nothing stored.
     Str most = long_value(&f, 65536);
@@ -680,14 +680,14 @@ TEST(store_reads_a_value_past_the_terminals_line_limit_whole_and_refuses_one_pas
     EXPECT(tty_expect(&t, "Add them? [y/n] "));
     tty_send(&t, "n");
     EXPECT_EQ(tty_end(&t), 0);
-    EXPECT_STR(sf_read(&f, "keys/most"), most);
+    EXPECT_STR(secrets_fixture_read(&f, "keys/most"), most);
     tty_to_value(&t, &f, "past");
     tty_type(&t, long_value(&f, 65537));
     tty_type(&t, S("\n"));
     EXPECT_EQ(tty_end(&t), 1);
     EXPECT(tty_expect(&t, "shale --secrets: the value is longer than 64 KiB, the most a secret may be; nothing is stored\n"));
-    EXPECT_STR(sf_read(&f, "keys/past"), S("<none>"));
-    EXPECT_EQ(sf_count(&f, "keys"), 2);
+    EXPECT_STR(secrets_fixture_read(&f, "keys/past"), S("<none>"));
+    EXPECT_EQ(secrets_fixture_count(&f, "keys"), 2);
     EXPECT((t.lflag & ECHO) != 0);
     EXPECT((t.lflag & ICANON) != 0);
     EXPECT(!tty_said(&t, "Qz7kW2xRQz7k"));
@@ -698,13 +698,13 @@ TEST(store_reads_a_value_past_the_terminals_line_limit_whole_and_refuses_one_pas
     EXPECT(tty_expect(&t, "Add them? [y/n] "));
     tty_send(&t, "n");
     EXPECT_EQ(tty_end(&t), 0);
-    EXPECT_STR(sf_read(&f, "keys/fixed"), S("abc"));
-    sf_deinit(&f);
+    EXPECT_STR(secrets_fixture_read(&f, "keys/fixed"), S("abc"));
+    secrets_fixture_deinit(&f);
 }
 
 TEST(a_ctrl_c_at_the_value_prompt_puts_the_terminals_echo_back_and_stores_nothing) {
     Sf f;
-    sf_init(&f, ONE_SECRETS_MOUNT);
+    secrets_fixture_init(&f, ONE_SECRETS_MOUNT);
     Tty t;
     tty_to_value(&t, &f, "tok");
     // Half a value typed, then ^C, which the terminal makes SIGINT.
@@ -715,8 +715,8 @@ TEST(a_ctrl_c_at_the_value_prompt_puts_the_terminals_echo_back_and_stores_nothin
     EXPECT_EQ(WTERMSIG(t.status), SIGINT);
     EXPECT((t.lflag & ECHO) != 0);
     EXPECT((t.lflag & ICANON) != 0);
-    EXPECT_EQ(sf_count(&f, "keys"), 0);
-    EXPECT_EQ(sf_count(&f, "home"), 0);
+    EXPECT_EQ(secrets_fixture_count(&f, "keys"), 0);
+    EXPECT_EQ(secrets_fixture_count(&f, "home"), 0);
     EXPECT(!tty_said(&t, "half-typed"));
     // SIGTERM and SIGHUP, sent as another program would, do the same.
     for (int k = 0; k < 2; k++) {
@@ -728,14 +728,14 @@ TEST(a_ctrl_c_at_the_value_prompt_puts_the_terminals_echo_back_and_stores_nothin
         EXPECT_EQ(WTERMSIG(t.status), sig);
         EXPECT((t.lflag & ECHO) != 0);
         EXPECT((t.lflag & ICANON) != 0);
-        EXPECT_EQ(sf_count(&f, "keys"), 0);
+        EXPECT_EQ(secrets_fixture_count(&f, "keys"), 0);
     }
-    sf_deinit(&f);
+    secrets_fixture_deinit(&f);
 }
 
 TEST(store_an_empty_value_stores_nothing) {
     Sf f;
-    sf_init(&f, ONE_SECRETS_MOUNT);
+    secrets_fixture_init(&f, ONE_SECRETS_MOUNT);
     Tty t;
     tty_start(&t, &f);
     EXPECT(tty_expect(&t, "Which one (1, 2 or 3)? "));
@@ -746,21 +746,21 @@ TEST(store_an_empty_value_stores_nothing) {
     tty_send(&t, "");
     EXPECT(tty_expect(&t, "The value is empty: nothing is stored.\n"));
     EXPECT_EQ(tty_end(&t), 0);
-    EXPECT_EQ(sf_count(&f, "keys"), 0);
-    EXPECT_EQ(sf_count(&f, "home"), 0);
-    sf_deinit(&f);
+    EXPECT_EQ(secrets_fixture_count(&f, "keys"), 0);
+    EXPECT_EQ(secrets_fixture_count(&f, "home"), 0);
+    secrets_fixture_deinit(&f);
 }
 
 TEST(deny_adds_only_what_is_missing_keeps_the_old_file_as_bak_and_leaves_a_correct_file_untouched) {
     Sf f;
-    sf_init(&f, ONE_SECRETS_MOUNT);
-    if (mkdir(sf_path(&f, "home/.claude"), 0700) != 0) abort();
-    Str old = sf_at(&f, "{\"model\": \"opus\", \"permissions\": {\"deny\": [\"Read(/@/keys/\x2a\x2a)\"]}}");
+    secrets_fixture_init(&f, ONE_SECRETS_MOUNT);
+    if (mkdir(secrets_fixture_path(&f, "home/.claude"), 0700) != 0) abort();
+    Str old = secrets_fixture_at(&f, "{\"model\": \"opus\", \"permissions\": {\"deny\": [\"Read(/@/keys/\x2a\x2a)\"]}}");
     char old_c[PATH_MAX * 2];
     snprintf(old_c, sizeof old_c, "%.*s", (int)old.len, old.ptr);
-    sf_put(&f, "home/.claude/settings.json", old_c);
+    secrets_fixture_put(&f, "home/.claude/settings.json", old_c);
     // An earlier .bak is overwritten.
-    sf_put(&f, "home/.claude/settings.json.bak", "earlier");
+    secrets_fixture_put(&f, "home/.claude/settings.json.bak", "earlier");
     Tty t;
     tty_start(&t, &f);
     EXPECT(tty_expect(&t, "Which one (1, 2 or 3)? "));
@@ -771,34 +771,34 @@ TEST(deny_adds_only_what_is_missing_keeps_the_old_file_as_bak_and_leaves_a_corre
     EXPECT(tty_expect(&t, "Added 1 rule to ~/.claude/settings.json (the old file is ~/.claude/settings.json.bak).\n"));
     EXPECT_EQ(tty_end(&t), 0);
     EXPECT(tty_said(&t, "Edit(/"));
-    EXPECT_STR(sf_read(&f, "home/.claude/settings.json"),
-               sf_at(&f, "{\n  \"model\": \"opus\",\n  \"permissions\": {\n    \"deny\": [\n      \"Read(/@/keys/\x2a\x2a)\",\n      \"Edit(/@/keys/\x2a\x2a)\"\n    ]\n  }\n}\n"));
-    EXPECT_STR(sf_read(&f, "home/.claude/settings.json.bak"), old);
-    EXPECT_EQ(sf_count(&f, "home/.claude"), 2);
+    EXPECT_STR(secrets_fixture_read(&f, "home/.claude/settings.json"),
+               secrets_fixture_at(&f, "{\n  \"model\": \"opus\",\n  \"permissions\": {\n    \"deny\": [\n      \"Read(/@/keys/\x2a\x2a)\",\n      \"Edit(/@/keys/\x2a\x2a)\"\n    ]\n  }\n}\n"));
+    EXPECT_STR(secrets_fixture_read(&f, "home/.claude/settings.json.bak"), old);
+    EXPECT_EQ(secrets_fixture_count(&f, "home/.claude"), 2);
     // Run again, it finds nothing missing and writes nothing.
-    Str now = sf_read(&f, "home/.claude/settings.json");
+    Str now = secrets_fixture_read(&f, "home/.claude/settings.json");
     struct stat before;
-    EXPECT(stat(sf_path(&f, "home/.claude/settings.json"), &before) == 0);
+    EXPECT(stat(secrets_fixture_path(&f, "home/.claude/settings.json"), &before) == 0);
     tty_start(&t, &f);
     EXPECT(tty_expect(&t, "Which one (1, 2 or 3)? "));
     tty_send(&t, "deny");
     EXPECT(tty_expect(&t, "~/.claude/settings.json holds every deny rule already: nothing is written.\n"));
     EXPECT_EQ(tty_end(&t), 0);
     struct stat after;
-    EXPECT(stat(sf_path(&f, "home/.claude/settings.json"), &after) == 0);
-    EXPECT_STR(sf_read(&f, "home/.claude/settings.json"), now);
+    EXPECT(stat(secrets_fixture_path(&f, "home/.claude/settings.json"), &after) == 0);
+    EXPECT_STR(secrets_fixture_read(&f, "home/.claude/settings.json"), now);
     EXPECT_EQ(after.st_ino, before.st_ino);
     EXPECT_EQ(after.st_mtim.tv_sec, before.st_mtim.tv_sec);
     EXPECT_EQ(after.st_mtim.tv_nsec, before.st_mtim.tv_nsec);
-    EXPECT_STR(sf_read(&f, "home/.claude/settings.json.bak"), old);
-    sf_deinit(&f);
+    EXPECT_STR(secrets_fixture_read(&f, "home/.claude/settings.json.bak"), old);
+    secrets_fixture_deinit(&f);
 }
 
 TEST(deny_a_file_that_does_not_parse_or_a_no_writes_nothing) {
     Sf f;
-    sf_init(&f, ONE_SECRETS_MOUNT);
-    if (mkdir(sf_path(&f, "home/.claude"), 0700) != 0) abort();
-    sf_put(&f, "home/.claude/settings.json", "{\"model\": \"opus\",}");
+    secrets_fixture_init(&f, ONE_SECRETS_MOUNT);
+    if (mkdir(secrets_fixture_path(&f, "home/.claude"), 0700) != 0) abort();
+    secrets_fixture_put(&f, "home/.claude/settings.json", "{\"model\": \"opus\",}");
     Tty t;
     tty_start(&t, &f);
     EXPECT(tty_expect(&t, "Which one (1, 2 or 3)? "));
@@ -806,10 +806,10 @@ TEST(deny_a_file_that_does_not_parse_or_a_no_writes_nothing) {
     EXPECT_EQ(tty_end(&t), 1);
     EXPECT(tty_expect(&t, "shale --secrets: ~/.claude/settings.json does not parse: a string was expected at byte 17; nothing is written\n"));
     EXPECT(!tty_said(&t, "Add them"));
-    EXPECT_STR(sf_read(&f, "home/.claude/settings.json"), S("{\"model\": \"opus\",}"));
-    EXPECT_EQ(sf_count(&f, "home/.claude"), 1);
+    EXPECT_STR(secrets_fixture_read(&f, "home/.claude/settings.json"), S("{\"model\": \"opus\",}"));
+    EXPECT_EQ(secrets_fixture_count(&f, "home/.claude"), 1);
     // A no leaves a file that parses as it was, with no .bak.
-    sf_put(&f, "home/.claude/settings.json", "{}");
+    secrets_fixture_put(&f, "home/.claude/settings.json", "{}");
     tty_start(&t, &f);
     EXPECT(tty_expect(&t, "Which one (1, 2 or 3)? "));
     tty_send(&t, "3");
@@ -817,9 +817,9 @@ TEST(deny_a_file_that_does_not_parse_or_a_no_writes_nothing) {
     tty_send(&t, "n");
     EXPECT(tty_expect(&t, "Nothing is written.\n"));
     EXPECT_EQ(tty_end(&t), 0);
-    EXPECT_STR(sf_read(&f, "home/.claude/settings.json"), S("{}"));
-    EXPECT_EQ(sf_count(&f, "home/.claude"), 1);
-    sf_deinit(&f);
+    EXPECT_STR(secrets_fixture_read(&f, "home/.claude/settings.json"), S("{}"));
+    EXPECT_EQ(secrets_fixture_count(&f, "home/.claude"), 1);
+    secrets_fixture_deinit(&f);
 }
 
 TEST_MAIN(TEST_CASE(settings_a_file_read_and_written_back_keeps_its_order_its_texts_and_lays_out_two_spaces_a_level),

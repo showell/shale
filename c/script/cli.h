@@ -706,19 +706,19 @@ static inline STATUS_MUST_USE Status cli_unread_arg(Arena *a, const Program *pro
         }
         if (read) continue;
         Msg m;
-        msg_init(&m, a);
-        msg_str(&m, S("`"));
-        msg_str(&m, name);
-        msg_str(&m, S("=` is given, and the script reads no `arg(\""));
-        msg_str(&m, name);
-        msg_str(&m, S("\")`: "));
+        message_init(&m, a);
+        message_str(&m, S("`"));
+        message_str(&m, name);
+        message_str(&m, S("=` is given, and the script reads no `arg(\""));
+        message_str(&m, name);
+        message_str(&m, S("\")`: "));
         if (prog->args_read.len == 0) {
-            msg_str(&m, S("it reads none"));
+            message_str(&m, S("it reads none"));
         } else {
-            msg_str(&m, S("it reads "));
+            message_str(&m, S("it reads "));
             for (size_t k = 0; k < prog->args_read.len; k++) {
-                if (k > 0) msg_str(&m, S(", "));
-                msg_str(&m, at(prog->args_read, k));
+                if (k > 0) message_str(&m, S(", "));
+                message_str(&m, at(prog->args_read, k));
             }
         }
         if (m.s != OK) return STOP;

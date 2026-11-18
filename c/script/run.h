@@ -198,9 +198,9 @@ static inline Str run_unum(Run *r, uint64_t n) {
 static inline STATUS_MUST_USE Status run_fail_parts(Run *r, Pos pos, StopClass cls, Str fallback, StrPieces parts) {
     StrParts all = {parts.piece, sizeof parts.piece / sizeof(Str)};
     Msg m;
-    msg_init(&m, r->ctx.values);
+    message_init(&m, r->ctx.values);
     for (size_t k = 0; k < all.len; k++) {
-        if (at(all, k).len > 0) msg_str(&m, at(all, k));
+        if (at(all, k).len > 0) message_str(&m, at(all, k));
     }
     run_nums_copied(r);
     return run_fail_built(&r->ctx, pos, cls, &m.b, m.s, fallback);

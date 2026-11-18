@@ -10,7 +10,7 @@
 
 #include "fixture.c"
 
-#define SAYS(lit) fx_r(&f, lit)
+#define SAYS(lit) fixture_r(&f, lit)
 
 // The plain stop's tail, for a path no mount may name.
 #define PLAIN "is absolute: paths are relative to the data root, or a mount's, `name:path` (`shale --help` lists this box's mounts)"
@@ -19,9 +19,9 @@
 
 TEST(every_way_out_of_the_root_is_refused_before_the_file_system_is_asked) {
     Fx f;
-    fx_init(&f);
-    sx_put(&f.base, "top.txt", "t");
-    sx_put(&f.base, "chat/a.md", "a");
+    fixture_init(&f);
+    file_system_fixture_put(&f.base, "top.txt", "t");
+    file_system_fixture_put(&f.base, "chat/a.md", "a");
     typedef struct {
         const char *who;
         const char *path;
@@ -37,52 +37,52 @@ TEST(every_way_out_of_the_root_is_refused_before_the_file_system_is_asked) {
     SLICE_TYPE(Escapes, const Escape);
     Escapes all = {escapes, sizeof escapes / sizeof *escapes};
     for (size_t i = 0; i < all.len; i++) {
-        fx_again(&f);
+        fixture_again(&f);
         CheckedPath p;
-        Status s = path_arg(&f.run, fx_pos(), sx_cs(at(all, i).who), sx_cs(at(all, i).path), at(all, i).allow_root, &p);
-        EXPECT(fx_stopped(&f, s, CLASS_ARGUMENT, S("")));
+        Status s = path_arg(&f.run, fixture_pos(), file_system_fixture_cs(at(all, i).who), file_system_fixture_cs(at(all, i).path), at(all, i).allow_root, &p);
+        EXPECT(fixture_stopped(&f, s, CLASS_ARGUMENT, S("")));
     }
     // The texts of three of them, exactly.
-    fx_again(&f);
+    fixture_again(&f);
     CheckedPath p;
-    EXPECT(fx_said(&f, path_arg(&f.run, fx_pos(), S("read"), S("../auth/secret"), false, &p), CLASS_ARGUMENT,
+    EXPECT(fixture_said(&f, path_arg(&f.run, fixture_pos(), S("read"), S("../auth/secret"), false, &p), CLASS_ARGUMENT,
                    S("`read`: \"../auth/secret\" climbs out of the root with `..`: a folder beside it is reached through a mount, such as `repos:<name>/...` (`shale --help` lists this box's mounts)")));
-    fx_again(&f);
-    EXPECT(fx_said(&f, path_arg(&f.run, fx_pos(), S("read"), S("a/./b"), false, &p), CLASS_ARGUMENT,
+    fixture_again(&f);
+    EXPECT(fixture_said(&f, path_arg(&f.run, fixture_pos(), S("read"), S("a/./b"), false, &p), CLASS_ARGUMENT,
                    S("`read`: \"a/./b\" has a part (\".\") that is not a name: no `.`, `..`, empty parts or characters a strict name refuses")));
-    fx_again(&f);
-    EXPECT(fx_said(&f, path_arg(&f.run, fx_pos(), S("mkdir"), S(""), false, &p), CLASS_ARGUMENT, S("`mkdir(\"\")` would act on the whole root: name a path of at least one part")));
+    fixture_again(&f);
+    EXPECT(fixture_said(&f, path_arg(&f.run, fixture_pos(), S("mkdir"), S(""), false, &p), CLASS_ARGUMENT, S("`mkdir(\"\")` would act on the whole root: name a path of at least one part")));
     // With metal's hook, the absolute stop is the root's alone.
-    PathRun bare = path_run_make(&f.ctx, f.base.root, fx_charge, &f, &PATH_HOOK_NONE);
-    fx_again(&f);
-    EXPECT(fx_said(&f, path_arg(&bare, fx_pos(), S("read"), S("/etc/passwd"), false, &p), CLASS_ARGUMENT, S("`read`: \"/etc/passwd\" is absolute: paths are relative to the data root")));
+    PathRun bare = path_run_make(&f.ctx, f.base.root, fixture_charge, &f, &PATH_HOOK_NONE);
+    fixture_again(&f);
+    EXPECT(fixture_said(&f, path_arg(&bare, fixture_pos(), S("read"), S("/etc/passwd"), false, &p), CLASS_ARGUMENT, S("`read`: \"/etc/passwd\" is absolute: paths are relative to the data root")));
     // What is in the root is found, `.` is the root, and the steps are the
     // path's bytes.
-    fx_again(&f);
+    fixture_again(&f);
     uint64_t before = f.steps;
-    EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("exists"), S("chat/a.md"), true, &p));
-    EXPECT_STR(p.full.s, fx_r(&f, "R/chat/a.md"));
+    EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fixture_pos(), S("exists"), S("chat/a.md"), true, &p));
+    EXPECT_STR(p.full.s, fixture_r(&f, "R/chat/a.md"));
     EXPECT_STR(p.rel, S("chat/a.md"));
     // Nine bytes, then a step for each of its two parts' lstat.
     EXPECT_EQ(f.steps - before, 11);
-    EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("ls"), S("."), true, &p));
+    EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fixture_pos(), S("ls"), S("."), true, &p));
     EXPECT_STR(p.full.s, f.base.root);
     EXPECT_STR(p.rel, S(""));
     Str text = S("");
-    EXPECT(sx_file(&f.base, "top.txt", &text));
+    EXPECT(file_system_fixture_file(&f.base, "top.txt", &text));
     EXPECT_STR(text, S("t"));
-    fx_deinit(&f);
+    fixture_deinit(&f);
 }
 
 // ── the mounts file ─────────────────────────────────────────────────────
 
 TEST(mounts_a_mounts_paths_real_an_unknown_mount_or_a_missing_folder_named_the_files_mistakes_by_line) {
     Fx f;
-    fx_init(&f);
-    sx_mkdir(&f.base, "elsewhere/logs");
+    fixture_init(&f);
+    file_system_fixture_mkdir(&f.base, "elsewhere/logs");
     Mounts ms;
     Str why = S("");
-    EXPECT_EQ(mounts_parse(&f.host, fx_r(&f, "# where things are\n\nruns = R/elsewhere\nhome = ~/\ngone = /no/such/folder\nmy-runs = R/elsewhere\n"), S("/home/someone"), &ms, &why), MOUNTS_OK);
+    EXPECT_EQ(mounts_parse(&f.host, fixture_r(&f, "# where things are\n\nruns = R/elsewhere\nhome = ~/\ngone = /no/such/folder\nmy-runs = R/elsewhere\n"), S("/home/someone"), &ms, &why), MOUNTS_OK);
     EXPECT_EQ(ms.len, 4);
     EXPECT_STR(at(ms, 1).dir, S("/home/someone"));
     // The filesystem's root is a folder too: its `/` is kept, not trimmed away.
@@ -92,47 +92,47 @@ TEST(mounts_a_mounts_paths_real_an_unknown_mount_or_a_missing_folder_named_the_f
     EXPECT_STR(at(top, 1).dir, S("/tmp"));
     f.paths.mounts = Mounts_items(&ms);
     EXPECT(paths_run_folders_make(&f.paths, &f.run));
-    EXPECT_OK_IN(&f.ctx, fx_change(&f, "replace", S("runs:logs/a.txt"), S("via the mount")));
+    EXPECT_OK_IN(&f.ctx, fixture_change(&f, "replace", S("runs:logs/a.txt"), S("via the mount")));
     Str text = S("");
-    EXPECT(sx_file(&f.base, "elsewhere/logs/a.txt", &text));
+    EXPECT(file_system_fixture_file(&f.base, "elsewhere/logs/a.txt", &text));
     EXPECT_STR(text, S("via the mount"));
     CheckedPath p;
-    fx_again(&f);
+    fixture_again(&f);
     uint64_t before = f.steps;
-    EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("read"), S("runs:logs/a.txt"), false, &p));
-    EXPECT_STR(p.full.s, fx_r(&f, "R/elsewhere/logs/a.txt"));
+    EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fixture_pos(), S("read"), S("runs:logs/a.txt"), false, &p));
+    EXPECT_STR(p.full.s, fixture_r(&f, "R/elsewhere/logs/a.txt"));
     EXPECT_STR(p.rel, S("runs:logs/a.txt"));
     // Its bytes, then a step for each part below the mount's folder.
     EXPECT_EQ(f.steps - before, 17);
-    EXPECT_OK_IN(&f.ctx, fx_look(&f, "exists", S("runs:")));
+    EXPECT_OK_IN(&f.ctx, fixture_look(&f, "exists", S("runs:")));
     Str real = S("");
-    EXPECT_OK_IN(&f.ctx, paths_os_path(&f.paths, &f.run, fx_pos(), S("real"), S("runs:logs"), true, &real));
-    EXPECT_STR(real, fx_r(&f, "R/elsewhere/logs"));
+    EXPECT_OK_IN(&f.ctx, paths_os_path(&f.paths, &f.run, fixture_pos(), S("real"), S("runs:logs"), true, &real));
+    EXPECT_STR(real, fixture_r(&f, "R/elsewhere/logs"));
     Str real_root = S("");
-    EXPECT_OK_IN(&f.ctx, paths_os_path(&f.paths, &f.run, fx_pos(), S("real"), S(""), true, &real_root));
+    EXPECT_OK_IN(&f.ctx, paths_os_path(&f.paths, &f.run, fixture_pos(), S("real"), S(""), true, &real_root));
     EXPECT_STR(real_root, f.base.root);
     Str real_dot = S("");
-    EXPECT_OK_IN(&f.ctx, paths_os_path(&f.paths, &f.run, fx_pos(), S("real"), S("."), true, &real_dot));
+    EXPECT_OK_IN(&f.ctx, paths_os_path(&f.paths, &f.run, fixture_pos(), S("real"), S("."), true, &real_dot));
     EXPECT_STR(real_dot, real_root);
     // A mount's `.` is the mount, as the root's `.` is the root.
     Str m_dot = S("");
     Str m_bare = S("");
-    EXPECT_OK_IN(&f.ctx, paths_os_path(&f.paths, &f.run, fx_pos(), S("real"), S("runs:."), true, &m_dot));
-    EXPECT_OK_IN(&f.ctx, paths_os_path(&f.paths, &f.run, fx_pos(), S("real"), S("runs:"), true, &m_bare));
+    EXPECT_OK_IN(&f.ctx, paths_os_path(&f.paths, &f.run, fixture_pos(), S("real"), S("runs:."), true, &m_dot));
+    EXPECT_OK_IN(&f.ctx, paths_os_path(&f.paths, &f.run, fixture_pos(), S("real"), S("runs:"), true, &m_bare));
     EXPECT_STR(m_dot, m_bare);
     // A mount whose name has a `-` resolves as any other.
-    EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("glob"), S("my-runs:logs"), true, &p));
-    EXPECT_STR(p.full.s, fx_r(&f, "R/elsewhere/logs"));
-    EXPECT(fx_stopped(&f, fx_look(&f, "read", S("nope:x")), CLASS_ARGUMENT, S("the mounts are `runs`, `home`, `gone`")));
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("nope:x")), CLASS_ARGUMENT, S("\"nope:x\": `nope:` is not a mount: the mounts are `runs`, `home`, `gone`, `my-runs` (~/.config/shale/mounts)")));
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("gone:x")), CLASS_FILE_SYSTEM, S("the mount `gone` is /no/such/folder, which is not a folder there")));
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("runs:../x")), CLASS_ARGUMENT, S("\"runs:../x\" climbs out of its mount with `..`: a folder beside it is reached through a mount of its own (`shale --help` lists this box's mounts)")));
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("runs:/etc/passwd")), CLASS_ARGUMENT, S("\"runs:/etc/passwd\" is absolute inside its mount: a mount's paths are relative to it")));
+    EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fixture_pos(), S("glob"), S("my-runs:logs"), true, &p));
+    EXPECT_STR(p.full.s, fixture_r(&f, "R/elsewhere/logs"));
+    EXPECT(fixture_stopped(&f, fixture_look(&f, "read", S("nope:x")), CLASS_ARGUMENT, S("the mounts are `runs`, `home`, `gone`")));
+    EXPECT(fixture_said(&f, fixture_look(&f, "read", S("nope:x")), CLASS_ARGUMENT, S("\"nope:x\": `nope:` is not a mount: the mounts are `runs`, `home`, `gone`, `my-runs` (~/.config/shale/mounts)")));
+    EXPECT(fixture_said(&f, fixture_look(&f, "read", S("gone:x")), CLASS_FILE_SYSTEM, S("the mount `gone` is /no/such/folder, which is not a folder there")));
+    EXPECT(fixture_said(&f, fixture_look(&f, "read", S("runs:../x")), CLASS_ARGUMENT, S("\"runs:../x\" climbs out of its mount with `..`: a folder beside it is reached through a mount of its own (`shale --help` lists this box's mounts)")));
+    EXPECT(fixture_said(&f, fixture_look(&f, "read", S("runs:/etc/passwd")), CLASS_ARGUMENT, S("\"runs:/etc/passwd\" is absolute inside its mount: a mount's paths are relative to it")));
     // No mounts at all: said so.
     MountsItems none = {NULL, 0};
     f.paths.mounts = none;
     EXPECT(paths_run_folders_make(&f.paths, &f.run));
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("runs:x")), CLASS_ARGUMENT, S("\"runs:x\": `runs:` is not a mount: there are none (~/.config/shale/mounts)")));
+    EXPECT(fixture_said(&f, fixture_look(&f, "read", S("runs:x")), CLASS_ARGUMENT, S("\"runs:x\": `runs:` is not a mount: there are none (~/.config/shale/mounts)")));
     typedef struct {
         const char *text;
         const char *says;
@@ -147,15 +147,15 @@ TEST(mounts_a_mounts_paths_real_an_unknown_mount_or_a_missing_folder_named_the_f
     Bads bads = {bad, sizeof bad / sizeof *bad};
     for (size_t i = 0; i < bads.len; i++) {
         Mounts out;
-        EXPECT_EQ(mounts_parse(&f.host, sx_cs(at(bads, i).text), S("/home/x"), &out, &why), MOUNTS_MALFORMED);
-        EXPECT_STR(why, sx_cs(at(bads, i).says));
+        EXPECT_EQ(mounts_parse(&f.host, file_system_fixture_cs(at(bads, i).text), S("/home/x"), &out, &why), MOUNTS_MALFORMED);
+        EXPECT_STR(why, file_system_fixture_cs(at(bads, i).says));
     }
-    fx_deinit(&f);
+    fixture_deinit(&f);
 }
 
 TEST(the_mounts_file_shale_mounts_pins_it_the_default_s_absence_is_no_mounts_a_pinned_one_s_a_mistake) {
     Fx f;
-    fx_init(&f);
+    fixture_init(&f);
     Arena *a = &f.host;
     MountsLoaded got;
     Str why = S("");
@@ -164,47 +164,47 @@ TEST(the_mounts_file_shale_mounts_pins_it_the_default_s_absence_is_no_mounts_a_p
     EXPECT_STR(got.from, S("/no/such/home/.config/shale/mounts"));
     EXPECT_EQ(mounts_load(a, true, S("/no/such/mounts"), S("/h"), &got, &why), MOUNTS_MALFORMED);
     EXPECT_STR(why, S("SHALE_MOUNTS=/no/such/mounts: FileNotFound"));
-    sx_put(&f.base, "mounts", "runs = ~/runs\n");
-    Str file = sx_at(&f.base, "mounts").s;
+    file_system_fixture_put(&f.base, "mounts", "runs = ~/runs\n");
+    Str file = file_system_fixture_at(&f.base, "mounts").s;
     EXPECT_EQ(mounts_load(a, true, file, S("/h"), &got, &why), MOUNTS_OK);
     EXPECT_STR(at(got.mounts, 0).dir, S("/h/runs"));
     EXPECT_STR(got.from, file);
-    sx_put(&f.base, "mounts", "runs = runs\n");
+    file_system_fixture_put(&f.base, "mounts", "runs = runs\n");
     EXPECT_EQ(mounts_load(a, true, file, S("/h"), &got, &why), MOUNTS_MALFORMED);
     EXPECT(str_starts_with(why, file));
     Str tail = S(": line 1: `runs`'s value is relative: an absolute path, or one from `~/`");
     EXPECT(why.len >= tail.len && str_eq(str_sub(why, why.len - tail.len, why.len), tail));
     // A link in a mount's own path is resolved once, as the user's choice.
-    sx_mkdir(&f.base, "real-folder");
-    fx_link(&f, "real-folder", "linked");
+    file_system_fixture_mkdir(&f.base, "real-folder");
+    fixture_link(&f, "real-folder", "linked");
     Buf text = buf_make(a);
-    EXPECT(buf_lit(&text, "l = ") == OK && buf_str(&text, sx_at(&f.base, "linked").s) == OK && buf_lit(&text, "\n") == OK);
-    sx_put(&f.base, "mounts", "");
+    EXPECT(buf_lit(&text, "l = ") == OK && buf_str(&text, file_system_fixture_at(&f.base, "linked").s) == OK && buf_lit(&text, "\n") == OK);
+    file_system_fixture_put(&f.base, "mounts", "");
     EXPECT_EQ(file_system_replace(&f.base.file_system, a, os_str_own(file), buf_view(&text)), FILE_SYSTEM_OK);
     EXPECT_EQ(mounts_load(a, true, file, S("/h"), &got, &why), MOUNTS_OK);
-    EXPECT_STR(at(got.mounts, 0).dir, sx_at(&f.base, "real-folder").s);
+    EXPECT_STR(at(got.mounts, 0).dir, file_system_fixture_at(&f.base, "real-folder").s);
     // A folder that is missing keeps its spelling, for the run that uses it
     // to stop on; one that cannot be resolved for another cause is refused,
     // naming the mount and the cause, never the folder.
-    sx_mkdir(&f.base, "shut/inner");
+    file_system_fixture_mkdir(&f.base, "shut/inner");
     buf_clear(&text);
-    EXPECT(buf_lit(&text, "gone = ") == OK && buf_str(&text, sx_at(&f.base, "nowhere").s) == OK && buf_lit(&text, "\ns = ") == OK && buf_str(&text, sx_at(&f.base, "shut/inner").s) == OK && buf_lit(&text, "\n") == OK);
+    EXPECT(buf_lit(&text, "gone = ") == OK && buf_str(&text, file_system_fixture_at(&f.base, "nowhere").s) == OK && buf_lit(&text, "\ns = ") == OK && buf_str(&text, file_system_fixture_at(&f.base, "shut/inner").s) == OK && buf_lit(&text, "\n") == OK);
     EXPECT_EQ(file_system_replace(&f.base.file_system, a, os_str_own(file), buf_view(&text)), FILE_SYSTEM_OK);
-    EXPECT_EQ(sx_chmod(&f.base, "shut", 0), 0);
+    EXPECT_EQ(file_system_fixture_chmod(&f.base, "shut", 0), 0);
     MountsResult shut = mounts_load(a, true, file, S("/h"), &got, &why);
-    EXPECT_EQ(sx_chmod(&f.base, "shut", 0755), 0);
+    EXPECT_EQ(file_system_fixture_chmod(&f.base, "shut", 0755), 0);
     EXPECT_EQ(shut, MOUNTS_MALFORMED);
     EXPECT(str_starts_with(why, file));
     tail = S(": the mount `s`'s folder cannot be resolved: AccessDenied");
     EXPECT(why.len >= tail.len && str_eq(str_sub(why, why.len - tail.len, why.len), tail));
     EXPECT_EQ(mounts_load(a, true, file, S("/h"), &got, &why), MOUNTS_OK);
-    EXPECT_STR(at(got.mounts, 0).dir, sx_at(&f.base, "nowhere").s);
+    EXPECT_STR(at(got.mounts, 0).dir, file_system_fixture_at(&f.base, "nowhere").s);
     // A NUL in a mount's path is refused where its line is known, not as
     // the arena's refusal it would read as at the kernel.
     Mounts ms;
     EXPECT_EQ(mounts_parse(a, ((Str){"ok = /x\nbad = /a\0b\n", 19}), S("/h"), &ms, &why), MOUNTS_MALFORMED);
     EXPECT_STR(why, S("line 2: `bad`'s path holds a NUL byte, which no path can carry"));
-    fx_deinit(&f);
+    fixture_deinit(&f);
 }
 
 TEST(ro_mounts_the_mounts_file_s_ro_and_tools_in_either_order_any_other_trailing_word_or_one_twice_refused_by_line) {
@@ -243,8 +243,8 @@ TEST(ro_mounts_the_mounts_file_s_ro_and_tools_in_either_order_any_other_trailing
     Bads bads = {bad, sizeof bad / sizeof *bad};
     for (size_t i = 0; i < bads.len; i++) {
         Mounts out;
-        EXPECT_EQ(mounts_parse(&a, sx_cs(at(bads, i).text), S("/home/x"), &out, &why), MOUNTS_MALFORMED);
-        EXPECT_STR(why, sx_cs(at(bads, i).says));
+        EXPECT_EQ(mounts_parse(&a, file_system_fixture_cs(at(bads, i).text), S("/home/x"), &out, &why), MOUNTS_MALFORMED);
+        EXPECT_STR(why, file_system_fixture_cs(at(bads, i).says));
     }
     arena_deinit(&a);
 }
@@ -282,8 +282,8 @@ TEST(secrets_mounts_the_mounts_file_s_mistakes_name_the_line_and_the_mount_never
     Bads bads = {bad, sizeof bad / sizeof *bad};
     for (size_t i = 0; i < bads.len; i++) {
         Mounts out;
-        EXPECT_EQ(mounts_parse(&a, sx_cs(at(bads, i).text), S("/home/x"), &out, &why), MOUNTS_MALFORMED);
-        EXPECT_STR(why, sx_cs(at(bads, i).says));
+        EXPECT_EQ(mounts_parse(&a, file_system_fixture_cs(at(bads, i).text), S("/home/x"), &out, &why), MOUNTS_MALFORMED);
+        EXPECT_STR(why, file_system_fixture_cs(at(bads, i).says));
         EXPECT(mem_find(why.ptr, why.len, "planted", strlen("planted")) == SIZE_MAX);
     }
     arena_deinit(&a);
@@ -293,9 +293,9 @@ TEST(secrets_mounts_the_mounts_file_s_mistakes_name_the_line_and_the_mount_never
 
 TEST(an_absolute_path_s_stop_the_deepest_mount_or_the_root_that_holds_it_and_how_to_write_it_there) {
     Fx f;
-    fx_init(&f);
-    sx_mkdir(&f.base, "scr/deep");
-    sx_mkdir(&f.base, "scr/tasks");
+    fixture_init(&f);
+    file_system_fixture_mkdir(&f.base, "scr/deep");
+    file_system_fixture_mkdir(&f.base, "scr/tasks");
     // Each order of the nested mounts, so neither the first nor the last to
     // match wins by its place in the file.
     Lits os = LITS("side = R-side\nouter = R/scr\ndeep = R/scr/deep\n", "deep = R/scr/deep\nouter = R/scr\nside = R-side\n");
@@ -327,52 +327,52 @@ TEST(an_absolute_path_s_stop_the_deepest_mount_or_the_root_that_holds_it_and_how
     SLICE_TYPE(Cases, const Case);
     Cases cs = {cases, sizeof cases / sizeof *cases};
     for (size_t o = 0; o < os.len; o++) {
-        fx_mounts(&f, at(os, o));
+        fixture_mounts(&f, at(os, o));
         for (size_t i = 0; i < cs.len; i++) {
-            EXPECT(fx_said(&f, fx_look(&f, at(cs, i).who, fx_r(&f, at(cs, i).path)), CLASS_ARGUMENT, fx_r(&f, at(cs, i).says)));
+            EXPECT(fixture_said(&f, fixture_look(&f, at(cs, i).who, fixture_r(&f, at(cs, i).path)), CLASS_ARGUMENT, fixture_r(&f, at(cs, i).says)));
         }
     }
     // A change and a program's folder take the same stop, and nothing is
     // written.
-    EXPECT(fx_said(&f, fx_change(&f, "replace", SAYS("R/scr/tasks/new.txt"), S("x")), CLASS_ARGUMENT, SAYS("`replace`: \"R/scr/tasks/new.txt\" is absolute: it's under the mount `outer:`, so write \"outer:tasks/new.txt\"")));
-    EXPECT(!sx_there(&f.base, "scr/tasks/new.txt"));
+    EXPECT(fixture_said(&f, fixture_change(&f, "replace", SAYS("R/scr/tasks/new.txt"), S("x")), CLASS_ARGUMENT, SAYS("`replace`: \"R/scr/tasks/new.txt\" is absolute: it's under the mount `outer:`, so write \"outer:tasks/new.txt\"")));
+    EXPECT(!file_system_fixture_there(&f.base, "scr/tasks/new.txt"));
     // A host call's stop names the call the script made, never `host`.
     Str os_path = S("");
-    fx_again(&f);
-    EXPECT(fx_said(&f, paths_os_path(&f.paths, &f.run, fx_pos(), S("run"), SAYS("R/scr/deep"), false, &os_path), CLASS_ARGUMENT, SAYS("`run`: \"R/scr/deep\" is absolute: it's under the mount `deep:`, so write \"deep:.\"")));
-    fx_again(&f);
-    EXPECT(fx_said(&f, paths_os_path(&f.paths, &f.run, fx_pos(), S("real"), SAYS("R/scr/deep/x.zig"), true, &os_path), CLASS_ARGUMENT, SAYS("`real`: \"R/scr/deep/x.zig\" is absolute: it's under the mount `deep:`, so write \"deep:x.zig\"")));
-    EXPECT(fx_said(&f, fx_look(&f, "zig_rename", S("/etc/a.zig")), CLASS_ARGUMENT, S("`zig_rename`: \"/etc/a.zig\" " PLAIN)));
-    fx_again(&f);
-    EXPECT(fx_said(&f, paths_os_path(&f.paths, &f.run, fx_pos(), S("real"), SAYS("R/scr/../x"), true, &os_path), CLASS_ARGUMENT, SAYS("`real`: \"R/scr/../x\" " PLAIN)));
-    fx_deinit(&f);
+    fixture_again(&f);
+    EXPECT(fixture_said(&f, paths_os_path(&f.paths, &f.run, fixture_pos(), S("run"), SAYS("R/scr/deep"), false, &os_path), CLASS_ARGUMENT, SAYS("`run`: \"R/scr/deep\" is absolute: it's under the mount `deep:`, so write \"deep:.\"")));
+    fixture_again(&f);
+    EXPECT(fixture_said(&f, paths_os_path(&f.paths, &f.run, fixture_pos(), S("real"), SAYS("R/scr/deep/x.zig"), true, &os_path), CLASS_ARGUMENT, SAYS("`real`: \"R/scr/deep/x.zig\" is absolute: it's under the mount `deep:`, so write \"deep:x.zig\"")));
+    EXPECT(fixture_said(&f, fixture_look(&f, "zig_rename", S("/etc/a.zig")), CLASS_ARGUMENT, S("`zig_rename`: \"/etc/a.zig\" " PLAIN)));
+    fixture_again(&f);
+    EXPECT(fixture_said(&f, paths_os_path(&f.paths, &f.run, fixture_pos(), S("real"), SAYS("R/scr/../x"), true, &os_path), CLASS_ARGUMENT, SAYS("`real`: \"R/scr/../x\" " PLAIN)));
+    fixture_deinit(&f);
 }
 
 TEST(an_absolute_path_s_stop_and_a_host_call_s_in_a_builtin_s_checks_the_call_is_named) {
     Fx f;
-    fx_init(&f);
+    fixture_init(&f);
     // `zig_rename`'s path is checked by the core's rules, its name the
     // call's.
-    EXPECT(fx_stopped(&f, fx_look(&f, "zig_rename", S("a/../b.zig")), CLASS_ARGUMENT, S("`zig_rename`: \"a/../b.zig\" climbs out of the root with `..`")));
+    EXPECT(fixture_stopped(&f, fixture_look(&f, "zig_rename", S("a/../b.zig")), CLASS_ARGUMENT, S("`zig_rename`: \"a/../b.zig\" climbs out of the root with `..`")));
     // The name is the caller's for each call: a later stop of `read` is
     // `read`'s.
     Str os_path = S("");
-    EXPECT_OK_IN(&f.ctx, paths_os_path(&f.paths, &f.run, fx_pos(), S("real"), S(""), true, &os_path));
-    EXPECT(fx_stopped(&f, fx_look(&f, "read", S("/etc/x")), CLASS_ARGUMENT, S("`read`: \"/etc/x\"")));
-    fx_deinit(&f);
+    EXPECT_OK_IN(&f.ctx, paths_os_path(&f.paths, &f.run, fixture_pos(), S("real"), S(""), true, &os_path));
+    EXPECT(fixture_stopped(&f, fixture_look(&f, "read", S("/etc/x")), CLASS_ARGUMENT, S("`read`: \"/etc/x\"")));
+    fixture_deinit(&f);
 }
 
 TEST(an_absolute_path_s_stop_a_path_in_a_secrets_mount_s_folder_names_neither_the_mount_nor_its_folder) {
     Fx f;
-    fx_init(&f);
-    sx_mkdir(&f.base, "scr/keys");
-    sx_put(&f.base, "scr/keys/tok", "s3cret\n");
-    fx_mounts(&f, "outer = R/scr\nvault = R/scr/keys secrets\n");
+    fixture_init(&f);
+    file_system_fixture_mkdir(&f.base, "scr/keys");
+    file_system_fixture_put(&f.base, "scr/keys/tok", "s3cret\n");
+    fixture_mounts(&f, "outer = R/scr\nvault = R/scr/keys secrets\n");
     Lits ss = LITS("R/scr/keys/tok", "R/scr/keys");
     Lits ws = LITS("read", "exists");
     for (size_t i = 0; i < ss.len; i++) {
-        Status s = fx_look(&f, at(ws, i), fx_r(&f, at(ss, i)));
-        EXPECT(fx_stopped(&f, s, CLASS_ARGUMENT, S(PLAIN)));
+        Status s = fixture_look(&f, at(ws, i), fixture_r(&f, at(ss, i)));
+        EXPECT(fixture_stopped(&f, s, CLASS_ARGUMENT, S(PLAIN)));
         Str m = f.ctx.stop.message;
         EXPECT(str_eq(str_sub(m, m.len - strlen(PLAIN), m.len), S(PLAIN)));
         EXPECT(mem_find(m.ptr, m.len, "vault", 5) == SIZE_MAX);
@@ -380,101 +380,101 @@ TEST(an_absolute_path_s_stop_a_path_in_a_secrets_mount_s_folder_names_neither_th
         EXPECT(mem_find(m.ptr, m.len, "so write", 8) == SIZE_MAX);
     }
     // Beside the secrets folder, the mount above it is named as ever.
-    EXPECT(fx_said(&f, fx_look(&f, "read", SAYS("R/scr/notes.txt")), CLASS_ARGUMENT, SAYS("`read`: \"R/scr/notes.txt\" is absolute: it's under the mount `outer:`, so write \"outer:notes.txt\"")));
-    fx_deinit(&f);
+    EXPECT(fixture_said(&f, fixture_look(&f, "read", SAYS("R/scr/notes.txt")), CLASS_ARGUMENT, SAYS("`read`: \"R/scr/notes.txt\" is absolute: it's under the mount `outer:`, so write \"outer:notes.txt\"")));
+    fixture_deinit(&f);
 }
 
 // ── read-only mounts, links, a walk through a mount ─────────────────────
 
 TEST(ro_mounts_every_change_through_one_is_refused_before_anything_is_written_a_read_works) {
     Fx f;
-    fx_init(&f);
-    sx_mkdir(&f.base, "frozen/sub");
-    sx_put(&f.base, "frozen/a.zig", "const x = 1;\n\nconst y = x;\n");
-    sx_put(&f.base, "mine.zig", "const z = 1;\n");
-    fx_mounts(&f, "ro = R/frozen ro\n");
-    EXPECT_OK_IN(&f.ctx, fx_look(&f, "read", S("ro:a.zig")));
-    EXPECT_OK_IN(&f.ctx, fx_look(&f, "exists", S("ro:sub")));
-    EXPECT_OK_IN(&f.ctx, fx_look(&f, "ls", S("ro:")));
+    fixture_init(&f);
+    file_system_fixture_mkdir(&f.base, "frozen/sub");
+    file_system_fixture_put(&f.base, "frozen/a.zig", "const x = 1;\n\nconst y = x;\n");
+    file_system_fixture_put(&f.base, "mine.zig", "const z = 1;\n");
+    fixture_mounts(&f, "ro = R/frozen ro\n");
+    EXPECT_OK_IN(&f.ctx, fixture_look(&f, "read", S("ro:a.zig")));
+    EXPECT_OK_IN(&f.ctx, fixture_look(&f, "exists", S("ro:sub")));
+    EXPECT_OK_IN(&f.ctx, fixture_look(&f, "ls", S("ro:")));
     // Every change's path, through the mount and by the root into its folder.
     Lits ps = LITS("ro:a.zig", "ro:new.zig", "ro:d", "ro:sub", "frozen/a.zig", "frozen/sub/x");
     for (size_t i = 0; i < ps.len; i++) {
-        EXPECT(fx_stopped(&f, fx_change(&f, "replace", sx_cs(at(ps, i)), S("x")), CLASS_REFUSED, S("mount `ro` is read-only")));
+        EXPECT(fixture_stopped(&f, fixture_change(&f, "replace", file_system_fixture_cs(at(ps, i)), S("x")), CLASS_REFUSED, S("mount `ro` is read-only")));
         Str text = S("");
-        EXPECT(sx_file(&f.base, "frozen/a.zig", &text));
+        EXPECT(file_system_fixture_file(&f.base, "frozen/a.zig", &text));
         EXPECT_STR(text, S("const x = 1;\n\nconst y = x;\n"));
-        EXPECT(sx_file(&f.base, "mine.zig", &text));
+        EXPECT(file_system_fixture_file(&f.base, "mine.zig", &text));
         EXPECT_STR(text, S("const z = 1;\n"));
     }
-    EXPECT(fx_said(&f, fx_change(&f, "append", S("ro:a.zig"), S("x")), CLASS_REFUSED, S("ro:a.zig: mount `ro` is read-only")));
-    EXPECT(!sx_there(&f.base, "frozen/new.zig"));
-    EXPECT(!sx_there(&f.base, "frozen/d"));
+    EXPECT(fixture_said(&f, fixture_change(&f, "append", S("ro:a.zig"), S("x")), CLASS_REFUSED, S("ro:a.zig: mount `ro` is read-only")));
+    EXPECT(!file_system_fixture_there(&f.base, "frozen/new.zig"));
+    EXPECT(!file_system_fixture_there(&f.base, "frozen/d"));
     // A path beside it that only begins with its folder's name may change.
-    EXPECT_OK_IN(&f.ctx, fx_change(&f, "replace", S("frozenx.txt"), S("y")));
-    fx_deinit(&f);
+    EXPECT_OK_IN(&f.ctx, fixture_change(&f, "replace", S("frozenx.txt"), S("y")));
+    fixture_deinit(&f);
 }
 
 TEST(ro_mounts_a_writable_mount_inside_a_read_only_one_decides_for_its_own_folder) {
     Fx f;
-    fx_init(&f);
-    sx_mkdir(&f.base, "all/open");
-    sx_put(&f.base, "all/a.txt", "a\n");
-    fx_mounts(&f, "all = R/all ro\nopen = R/all/open\n");
-    EXPECT_OK_IN(&f.ctx, fx_change(&f, "replace", S("open:b.txt"), S("b")));
+    fixture_init(&f);
+    file_system_fixture_mkdir(&f.base, "all/open");
+    file_system_fixture_put(&f.base, "all/a.txt", "a\n");
+    fixture_mounts(&f, "all = R/all ro\nopen = R/all/open\n");
+    EXPECT_OK_IN(&f.ctx, fixture_change(&f, "replace", S("open:b.txt"), S("b")));
     Str text = S("");
-    EXPECT(sx_file(&f.base, "all/open/b.txt", &text));
+    EXPECT(file_system_fixture_file(&f.base, "all/open/b.txt", &text));
     EXPECT_STR(text, S("b"));
-    EXPECT(fx_stopped(&f, fx_change(&f, "replace", S("all:open/b.txt"), S("x")), CLASS_REFUSED, S("mount `all` is read-only")));
-    EXPECT(fx_stopped(&f, fx_change(&f, "replace", S("all:a.txt"), S("x")), CLASS_REFUSED, S("mount `all` is read-only")));
+    EXPECT(fixture_stopped(&f, fixture_change(&f, "replace", S("all:open/b.txt"), S("x")), CLASS_REFUSED, S("mount `all` is read-only")));
+    EXPECT(fixture_stopped(&f, fixture_change(&f, "replace", S("all:a.txt"), S("x")), CLASS_REFUSED, S("mount `all` is read-only")));
     // By the root: into the writable one's folder it may, beside it it may not.
-    EXPECT_OK_IN(&f.ctx, fx_change(&f, "replace", S("all/open/c.txt"), S("c")));
-    EXPECT(fx_stopped(&f, fx_change(&f, "replace", S("all/a.txt"), S("x")), CLASS_REFUSED, S("all/a.txt: mount `all` is read-only")));
-    EXPECT(sx_file(&f.base, "all/a.txt", &text));
+    EXPECT_OK_IN(&f.ctx, fixture_change(&f, "replace", S("all/open/c.txt"), S("c")));
+    EXPECT(fixture_stopped(&f, fixture_change(&f, "replace", S("all/a.txt"), S("x")), CLASS_REFUSED, S("all/a.txt: mount `all` is read-only")));
+    EXPECT(file_system_fixture_file(&f.base, "all/a.txt", &text));
     EXPECT_STR(text, S("a\n"));
-    EXPECT(sx_file(&f.base, "all/open/b.txt", &text));
+    EXPECT(file_system_fixture_file(&f.base, "all/open/b.txt", &text));
     EXPECT_STR(text, S("b"));
-    fx_deinit(&f);
+    fixture_deinit(&f);
 }
 
 TEST(a_walk_through_a_mount_its_paths_are_the_mounts_and_each_lands_where_the_mount_points) {
     Fx f;
-    fx_init(&f);
-    sx_mkdir(&f.base, "elsewhere/sub");
-    sx_put(&f.base, "elsewhere/a.zig", "x");
-    sx_put(&f.base, "elsewhere/sub/b.zig", "yy");
-    fx_mounts(&f, "m = R/elsewhere\n");
+    fixture_init(&f);
+    file_system_fixture_mkdir(&f.base, "elsewhere/sub");
+    file_system_fixture_put(&f.base, "elsewhere/a.zig", "x");
+    file_system_fixture_put(&f.base, "elsewhere/sub/b.zig", "yy");
+    fixture_mounts(&f, "m = R/elsewhere\n");
     CheckedPath p;
-    EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("walk"), S("m:"), true, &p));
-    EXPECT_STR(p.full.s, fx_r(&f, "R/elsewhere"));
+    EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fixture_pos(), S("walk"), S("m:"), true, &p));
+    EXPECT_STR(p.full.s, fixture_r(&f, "R/elsewhere"));
     EXPECT_STR(p.rel, S("m:"));
-    EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("walk"), S("m:."), true, &p));
+    EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fixture_pos(), S("walk"), S("m:."), true, &p));
     EXPECT_STR(p.rel, S("m:"));
-    EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("walk"), S("m:sub"), true, &p));
-    EXPECT_STR(p.full.s, fx_r(&f, "R/elsewhere/sub"));
+    EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fixture_pos(), S("walk"), S("m:sub"), true, &p));
+    EXPECT_STR(p.full.s, fixture_r(&f, "R/elsewhere/sub"));
     FileSystemEntries es;
     EXPECT_EQ(file_system_list(&f.base.file_system, &f.base.values, p.full, &es), FILE_SYSTEM_OK);
     EXPECT_EQ(es.len, 1);
     EXPECT_STR(at(es, 0).name, S("b.zig"));
     FileSystemStat st;
-    EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("walk"), S("m:sub/b.zig"), true, &p));
+    EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fixture_pos(), S("walk"), S("m:sub/b.zig"), true, &p));
     EXPECT_EQ(file_system_stat(&f.base.file_system, p.full, &st), FILE_SYSTEM_OK);
     EXPECT_EQ(st.size, 2);
-    fx_deinit(&f);
+    fixture_deinit(&f);
 }
 
 TEST(the_file_system_follows_no_link_to_a_file_to_a_folder_in_the_middle_in_a_mount_out_of_the_root) {
     Fx f;
-    fx_init(&f);
-    sx_mkdir(&f.base, "dir");
-    sx_mkdir(&f.base, "frozen");
-    sx_put(&f.base, "real.txt", "real");
-    sx_put(&f.base, "dir/inner.txt", "inner");
-    fx_link(&f, "real.txt", "link_file");
-    fx_link(&f, "dir", "link_dir");
-    fx_link(&f, "../real.txt", "dir/up");
-    fx_link(&f, "../real.txt", "frozen/up");
-    fx_link(&f, "/etc/hostname", "outside");
-    fx_mounts(&f, "m = R/dir\nro = R/frozen ro\n");
+    fixture_init(&f);
+    file_system_fixture_mkdir(&f.base, "dir");
+    file_system_fixture_mkdir(&f.base, "frozen");
+    file_system_fixture_put(&f.base, "real.txt", "real");
+    file_system_fixture_put(&f.base, "dir/inner.txt", "inner");
+    fixture_link(&f, "real.txt", "link_file");
+    fixture_link(&f, "dir", "link_dir");
+    fixture_link(&f, "../real.txt", "dir/up");
+    fixture_link(&f, "../real.txt", "frozen/up");
+    fixture_link(&f, "/etc/hostname", "outside");
+    fixture_mounts(&f, "m = R/dir\nro = R/frozen ro\n");
     typedef struct {
         const char *who;
         const char *path;
@@ -487,38 +487,38 @@ TEST(the_file_system_follows_no_link_to_a_file_to_a_folder_in_the_middle_in_a_mo
     };
     SLICE_TYPE(Cases, const Case);
     Cases cs = {cases, sizeof cases / sizeof *cases};
-    for (size_t i = 0; i < cs.len; i++) EXPECT(fx_stopped(&f, fx_look(&f, at(cs, i).who, sx_cs(at(cs, i).path)), CLASS_REFUSED, sx_cs(at(cs, i).says)));
-    EXPECT(fx_stopped(&f, fx_change(&f, "replace", S("link_file"), S("x")), CLASS_REFUSED, S("is a symbolic link")));
+    for (size_t i = 0; i < cs.len; i++) EXPECT(fixture_stopped(&f, fixture_look(&f, at(cs, i).who, file_system_fixture_cs(at(cs, i).path)), CLASS_REFUSED, file_system_fixture_cs(at(cs, i).says)));
+    EXPECT(fixture_stopped(&f, fixture_change(&f, "replace", S("link_file"), S("x")), CLASS_REFUSED, S("is a symbolic link")));
     // Its exact words, a mount's path spelled as the script wrote it.
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("link_dir/inner.txt")), CLASS_REFUSED, S("link_dir is a symbolic link: the file system follows none")));
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("m:up")), CLASS_REFUSED, S("m:up is a symbolic link: the file system follows none")));
+    EXPECT(fixture_said(&f, fixture_look(&f, "read", S("link_dir/inner.txt")), CLASS_REFUSED, S("link_dir is a symbolic link: the file system follows none")));
+    EXPECT(fixture_said(&f, fixture_look(&f, "read", S("m:up")), CLASS_REFUSED, S("m:up is a symbolic link: the file system follows none")));
     Str text = S("");
-    EXPECT(sx_file(&f.base, "real.txt", &text));
+    EXPECT(file_system_fixture_file(&f.base, "real.txt", &text));
     EXPECT_STR(text, S("real"));
     // What is no link reads as ever.
-    EXPECT_OK_IN(&f.ctx, fx_look(&f, "read", S("real.txt")));
-    EXPECT_OK_IN(&f.ctx, fx_look(&f, "read", S("m:inner.txt")));
-    EXPECT_OK_IN(&f.ctx, fx_look(&f, "ls", S("")));
-    fx_deinit(&f);
+    EXPECT_OK_IN(&f.ctx, fixture_look(&f, "read", S("real.txt")));
+    EXPECT_OK_IN(&f.ctx, fixture_look(&f, "read", S("m:inner.txt")));
+    EXPECT_OK_IN(&f.ctx, fixture_look(&f, "ls", S("")));
+    fixture_deinit(&f);
 }
 
 // ── the secrets rule ────────────────────────────────────────────────────
 
 // Whether the stop the run made names the secrets folder `keys` under the root.
-static bool fx_names_keys(Fx *f) {
-    Str dir = sx_at(&f->base, "keys").s;
+static bool fixture_names_keys(Fx *f) {
+    Str dir = file_system_fixture_at(&f->base, "keys").s;
     Str m = f->ctx.stop.message;
     return mem_find(m.ptr, m.len, dir.ptr, dir.len) != SIZE_MAX;
 }
 
 TEST(secrets_mounts_no_read_listing_change_path_or_argument_reaches_a_token_by_the_mount_or_another_way) {
     Fx f;
-    fx_init(&f);
-    sx_mkdir(&f.base, "keys");
-    sx_put(&f.base, "keys/tok", "s3cret\n");
-    fx_link(&f, "keys", "alias");
-    fx_link(&f, ".", "up");
-    fx_mounts(&f, "k = R/keys secrets\nall = R\n");
+    fixture_init(&f);
+    file_system_fixture_mkdir(&f.base, "keys");
+    file_system_fixture_put(&f.base, "keys/tok", "s3cret\n");
+    fixture_link(&f, "keys", "alias");
+    fixture_link(&f, ".", "up");
+    fixture_mounts(&f, "k = R/keys secrets\nall = R\n");
     EXPECT_EQ(at(f.paths.mounts, 0).access, MOUNT_READ_ONLY);
     typedef struct {
         const char *who;
@@ -537,24 +537,24 @@ TEST(secrets_mounts_no_read_listing_change_path_or_argument_reaches_a_token_by_t
     SLICE_TYPE(Cases, const Case);
     Cases ls = {looks, sizeof looks / sizeof *looks};
     for (size_t i = 0; i < ls.len; i++) {
-        EXPECT(fx_stopped(&f, fx_look(&f, at(ls, i).who, sx_cs(at(ls, i).path)), CLASS_REFUSED, sx_cs(at(ls, i).says)));
-        EXPECT(!fx_names_keys(&f));
+        EXPECT(fixture_stopped(&f, fixture_look(&f, at(ls, i).who, file_system_fixture_cs(at(ls, i).path)), CLASS_REFUSED, file_system_fixture_cs(at(ls, i).says)));
+        EXPECT(!fixture_names_keys(&f));
     }
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("k:tok")), CLASS_REFUSED, S("\"k:tok\": the mount `k` holds secrets: only `run`'s `secrets` (or `http_get`'s `bearer`) may name its files")));
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("keys/tok")), CLASS_REFUSED, S("\"keys/tok\" is in the mount `k`, which holds secrets")));
+    EXPECT(fixture_said(&f, fixture_look(&f, "read", S("k:tok")), CLASS_REFUSED, S("\"k:tok\": the mount `k` holds secrets: only `run`'s `secrets` (or `http_get`'s `bearer`) may name its files")));
+    EXPECT(fixture_said(&f, fixture_look(&f, "read", S("keys/tok")), CLASS_REFUSED, S("\"keys/tok\" is in the mount `k`, which holds secrets")));
     Str os = S("");
-    fx_again(&f);
-    EXPECT(fx_stopped(&f, paths_os_path(&f.paths, &f.run, fx_pos(), S("real"), S("k:tok"), true, &os), CLASS_REFUSED, S("the mount `k` holds secrets")));
-    EXPECT(fx_stopped(&f, fx_change(&f, "replace", S("k:tok"), S("x")), CLASS_REFUSED, S("the mount `k` holds secrets")));
+    fixture_again(&f);
+    EXPECT(fixture_stopped(&f, paths_os_path(&f.paths, &f.run, fixture_pos(), S("real"), S("k:tok"), true, &os), CLASS_REFUSED, S("the mount `k` holds secrets")));
+    EXPECT(fixture_stopped(&f, fixture_change(&f, "replace", S("k:tok"), S("x")), CLASS_REFUSED, S("the mount `k` holds secrets")));
     // A program started in it.
-    fx_again(&f);
-    EXPECT(fx_stopped(&f, paths_os_path(&f.paths, &f.run, fx_pos(), S("run"), S("k:"), false, &os), CLASS_REFUSED, S("the mount `k` holds secrets")));
-    fx_again(&f);
-    EXPECT(fx_stopped(&f, paths_os_path(&f.paths, &f.run, fx_pos(), S("run"), S("all:keys"), false, &os), CLASS_REFUSED, S("the mount `k`")));
+    fixture_again(&f);
+    EXPECT(fixture_stopped(&f, paths_os_path(&f.paths, &f.run, fixture_pos(), S("run"), S("k:"), false, &os), CLASS_REFUSED, S("the mount `k` holds secrets")));
+    fixture_again(&f);
+    EXPECT(fixture_stopped(&f, paths_os_path(&f.paths, &f.run, fixture_pos(), S("run"), S("all:keys"), false, &os), CLASS_REFUSED, S("the mount `k`")));
     // A program handed its path, by any spelling: whole, relative to the
     // program's folder, with `.` or `..`, after an option's `=`, through a
     // link, in `env`, or to a job; a folder that holds it; a link to one.
-    Str argv_real = fx_r(&f, "R/keys/tok");
+    Str argv_real = fixture_r(&f, "R/keys/tok");
     typedef struct {
         const char *who;
         Str arg;
@@ -577,10 +577,10 @@ TEST(secrets_mounts_no_read_listing_change_path_or_argument_reaches_a_token_by_t
     for (size_t i = 0; i < as.len; i++) {
         const Str argv_items[4] = {S("shale-fixture"), S("lines"), S("1"), at(as, i).arg};
         PathsStrs argv = {argv_items, 4};
-        fx_again(&f);
-        Status s = paths_refuse_secret_args(&f.paths, &f.run, fx_pos(), sx_cs(at(as, i).who), argv, f.base.root, none, none);
-        EXPECT(fx_stopped(&f, s, CLASS_REFUSED, sx_cs(at(as, i).says)));
-        EXPECT(!fx_names_keys(&f));
+        fixture_again(&f);
+        Status s = paths_refuse_secret_args(&f.paths, &f.run, fixture_pos(), file_system_fixture_cs(at(as, i).who), argv, f.base.root, none, none);
+        EXPECT(fixture_stopped(&f, s, CLASS_REFUSED, file_system_fixture_cs(at(as, i).says)));
+        EXPECT(!fixture_names_keys(&f));
     }
     const Str env_k[1] = {S("F")};
     const Str env_v[1] = {S("keys/tok")};
@@ -588,39 +588,39 @@ TEST(secrets_mounts_no_read_listing_change_path_or_argument_reaches_a_token_by_t
     PathsStrs ev = {env_v, 1};
     const Str plain_argv[2] = {S("shale-fixture"), S("env")};
     PathsStrs pa = {plain_argv, 2};
-    fx_again(&f);
-    EXPECT(fx_said(&f, paths_refuse_secret_args(&f.paths, &f.run, fx_pos(), S("run"), pa, f.base.root, ek, ev), CLASS_REFUSED,
+    fixture_again(&f);
+    EXPECT(fixture_said(&f, paths_refuse_secret_args(&f.paths, &f.run, fixture_pos(), S("run"), pa, f.base.root, ek, ev), CLASS_REFUSED,
                    S("`run`'s `env` F names the mount `k`'s folder, which holds secrets: hand one over as `secrets`")));
     // A program handed nothing of it runs.
-    fx_again(&f);
-    EXPECT_OK_IN(&f.ctx, paths_refuse_secret_args(&f.paths, &f.run, fx_pos(), S("run"), pa, f.base.root, none, none));
+    fixture_again(&f);
+    EXPECT_OK_IN(&f.ctx, paths_refuse_secret_args(&f.paths, &f.run, fixture_pos(), S("run"), pa, f.base.root, none, none));
     Str text = S("");
-    EXPECT(sx_file(&f.base, "keys/tok", &text));
+    EXPECT(file_system_fixture_file(&f.base, "keys/tok", &text));
     EXPECT_STR(text, S("s3cret\n"));
     // `secrets` takes one; the mount itself is no secret.
     Str secret = S("");
-    fx_again(&f);
-    EXPECT_OK_IN(&f.ctx, paths_secret_path(&f.paths, &f.run, fx_pos(), S("run"), S("k:tok"), &secret));
-    EXPECT_STR(secret, fx_r(&f, "R/keys/tok"));
-    fx_again(&f);
-    EXPECT(fx_said(&f, paths_secret_path(&f.paths, &f.run, fx_pos(), S("run"), S("k:"), &secret), CLASS_ARGUMENT, S("\"k:\": a secret is a file in the mount, not the mount")));
+    fixture_again(&f);
+    EXPECT_OK_IN(&f.ctx, paths_secret_path(&f.paths, &f.run, fixture_pos(), S("run"), S("k:tok"), &secret));
+    EXPECT_STR(secret, fixture_r(&f, "R/keys/tok"));
+    fixture_again(&f);
+    EXPECT(fixture_said(&f, paths_secret_path(&f.paths, &f.run, fixture_pos(), S("run"), S("k:"), &secret), CLASS_ARGUMENT, S("\"k:\": a secret is a file in the mount, not the mount")));
     // A path that is no secrets mount's is any path.
-    fx_again(&f);
-    EXPECT_EQ(paths_secret_path(&f.paths, &f.run, fx_pos(), S("run"), S("all:up"), &secret), STOP);
-    EXPECT(fx_stopped(&f, STOP, CLASS_REFUSED, S("up is a symbolic link")));
+    fixture_again(&f);
+    EXPECT_EQ(paths_secret_path(&f.paths, &f.run, fixture_pos(), S("run"), S("all:up"), &secret), STOP);
+    EXPECT(fixture_stopped(&f, STOP, CLASS_REFUSED, S("up is a symbolic link")));
     // Names are not secrets: the folder above it lists.
-    EXPECT_OK_IN(&f.ctx, fx_look(&f, "ls", S("")));
-    fx_deinit(&f);
+    EXPECT_OK_IN(&f.ctx, fixture_look(&f, "ls", S("")));
+    fixture_deinit(&f);
 }
 
 TEST(stdout_secret_only_directly_in_a_secrets_mount_never_in_a_folder_of_it_never_through_a_link) {
     Fx f;
-    fx_init(&f);
-    sx_mkdir(&f.base, "keys/sub");
-    sx_mkdir(&f.base, "plain");
-    sx_put(&f.base, "keys/old", "was\n");
-    fx_link(&f, "old", "keys/ln");
-    fx_mounts(&f, "k = R/keys secrets\np = R/plain\n");
+    fixture_init(&f);
+    file_system_fixture_mkdir(&f.base, "keys/sub");
+    file_system_fixture_mkdir(&f.base, "plain");
+    file_system_fixture_put(&f.base, "keys/old", "was\n");
+    fixture_link(&f, "old", "keys/ln");
+    fixture_mounts(&f, "k = R/keys secrets\np = R/plain\n");
     typedef struct {
         const char *path;
         StopClass cls;
@@ -640,40 +640,40 @@ TEST(stdout_secret_only_directly_in_a_secrets_mount_never_in_a_folder_of_it_neve
     Cases cs = {cases, sizeof cases / sizeof *cases};
     Str target = S("");
     for (size_t i = 0; i < cs.len; i++) {
-        fx_again(&f);
-        EXPECT(fx_stopped(&f, paths_secret_target(&f.paths, &f.run, fx_pos(), sx_cs(at(cs, i).path), &target), at(cs, i).cls, sx_cs(at(cs, i).says)));
+        fixture_again(&f);
+        EXPECT(fixture_stopped(&f, paths_secret_target(&f.paths, &f.run, fixture_pos(), file_system_fixture_cs(at(cs, i).path), &target), at(cs, i).cls, file_system_fixture_cs(at(cs, i).says)));
     }
-    fx_again(&f);
-    EXPECT(fx_said(&f, paths_secret_target(&f.paths, &f.run, fx_pos(), S("k:sub/x"), &target), CLASS_REFUSED,
+    fixture_again(&f);
+    EXPECT(fixture_said(&f, paths_secret_target(&f.paths, &f.run, fixture_pos(), S("k:sub/x"), &target), CLASS_REFUSED,
                    S("`run`'s `stdout_secret` \"k:sub/x\" is in a folder of the mount: a secret is a file directly in it, `\"k:NAME\"`")));
-    fx_again(&f);
-    EXPECT_OK_IN(&f.ctx, paths_secret_target(&f.paths, &f.run, fx_pos(), S("k:new"), &target));
-    EXPECT_STR(target, fx_r(&f, "R/keys/new"));
-    fx_deinit(&f);
+    fixture_again(&f);
+    EXPECT_OK_IN(&f.ctx, paths_secret_target(&f.paths, &f.run, fixture_pos(), S("k:new"), &target));
+    EXPECT_STR(target, fixture_r(&f, "R/keys/new"));
+    fixture_deinit(&f);
 }
 
 TEST(the_secrets_rule_s_one_check_a_host_text_naming_a_secrets_folder_ends_the_process) {
     Fx f;
-    fx_init(&f);
-    sx_mkdir(&f.base, "keys");
-    fx_mounts(&f, "k = R/keys secrets\n");
-    Str dir = sx_at(&f.base, "keys/tok").s;
+    fixture_init(&f);
+    file_system_fixture_mkdir(&f.base, "keys");
+    fixture_mounts(&f, "k = R/keys secrets\n");
+    Str dir = file_system_fixture_at(&f.base, "keys/tok").s;
     // The script's own text may come back, as Zig's plain stop gives it back.
-    fx_again(&f);
-    EXPECT(fx_said(&f, path_fail(&f.run, fx_pos(), CLASS_ARGUMENT, S("`read`: \"{s}\" is absolute"), MSG_ARGS(MSG_FROM_SCRIPT(dir))), CLASS_ARGUMENT, fx_r(&f, "`read`: \"R/keys/tok\" is absolute")));
+    fixture_again(&f);
+    EXPECT(fixture_said(&f, path_fail(&f.run, fixture_pos(), CLASS_ARGUMENT, S("`read`: \"{s}\" is absolute"), MSG_ARGS(MSG_FROM_SCRIPT(dir))), CLASS_ARGUMENT, fixture_r(&f, "`read`: \"R/keys/tok\" is absolute")));
     // A host text naming the folder is a bug in the C, never a message.
-    EXPECT_DIES(if (path_fail(&f.run, fx_pos(), CLASS_FILE_SYSTEM, S("--undo-on-stop: {s} cannot be read"), MSG_ARGS(MSG_FROM_HOST(dir))) != OK) {});
+    EXPECT_DIES(if (path_fail(&f.run, fixture_pos(), CLASS_FILE_SYSTEM, S("--undo-on-stop: {s} cannot be read"), MSG_ARGS(MSG_FROM_HOST(dir))) != OK) {});
     // So is one naming it as the run sees it, through a relative root.
     bool names = false;
-    EXPECT_OK_IN(&f.ctx, paths_names_secret(&f.paths, &f.run, fx_pos(), fx_r(&f, "x R/keys y"), &names));
+    EXPECT_OK_IN(&f.ctx, paths_names_secret(&f.paths, &f.run, fixture_pos(), fixture_r(&f, "x R/keys y"), &names));
     EXPECT(names);
-    EXPECT_OK_IN(&f.ctx, paths_names_secret(&f.paths, &f.run, fx_pos(), S("keys/tok"), &names));
+    EXPECT_OK_IN(&f.ctx, paths_names_secret(&f.paths, &f.run, fixture_pos(), S("keys/tok"), &names));
     EXPECT(!names);
     // The folder itself, wherever it stands in a message.
     Lits namings = LITS("R/keys", "R/keys/tok", "R/keys.", "`R/keys`", "R/keys: shut", "R/keys2 or R/keys/t", "R/keys.bak and R/keys");
     for (size_t k = 0; k < namings.len; k++) {
         names = false;
-        EXPECT_OK_IN(&f.ctx, paths_names_secret(&f.paths, &f.run, fx_pos(), fx_r(&f, at(namings, k)), &names));
+        EXPECT_OK_IN(&f.ctx, paths_names_secret(&f.paths, &f.run, fixture_pos(), fixture_r(&f, at(namings, k)), &names));
         EXPECT(names);
     }
     // A sibling whose name only begins with the folder's is not it, so its
@@ -681,39 +681,39 @@ TEST(the_secrets_rule_s_one_check_a_host_text_naming_a_secrets_folder_ends_the_p
     Lits siblings = LITS("R/keysx", "R/keys2/f.txt/x", "R/keys-old", "R/keys_1", "R/keys.bak/tok");
     for (size_t k = 0; k < siblings.len; k++) {
         names = true;
-        EXPECT_OK_IN(&f.ctx, paths_names_secret(&f.paths, &f.run, fx_pos(), fx_r(&f, at(siblings, k)), &names));
+        EXPECT_OK_IN(&f.ctx, paths_names_secret(&f.paths, &f.run, fixture_pos(), fixture_r(&f, at(siblings, k)), &names));
         EXPECT(!names);
     }
     // A mount's folder is a host text too, held to the same check.
-    EXPECT_DIES(if (path_fail(&f.run, fx_pos(), CLASS_FILE_SYSTEM, S("the mount `{s}` is {s}, which is not a folder there"), MSG_ARGS(MSG_FROM_HOST(S("k")), MSG_FROM_HOST(fx_r(&f, "R/keys")))) != OK) {});
+    EXPECT_DIES(if (path_fail(&f.run, fixture_pos(), CLASS_FILE_SYSTEM, S("the mount `{s}` is {s}, which is not a folder there"), MSG_ARGS(MSG_FROM_HOST(S("k")), MSG_FROM_HOST(fixture_r(&f, "R/keys")))) != OK) {});
     // So a mount's folder missing or shut is said by the mount's name alone
     // when the folder is a secrets mount's, or its path spells one; an
     // ordinary mount's names its folder.
-    sx_mkdir(&f.base, "shut/keys");
-    sx_mkdir(&f.base, "shut/plain");
-    fx_mounts(&f, "k = R/no-keys secrets\np = R/no-plain\nks = R/shut/keys secrets\nps = R/shut/plain\nin = R/no-keys/sub\nnear = R/no-keys-old\nkin = R/shut/keys/sub\n");
+    file_system_fixture_mkdir(&f.base, "shut/keys");
+    file_system_fixture_mkdir(&f.base, "shut/plain");
+    fixture_mounts(&f, "k = R/no-keys secrets\np = R/no-plain\nks = R/shut/keys secrets\nps = R/shut/plain\nin = R/no-keys/sub\nnear = R/no-keys-old\nkin = R/shut/keys/sub\n");
     Str secret = S("");
     // Through `run`'s `secrets` and `stdout_secret`, the mount alone.
-    fx_again(&f);
-    EXPECT(fx_said(&f, paths_secret_path(&f.paths, &f.run, fx_pos(), S("run"), S("k:tok"), &secret), CLASS_FILE_SYSTEM, S("the mount `k` is a secrets mount whose folder is missing")));
-    fx_again(&f);
-    EXPECT(fx_said(&f, paths_secret_target(&f.paths, &f.run, fx_pos(), S("k:tok"), &secret), CLASS_FILE_SYSTEM, S("the mount `k` is a secrets mount whose folder is missing")));
+    fixture_again(&f);
+    EXPECT(fixture_said(&f, paths_secret_path(&f.paths, &f.run, fixture_pos(), S("run"), S("k:tok"), &secret), CLASS_FILE_SYSTEM, S("the mount `k` is a secrets mount whose folder is missing")));
+    fixture_again(&f);
+    EXPECT(fixture_said(&f, paths_secret_target(&f.paths, &f.run, fixture_pos(), S("k:tok"), &secret), CLASS_FILE_SYSTEM, S("the mount `k` is a secrets mount whose folder is missing")));
     // An ordinary mount's names its folder.
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("p:x")), CLASS_FILE_SYSTEM, SAYS("the mount `p` is R/no-plain, which is not a folder there")));
+    EXPECT(fixture_said(&f, fixture_look(&f, "read", S("p:x")), CLASS_FILE_SYSTEM, SAYS("the mount `p` is R/no-plain, which is not a folder there")));
     // Unless its path spells a secrets mount's folder, inside it or only
     // beginning with it.
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("in:x")), CLASS_FILE_SYSTEM, S("the mount `in`'s folder is missing; its path holds a secrets mount's folder, so it is not named")));
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("near:x")), CLASS_FILE_SYSTEM, S("the mount `near`'s folder is missing; its path holds a secrets mount's folder, so it is not named")));
+    EXPECT(fixture_said(&f, fixture_look(&f, "read", S("in:x")), CLASS_FILE_SYSTEM, S("the mount `in`'s folder is missing; its path holds a secrets mount's folder, so it is not named")));
+    EXPECT(fixture_said(&f, fixture_look(&f, "read", S("near:x")), CLASS_FILE_SYSTEM, S("the mount `near`'s folder is missing; its path holds a secrets mount's folder, so it is not named")));
     // A folder there that cannot be opened: its parent shut.
-    EXPECT_EQ(sx_chmod(&f.base, "shut", 0), 0);
-    fx_again(&f);
-    EXPECT(fx_said(&f, paths_secret_path(&f.paths, &f.run, fx_pos(), S("run"), S("ks:tok"), &secret), CLASS_FILE_SYSTEM, S("the mount `ks` is a secrets mount whose folder cannot be opened: AccessDenied")));
-    fx_again(&f);
-    EXPECT(fx_said(&f, paths_secret_target(&f.paths, &f.run, fx_pos(), S("ks:tok"), &secret), CLASS_FILE_SYSTEM, S("the mount `ks` is a secrets mount whose folder cannot be opened: AccessDenied")));
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("ps:x")), CLASS_FILE_SYSTEM, SAYS("the mount `ps` is R/shut/plain, which cannot be opened: AccessDenied")));
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("kin:x")), CLASS_FILE_SYSTEM, S("the mount `kin`'s folder cannot be opened: AccessDenied; its path holds a secrets mount's folder, so it is not named")));
-    EXPECT_EQ(sx_chmod(&f.base, "shut", 0700), 0);
-    fx_deinit(&f);
+    EXPECT_EQ(file_system_fixture_chmod(&f.base, "shut", 0), 0);
+    fixture_again(&f);
+    EXPECT(fixture_said(&f, paths_secret_path(&f.paths, &f.run, fixture_pos(), S("run"), S("ks:tok"), &secret), CLASS_FILE_SYSTEM, S("the mount `ks` is a secrets mount whose folder cannot be opened: AccessDenied")));
+    fixture_again(&f);
+    EXPECT(fixture_said(&f, paths_secret_target(&f.paths, &f.run, fixture_pos(), S("ks:tok"), &secret), CLASS_FILE_SYSTEM, S("the mount `ks` is a secrets mount whose folder cannot be opened: AccessDenied")));
+    EXPECT(fixture_said(&f, fixture_look(&f, "read", S("ps:x")), CLASS_FILE_SYSTEM, SAYS("the mount `ps` is R/shut/plain, which cannot be opened: AccessDenied")));
+    EXPECT(fixture_said(&f, fixture_look(&f, "read", S("kin:x")), CLASS_FILE_SYSTEM, S("the mount `kin`'s folder cannot be opened: AccessDenied; its path holds a secrets mount's folder, so it is not named")));
+    EXPECT_EQ(file_system_fixture_chmod(&f.base, "shut", 0700), 0);
+    fixture_deinit(&f);
 }
 
 // ── the prefix attack ───────────────────────────────────────────────────
@@ -730,34 +730,34 @@ TEST(a_folder_that_only_begins_with_another_s_name_is_not_in_it) {
     EXPECT_STR(mounts_trim_slash(S("//")), S("/"));
     EXPECT_STR(mounts_trim_slash(S("")), S(""));
     Fx f;
-    fx_init(&f);
-    sx_mkdir(&f.base, "x");
-    sx_mkdir(&f.base, "xy");
-    sx_mkdir(&f.base, "k");
-    sx_mkdir(&f.base, "kz");
-    fx_mounts(&f, "x = R/x ro\nk = R/k secrets\n");
-    EXPECT(fx_stopped(&f, fx_change(&f, "replace", S("x/a.txt"), S("a")), CLASS_REFUSED, S("mount `x` is read-only")));
-    EXPECT_OK_IN(&f.ctx, fx_change(&f, "replace", S("xy/a.txt"), S("a")));
-    EXPECT(fx_stopped(&f, fx_look(&f, "read", S("k/a")), CLASS_REFUSED, S("is in the mount `k`")));
-    EXPECT_OK_IN(&f.ctx, fx_look(&f, "read", S("kz/a")));
-    EXPECT(!sx_there(&f.base, "x/a.txt"));
-    EXPECT(sx_there(&f.base, "xy/a.txt"));
-    fx_deinit(&f);
+    fixture_init(&f);
+    file_system_fixture_mkdir(&f.base, "x");
+    file_system_fixture_mkdir(&f.base, "xy");
+    file_system_fixture_mkdir(&f.base, "k");
+    file_system_fixture_mkdir(&f.base, "kz");
+    fixture_mounts(&f, "x = R/x ro\nk = R/k secrets\n");
+    EXPECT(fixture_stopped(&f, fixture_change(&f, "replace", S("x/a.txt"), S("a")), CLASS_REFUSED, S("mount `x` is read-only")));
+    EXPECT_OK_IN(&f.ctx, fixture_change(&f, "replace", S("xy/a.txt"), S("a")));
+    EXPECT(fixture_stopped(&f, fixture_look(&f, "read", S("k/a")), CLASS_REFUSED, S("is in the mount `k`")));
+    EXPECT_OK_IN(&f.ctx, fixture_look(&f, "read", S("kz/a")));
+    EXPECT(!file_system_fixture_there(&f.base, "x/a.txt"));
+    EXPECT(file_system_fixture_there(&f.base, "xy/a.txt"));
+    fixture_deinit(&f);
 }
 
 // ── the undo journal ────────────────────────────────────────────────────
 
 // A change the way `mkdir` and `remove_tree` make theirs: the hook first.
-static STATUS_MUST_USE Status fx_tree(Fx *f, bool make, Str path) {
-    fx_again(f);
+static STATUS_MUST_USE Status fixture_tree(Fx *f, bool make, Str path) {
+    fixture_again(f);
     CheckedPath p;
-    TRY(path_arg(&f->run, fx_pos(), make ? S("mkdir") : S("remove_tree"), path, false, &p));
-    TRY(f->hook.may_change(f->hook.ctx, &f->run, fx_pos(), p.rel, p.full.s));
+    TRY(path_arg(&f->run, fixture_pos(), make ? S("mkdir") : S("remove_tree"), path, false, &p));
+    TRY(f->hook.may_change(f->hook.ctx, &f->run, fixture_pos(), p.rel, p.full.s));
     FileSystemErr e = make ? file_system_make_dir(&f->base.file_system, p.full) : file_system_remove_tree(&f->base.file_system, &f->base.values, p.full);
-    return e == FILE_SYSTEM_OK ? OK : path_file_system_failed(&f->run, fx_pos(), make ? S("mkdir") : S("remove_tree"), p.rel, e);
+    return e == FILE_SYSTEM_OK ? OK : path_file_system_failed(&f->run, fixture_pos(), make ? S("mkdir") : S("remove_tree"), p.rel, e);
 }
 
-static void fx_journal_kinds(Fx *f, size_t *file, size_t *absent, size_t *dir) {
+static void fixture_journal_kinds(Fx *f, size_t *file, size_t *absent, size_t *dir) {
     *file = 0;
     *absent = 0;
     *dir = 0;
@@ -771,15 +771,15 @@ static void fx_journal_kinds(Fx *f, size_t *file, size_t *absent, size_t *dir) {
 
 TEST(undo_each_path_is_journaled_once_before_its_first_change_as_a_file_s_bytes_a_folder_or_nothing_there) {
     Fx f;
-    fx_init(&f);
+    fixture_init(&f);
     f.paths.undo = true;
-    sx_put(&f.base, "a.txt", "one\n");
-    sx_mkdir(&f.base, "d");
-    EXPECT_OK_IN(&f.ctx, fx_change(&f, "edit", S("a.txt"), S("two\n")));
-    EXPECT_OK_IN(&f.ctx, fx_change(&f, "edit", S("a.txt"), S("three\n")));
-    EXPECT_OK_IN(&f.ctx, fx_change(&f, "create", S("new.txt"), S("made\n")));
-    EXPECT_OK_IN(&f.ctx, fx_tree(&f, true, S("d/inner")));
-    EXPECT_OK_IN(&f.ctx, fx_tree(&f, false, S("d")));
+    file_system_fixture_put(&f.base, "a.txt", "one\n");
+    file_system_fixture_mkdir(&f.base, "d");
+    EXPECT_OK_IN(&f.ctx, fixture_change(&f, "edit", S("a.txt"), S("two\n")));
+    EXPECT_OK_IN(&f.ctx, fixture_change(&f, "edit", S("a.txt"), S("three\n")));
+    EXPECT_OK_IN(&f.ctx, fixture_change(&f, "create", S("new.txt"), S("made\n")));
+    EXPECT_OK_IN(&f.ctx, fixture_tree(&f, true, S("d/inner")));
+    EXPECT_OK_IN(&f.ctx, fixture_tree(&f, false, S("d")));
     // a.txt once though changed twice; the rest each once.
     PriorsItems j = Priors_items(&f.paths.journal);
     EXPECT_EQ(j.len, 4);
@@ -789,11 +789,11 @@ TEST(undo_each_path_is_journaled_once_before_its_first_change_as_a_file_s_bytes_
     size_t file = 0;
     size_t absent = 0;
     size_t dir = 0;
-    fx_journal_kinds(&f, &file, &absent, &dir);
+    fixture_journal_kinds(&f, &file, &absent, &dir);
     EXPECT_EQ(file, 1);
     EXPECT_EQ(absent, 2);
     EXPECT_EQ(dir, 1);
-    EXPECT_STR(at(j, 0).abs, fx_r(&f, "R/a.txt"));
+    EXPECT_STR(at(j, 0).abs, fixture_r(&f, "R/a.txt"));
     EXPECT_STR(at(j, 0).bytes, S("one\n"));
     EXPECT_EQ(f.paths.journal_bytes, 4);
     Buf w = buf_make(&f.host);
@@ -802,47 +802,47 @@ TEST(undo_each_path_is_journaled_once_before_its_first_change_as_a_file_s_bytes_
     // The folder was removed whole, which undo cannot put back: said, false.
     EXPECT(!all);
     Str said = buf_view(&w);
-    EXPECT_STR(said, fx_r(&f, "── not put back: R/d: a folder removed whole, and its files with it\n── undone: 4 path(s) the run changed put back, but not all (above)\n"));
+    EXPECT_STR(said, fixture_r(&f, "── not put back: R/d: a folder removed whole, and its files with it\n── undone: 4 path(s) the run changed put back, but not all (above)\n"));
     Str text = S("");
-    EXPECT(sx_file(&f.base, "a.txt", &text));
+    EXPECT(file_system_fixture_file(&f.base, "a.txt", &text));
     EXPECT_STR(text, S("one\n"));
-    EXPECT(!sx_there(&f.base, "new.txt"));
-    fx_deinit(&f);
+    EXPECT(!file_system_fixture_there(&f.base, "new.txt"));
+    fixture_deinit(&f);
 }
 
 TEST(undo_a_change_past_the_journal_s_room_a_file_it_cannot_read_a_path_neither_file_nor_folder_and_one_it_cannot_look_at_are_refused) {
     Fx f;
-    fx_init(&f);
+    fixture_init(&f);
     f.paths.undo = true;
-    sx_put(&f.base, "a.txt", "one\n");
+    file_system_fixture_put(&f.base, "a.txt", "one\n");
     // The room left is less than a.txt.
     f.paths.journal_bytes = PATHS_JOURNAL_MAX - 2;
-    EXPECT(fx_stopped(&f, fx_change(&f, "replace", S("a.txt"), S("x")), CLASS_REFUSED, S("--undo-on-stop keeps at most 67108864 bytes of what a run changes, and ")));
-    EXPECT(fx_said(&f, fx_change(&f, "replace", S("a.txt"), S("x")), CLASS_REFUSED, SAYS("--undo-on-stop keeps at most 67108864 bytes of what a run changes, and R/a.txt would pass it")));
+    EXPECT(fixture_stopped(&f, fixture_change(&f, "replace", S("a.txt"), S("x")), CLASS_REFUSED, S("--undo-on-stop keeps at most 67108864 bytes of what a run changes, and ")));
+    EXPECT(fixture_said(&f, fixture_change(&f, "replace", S("a.txt"), S("x")), CLASS_REFUSED, SAYS("--undo-on-stop keeps at most 67108864 bytes of what a run changes, and R/a.txt would pass it")));
     f.paths.journal_bytes = 0;
     Str text = S("");
-    EXPECT(sx_file(&f.base, "a.txt", &text));
+    EXPECT(file_system_fixture_file(&f.base, "a.txt", &text));
     EXPECT_STR(text, S("one\n"));
     // A file that may be stat'd but not read.
-    sx_put(&f.base, "sealed.txt", "s\n");
-    EXPECT_EQ(sx_chmod(&f.base, "sealed.txt", 0), 0);
-    EXPECT(fx_stopped(&f, fx_change(&f, "replace", S("sealed.txt"), S("x")), CLASS_FILE_SYSTEM, S("sealed.txt cannot be read (AccessDenied), so it could not be put back")));
-    EXPECT_EQ(sx_chmod(&f.base, "sealed.txt", 0600), 0);
+    file_system_fixture_put(&f.base, "sealed.txt", "s\n");
+    EXPECT_EQ(file_system_fixture_chmod(&f.base, "sealed.txt", 0), 0);
+    EXPECT(fixture_stopped(&f, fixture_change(&f, "replace", S("sealed.txt"), S("x")), CLASS_FILE_SYSTEM, S("sealed.txt cannot be read (AccessDenied), so it could not be put back")));
+    EXPECT_EQ(file_system_fixture_chmod(&f.base, "sealed.txt", 0600), 0);
     // A named pipe.
     FileSystemCPath fifo_cp;
     const char *fifo = NULL;
-    EXPECT_EQ(file_system_cstr(&fifo_cp, sx_at(&f.base, "pipe"), &fifo), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_cstr(&fifo_cp, file_system_fixture_at(&f.base, "pipe"), &fifo), FILE_SYSTEM_OK);
     EXPECT_EQ(mkfifo(fifo, 0600), 0);
-    EXPECT(fx_stopped(&f, fx_change(&f, "remove", S("pipe"), S("")), CLASS_REFUSED, S("pipe is neither a file nor a folder, and could not be put back")));
+    EXPECT(fixture_stopped(&f, fixture_change(&f, "remove", S("pipe"), S("")), CLASS_REFUSED, S("pipe is neither a file nor a folder, and could not be put back")));
     // A path in a folder that cannot be searched.
-    sx_mkdir(&f.base, "locked");
-    EXPECT_EQ(sx_chmod(&f.base, "locked", 0), 0);
-    EXPECT(fx_stopped(&f, fx_change(&f, "append", S("locked/x.txt"), S("x")), CLASS_FILE_SYSTEM, S("locked/x.txt cannot be looked at (AccessDenied), so it could not be put back")));
-    EXPECT_EQ(sx_chmod(&f.base, "locked", 0700), 0);
+    file_system_fixture_mkdir(&f.base, "locked");
+    EXPECT_EQ(file_system_fixture_chmod(&f.base, "locked", 0), 0);
+    EXPECT(fixture_stopped(&f, fixture_change(&f, "append", S("locked/x.txt"), S("x")), CLASS_FILE_SYSTEM, S("locked/x.txt cannot be looked at (AccessDenied), so it could not be put back")));
+    EXPECT_EQ(file_system_fixture_chmod(&f.base, "locked", 0700), 0);
     EXPECT_EQ(f.paths.journal.len, 0);
-    EXPECT(sx_file(&f.base, "sealed.txt", &text));
+    EXPECT(file_system_fixture_file(&f.base, "sealed.txt", &text));
     EXPECT_STR(text, S("s\n"));
-    fx_deinit(&f);
+    fixture_deinit(&f);
 }
 
 TEST(undo_the_journal_s_own_allocations_failing_at_each_stop_the_run_on_memory) {
@@ -851,12 +851,12 @@ TEST(undo_the_journal_s_own_allocations_failing_at_each_stop_the_run_on_memory) 
     bool done = false;
     for (size_t limit = 0; limit < 65536 && !done; limit += 8) {
         Fx f;
-        fx_init(&f);
+        fixture_init(&f);
         f.paths.undo = true;
-        sx_put(&f.base, "a.txt", "one\n");
+        file_system_fixture_put(&f.base, "a.txt", "one\n");
         f.host.limit = limit;
-        Status s = fx_change(&f, "replace", S("a.txt"), S("two\n"));
-        if (s == OK) s = fx_change(&f, "create", S("new.txt"), S("n"));
+        Status s = fixture_change(&f, "replace", S("a.txt"), S("two\n"));
+        if (s == OK) s = fixture_change(&f, "create", S("new.txt"), S("n"));
         if (s == OK) {
             done = true;
         } else if (f.ctx.stop.cls == CLASS_FILE_SYSTEM) {
@@ -869,7 +869,7 @@ TEST(undo_the_journal_s_own_allocations_failing_at_each_stop_the_run_on_memory) 
             EXPECT_EQ(f.ctx.stop.budget, BUDGET_ARENA);
             arena_stops++;
         }
-        fx_deinit(&f);
+        fixture_deinit(&f);
     }
     EXPECT(done);
     EXPECT(store_stops >= 1);
@@ -878,69 +878,69 @@ TEST(undo_the_journal_s_own_allocations_failing_at_each_stop_the_run_on_memory) 
 
 TEST(undo_a_relative_root_is_taken_against_the_working_folder_so_real_gives_an_absolute_path) {
     Fx f;
-    fx_init(&f);
+    fixture_init(&f);
     Str abs = f.base.root;
     // The same folder, spelled from the working folder.
     f.run.root = str_sub(abs, f.cwd.len + 1, abs.len);
     EXPECT(paths_run_folders_make(&f.paths, &f.run));
     EXPECT(str_byte(f.run.root, 0) != '/');
     Str real = S("");
-    EXPECT_OK_IN(&f.ctx, paths_os_path(&f.paths, &f.run, fx_pos(), S("real"), S(""), true, &real));
+    EXPECT_OK_IN(&f.ctx, paths_os_path(&f.paths, &f.run, fixture_pos(), S("real"), S(""), true, &real));
     EXPECT_STR(real, abs);
-    fx_deinit(&f);
+    fixture_deinit(&f);
 }
 
 TEST(undo_on_stop_puts_back_an_edit_a_file_made_a_folder_made_a_file_removed_an_executable_s_bytes_and_mode) {
     Fx f;
-    fx_init(&f);
+    fixture_init(&f);
     f.paths.undo = true;
-    sx_put(&f.base, "a.txt", "one\n");
-    sx_put(&f.base, "gone.txt", "kept\n");
-    sx_put(&f.base, "x.sh", "#!/bin/sh\necho old\n");
-    EXPECT_EQ(sx_chmod(&f.base, "x.sh", 0755), 0);
-    sx_mkdir(&f.base, "there");
-    EXPECT_OK_IN(&f.ctx, fx_change(&f, "edit", S("a.txt"), S("two\n")));
-    EXPECT_OK_IN(&f.ctx, fx_change(&f, "create", S("new.txt"), S("made\n")));
-    EXPECT_OK_IN(&f.ctx, fx_tree(&f, true, S("made")));
-    EXPECT_OK_IN(&f.ctx, fx_change(&f, "create", S("made/inner.txt"), S("in\n")));
-    EXPECT_OK_IN(&f.ctx, fx_change(&f, "replace", S("x.sh"), S("#!/bin/sh\necho new\n")));
+    file_system_fixture_put(&f.base, "a.txt", "one\n");
+    file_system_fixture_put(&f.base, "gone.txt", "kept\n");
+    file_system_fixture_put(&f.base, "x.sh", "#!/bin/sh\necho old\n");
+    EXPECT_EQ(file_system_fixture_chmod(&f.base, "x.sh", 0755), 0);
+    file_system_fixture_mkdir(&f.base, "there");
+    EXPECT_OK_IN(&f.ctx, fixture_change(&f, "edit", S("a.txt"), S("two\n")));
+    EXPECT_OK_IN(&f.ctx, fixture_change(&f, "create", S("new.txt"), S("made\n")));
+    EXPECT_OK_IN(&f.ctx, fixture_tree(&f, true, S("made")));
+    EXPECT_OK_IN(&f.ctx, fixture_change(&f, "create", S("made/inner.txt"), S("in\n")));
+    EXPECT_OK_IN(&f.ctx, fixture_change(&f, "replace", S("x.sh"), S("#!/bin/sh\necho new\n")));
     // `remove`: the hook, then the file system's remove.
-    fx_again(&f);
+    fixture_again(&f);
     CheckedPath p;
-    EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("remove"), S("gone.txt"), false, &p));
-    EXPECT_OK_IN(&f.ctx, f.hook.may_change(f.hook.ctx, &f.run, fx_pos(), p.rel, p.full.s));
+    EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fixture_pos(), S("remove"), S("gone.txt"), false, &p));
+    EXPECT_OK_IN(&f.ctx, f.hook.may_change(f.hook.ctx, &f.run, fixture_pos(), p.rel, p.full.s));
     EXPECT_EQ(file_system_remove(&f.base.file_system, p.full), FILE_SYSTEM_OK);
-    EXPECT_OK_IN(&f.ctx, fx_change(&f, "create", S("there/n.txt"), S("n\n")));
+    EXPECT_OK_IN(&f.ctx, fixture_change(&f, "create", S("there/n.txt"), S("n\n")));
     Buf w = buf_make(&f.host);
     bool all = false;
     EXPECT_EQ(undo_changes(&f.paths, &w, &all), OK);
     EXPECT(all);
     EXPECT_STR(buf_view(&w), S("── undone: 7 path(s) the run changed put back\n"));
     Str text = S("");
-    EXPECT(sx_file(&f.base, "a.txt", &text));
+    EXPECT(file_system_fixture_file(&f.base, "a.txt", &text));
     EXPECT_STR(text, S("one\n"));
-    EXPECT(sx_file(&f.base, "gone.txt", &text));
+    EXPECT(file_system_fixture_file(&f.base, "gone.txt", &text));
     EXPECT_STR(text, S("kept\n"));
-    EXPECT(sx_file(&f.base, "x.sh", &text));
+    EXPECT(file_system_fixture_file(&f.base, "x.sh", &text));
     EXPECT_STR(text, S("#!/bin/sh\necho old\n"));
-    EXPECT(!sx_there(&f.base, "new.txt"));
-    EXPECT(!sx_there(&f.base, "made"));
-    EXPECT(!sx_there(&f.base, "there/n.txt"));
+    EXPECT(!file_system_fixture_there(&f.base, "new.txt"));
+    EXPECT(!file_system_fixture_there(&f.base, "made"));
+    EXPECT(!file_system_fixture_there(&f.base, "there/n.txt"));
     // The folder that was there is there still, and the executable still one.
-    EXPECT(sx_there(&f.base, "there"));
+    EXPECT(file_system_fixture_there(&f.base, "there"));
     struct stat st;
-    EXPECT_EQ(file_system_stat_exact(sx_at(&f.base, "x.sh"), true, &st), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_stat_exact(file_system_fixture_at(&f.base, "x.sh"), true, &st), FILE_SYSTEM_OK);
     EXPECT_EQ(st.st_mode & 0777, 0755);
-    fx_deinit(&f);
+    fixture_deinit(&f);
 }
 
 TEST(undo_of_nothing_there_whose_path_is_gone_already_is_put_back_as_nothing) {
     Fx f;
-    fx_init(&f);
+    fixture_init(&f);
     f.paths.undo = true;
-    EXPECT_OK_IN(&f.ctx, fx_change(&f, "create", S("brief.txt"), S("b")));
+    EXPECT_OK_IN(&f.ctx, fixture_change(&f, "create", S("brief.txt"), S("b")));
     // Something else took it away before the undo: nothing to do, all put back.
-    EXPECT_EQ(file_system_remove(&f.base.file_system, sx_at(&f.base, "brief.txt")), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_remove(&f.base.file_system, file_system_fixture_at(&f.base, "brief.txt")), FILE_SYSTEM_OK);
     Buf w = buf_make(&f.host);
     bool all = false;
     EXPECT_EQ(undo_changes(&f.paths, &w, &all), OK);
@@ -953,26 +953,26 @@ TEST(undo_of_nothing_there_whose_path_is_gone_already_is_put_back_as_nothing) {
     EXPECT_EQ(undo_changes(&empty, &w, &all), OK);
     EXPECT(all);
     EXPECT_STR(buf_view(&w), S("── undone: 0 path(s) the run changed put back\n"));
-    fx_deinit(&f);
+    fixture_deinit(&f);
 }
 
 TEST(a_step_budget_met_in_the_walk_of_a_path_stops_one_past_it) {
     Fx f;
-    fx_init(&f);
-    sx_mkdir(&f.base, "a/b");
+    fixture_init(&f);
+    file_system_fixture_mkdir(&f.base, "a/b");
     // `a/b/c` charges 5 for its bytes, then 1 for each of its 3 parts.
     f.steps_budget = 7;
     CheckedPath p;
-    fx_again(&f);
-    EXPECT(fx_stopped(&f, path_arg(&f.run, fx_pos(), S("read"), S("a/b/c"), false, &p), CLASS_BUDGET, S("the step budget (")));
+    fixture_again(&f);
+    EXPECT(fixture_stopped(&f, path_arg(&f.run, fixture_pos(), S("read"), S("a/b/c"), false, &p), CLASS_BUDGET, S("the step budget (")));
     EXPECT_EQ(f.ctx.stop.budget, BUDGET_STEPS);
     EXPECT_EQ(f.steps, 8);
     f.steps = 0;
     f.steps_budget = 8;
-    fx_again(&f);
-    EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("read"), S("a/b/c"), false, &p));
+    fixture_again(&f);
+    EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fixture_pos(), S("read"), S("a/b/c"), false, &p));
     EXPECT_EQ(f.steps, 8);
-    fx_deinit(&f);
+    fixture_deinit(&f);
 }
 
 TEST(a_message_whose_arguments_miss_its_placeholders_ends_the_process) {
@@ -981,52 +981,52 @@ TEST(a_message_whose_arguments_miss_its_placeholders_ends_the_process) {
     arena_init(&a, 1 << 20, &refused);
     Buf b = buf_make(&a);
     MsgArgs none = {NULL, 0};
-    EXPECT_EQ(msg_format(&b, S("`{s}` and {{braces}}"), MSG_ARGS(MSG_FROM_SCRIPT(S("x")))), OK);
+    EXPECT_EQ(message_format(&b, S("`{s}` and {{braces}}"), MSG_ARGS(MSG_FROM_SCRIPT(S("x")))), OK);
     EXPECT_STR(buf_view(&b), S("`x` and {braces}"));
     // A placeholder with no argument, and an argument with no placeholder.
-    EXPECT_DIES(if (msg_format(&b, S("`{s}` is {s}"), MSG_ARGS(MSG_FROM_SCRIPT(S("x")))) != OK) {});
-    EXPECT_DIES(if (msg_format(&b, S("no placeholder"), MSG_ARGS(MSG_FROM_SCRIPT(S("x")))) != OK) {});
-    EXPECT_DIES(if (msg_format(&b, S("{s}"), none) != OK) {});
+    EXPECT_DIES(if (message_format(&b, S("`{s}` is {s}"), MSG_ARGS(MSG_FROM_SCRIPT(S("x")))) != OK) {});
+    EXPECT_DIES(if (message_format(&b, S("no placeholder"), MSG_ARGS(MSG_FROM_SCRIPT(S("x")))) != OK) {});
+    EXPECT_DIES(if (message_format(&b, S("{s}"), none) != OK) {});
     arena_deinit(&a);
 }
 
 TEST(a_host_report_line_naming_a_secrets_folder_ends_the_process) {
     Fx f;
-    fx_init(&f);
-    sx_mkdir(&f.base, "keys");
-    fx_mounts(&f, "k = R/keys secrets\n");
-    fx_again(&f);
+    fixture_init(&f);
+    file_system_fixture_mkdir(&f.base, "keys");
+    fixture_mounts(&f, "k = R/keys secrets\n");
+    fixture_again(&f);
     // The undo's line for a file outside the folder is said.
-    EXPECT_OK_IN(&f.ctx, paths_report_names_no_secret(&f.paths, &f.run, fx_r(&f, "undo: put back R/notes.txt")));
+    EXPECT_OK_IN(&f.ctx, paths_report_names_no_secret(&f.paths, &f.run, fixture_r(&f, "undo: put back R/notes.txt")));
     // One naming the folder ends the process before it is said.
-    EXPECT_DIES(if (paths_report_names_no_secret(&f.paths, &f.run, fx_r(&f, "undo: put back R/keys/tok")) != OK) {});
-    fx_deinit(&f);
+    EXPECT_DIES(if (paths_report_names_no_secret(&f.paths, &f.run, fixture_r(&f, "undo: put back R/keys/tok")) != OK) {});
+    fixture_deinit(&f);
 }
 
 // ── the secrets folders, worked out once a run ──────────────────────────
 
 // Two secrets mounts under the root and one that reaches both, so each check
 // is seen to walk past the first secrets folder to the second.
-static void fx_two_vaults(Fx *f) {
-    sx_mkdir(&f->base, "keys");
-    sx_mkdir(&f->base, "deep/vault");
-    sx_put(&f->base, "deep/vault/tok", "s3cret\n");
-    fx_mounts(f, "k = R/keys secrets\nall = R\nv = R/deep/vault secrets\n");
+static void fixture_two_vaults(Fx *f) {
+    file_system_fixture_mkdir(&f->base, "keys");
+    file_system_fixture_mkdir(&f->base, "deep/vault");
+    file_system_fixture_put(&f->base, "deep/vault/tok", "s3cret\n");
+    fixture_mounts(f, "k = R/keys secrets\nall = R\nv = R/deep/vault secrets\n");
 }
 
 TEST(secrets_folders_are_worked_out_once_a_run_so_a_walk_s_check_of_each_entry_allocates_nothing) {
     Fx f;
-    fx_init(&f);
-    fx_two_vaults(&f);
+    fixture_init(&f);
+    fixture_two_vaults(&f);
     EXPECT_EQ(f.paths.run.secrets.len, 2);
     EXPECT_STR(at(f.paths.run.secrets, 1).name, S("v"));
-    EXPECT_STR(at(f.paths.run.secrets, 1).run_dir, fx_r(&f, "R/deep/vault"));
+    EXPECT_STR(at(f.paths.run.secrets, 1).run_dir, fixture_r(&f, "R/deep/vault"));
     EXPECT_EQ(f.paths.run.dirs.len, 3);
     EXPECT_STR(at(f.paths.run.dirs, 1), f.base.root);
-    Str plain = fx_r(&f, "R/deep/notes.txt");
-    Str sibling = fx_r(&f, "R/deep/vault2/x");
-    Str in_first = fx_r(&f, "R/keys/tok");
-    Str in_second = fx_r(&f, "R/deep/vault/sub/tok");
+    Str plain = fixture_r(&f, "R/deep/notes.txt");
+    Str sibling = fixture_r(&f, "R/deep/vault2/x");
+    Str in_first = fixture_r(&f, "R/keys/tok");
+    Str in_second = fixture_r(&f, "R/deep/vault/sub/tok");
     size_t values = f.base.values.used;
     size_t host = f.host.used;
     // A thousand entries' checks, as a walk of a thousand files makes them:
@@ -1035,137 +1035,137 @@ TEST(secrets_folders_are_worked_out_once_a_run_so_a_walk_s_check_of_each_entry_a
     for (size_t i = 0; i < 1000; i++) {
         Str full = i % 4 == 0 ? plain : i % 4 == 1 ? sibling : i % 4 == 2 ? in_first : in_second;
         bool in = false;
-        EXPECT_OK_IN(&f.ctx, f.hook.in_secrets(f.hook.ctx, &f.run, fx_pos(), full, &in));
+        EXPECT_OK_IN(&f.ctx, f.hook.in_secrets(f.hook.ctx, &f.run, fixture_pos(), full, &in));
         secret += in ? 1 : 0;
     }
     EXPECT_EQ(secret, 500);
     EXPECT_EQ(f.base.values.used, values);
     EXPECT_EQ(f.host.used, host);
-    fx_deinit(&f);
+    fixture_deinit(&f);
 }
 
 TEST(secrets_folders_worked_out_once_every_refusal_still_fires_for_the_second_mount) {
     Fx f;
-    fx_init(&f);
-    fx_two_vaults(&f);
+    fixture_init(&f);
+    fixture_two_vaults(&f);
     // A secrets mount under the root, by a root path and by another mount's.
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("deep/vault/tok")), CLASS_REFUSED, S("\"deep/vault/tok\" is in the mount `v`, which holds secrets")));
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("all:deep/vault/tok")), CLASS_REFUSED, S("\"all:deep/vault/tok\" is in the mount `v`, which holds secrets")));
+    EXPECT(fixture_said(&f, fixture_look(&f, "read", S("deep/vault/tok")), CLASS_REFUSED, S("\"deep/vault/tok\" is in the mount `v`, which holds secrets")));
+    EXPECT(fixture_said(&f, fixture_look(&f, "read", S("all:deep/vault/tok")), CLASS_REFUSED, S("\"all:deep/vault/tok\" is in the mount `v`, which holds secrets")));
     // A secrets folder named in a program's argument, and in its `env`.
     const Str argv_items[2] = {S("shale-fixture"), S("deep/vault/tok")};
     PathsStrs argv = {argv_items, 2};
     PathsStrs none = {NULL, 0};
-    fx_again(&f);
-    EXPECT(fx_said(&f, paths_refuse_secret_args(&f.paths, &f.run, fx_pos(), S("run"), argv, f.base.root, none, none), CLASS_REFUSED,
+    fixture_again(&f);
+    EXPECT(fixture_said(&f, paths_refuse_secret_args(&f.paths, &f.run, fixture_pos(), S("run"), argv, f.base.root, none, none), CLASS_REFUSED,
                    S("`run`'s argument 2 names the mount `v`'s folder, which holds secrets: hand one over as `secrets`")));
     const Str env_k[1] = {S("F")};
     const Str env_v[1] = {S("deep/vault")};
     PathsStrs ek = {env_k, 1};
     PathsStrs ev = {env_v, 1};
-    fx_again(&f);
-    EXPECT(fx_said(&f, paths_refuse_secret_args(&f.paths, &f.run, fx_pos(), S("job_start"), none, f.base.root, ek, ev), CLASS_REFUSED,
+    fixture_again(&f);
+    EXPECT(fixture_said(&f, paths_refuse_secret_args(&f.paths, &f.run, fixture_pos(), S("job_start"), none, f.base.root, ek, ev), CLASS_REFUSED,
                    S("`job_start`'s `env` F names the mount `v`'s folder, which holds secrets: hand one over as `secrets`")));
     // An absolute path inside one has no hint; one beside it has one.
     AbsoluteHint hint;
-    fx_again(&f);
-    EXPECT_OK_IN(&f.ctx, f.hook.absolute_hint(f.hook.ctx, &f.run, fx_pos(), fx_r(&f, "R/deep/vault/tok"), &hint));
+    fixture_again(&f);
+    EXPECT_OK_IN(&f.ctx, f.hook.absolute_hint(f.hook.ctx, &f.run, fixture_pos(), fixture_r(&f, "R/deep/vault/tok"), &hint));
     EXPECT_EQ(hint.kind, ABSOLUTE_UNNAMED);
-    EXPECT_OK_IN(&f.ctx, f.hook.absolute_hint(f.hook.ctx, &f.run, fx_pos(), fx_r(&f, "R/deep/vault2/x"), &hint));
+    EXPECT_OK_IN(&f.ctx, f.hook.absolute_hint(f.hook.ctx, &f.run, fixture_pos(), fixture_r(&f, "R/deep/vault2/x"), &hint));
     EXPECT_EQ(hint.kind, ABSOLUTE_HINTED);
     EXPECT_STR(hint.spelled, S("deep/vault2/x"));
     // A text naming the second folder is a text naming a secret.
     bool names = false;
-    EXPECT_OK_IN(&f.ctx, f.hook.names_secret(f.hook.ctx, &f.run, fx_pos(), fx_r(&f, "at R/deep/vault."), &names));
+    EXPECT_OK_IN(&f.ctx, f.hook.names_secret(f.hook.ctx, &f.run, fixture_pos(), fixture_r(&f, "at R/deep/vault."), &names));
     EXPECT(names);
-    EXPECT_OK_IN(&f.ctx, f.hook.names_secret(f.hook.ctx, &f.run, fx_pos(), fx_r(&f, "at R/deep/vault2"), &names));
+    EXPECT_OK_IN(&f.ctx, f.hook.names_secret(f.hook.ctx, &f.run, fixture_pos(), fixture_r(&f, "at R/deep/vault2"), &names));
     EXPECT(!names);
-    fx_deinit(&f);
+    fixture_deinit(&f);
 }
 
 TEST(secrets_folders_worked_out_for_other_mounts_or_another_root_end_the_process) {
     Fx f;
-    fx_init(&f);
-    fx_two_vaults(&f);
+    fixture_init(&f);
+    fixture_two_vaults(&f);
     bool in = false;
-    Str full = fx_r(&f, "R/deep/vault/tok");
+    Str full = fixture_r(&f, "R/deep/vault/tok");
     // The mounts changed and the list not made again: it would miss them.
     MountsItems kept = f.paths.mounts;
     MountsItems fewer = {kept.ptr, 1};
     f.paths.mounts = fewer;
-    EXPECT_DIES(if (f.hook.in_secrets(f.hook.ctx, &f.run, fx_pos(), full, &in) != OK) {});
+    EXPECT_DIES(if (f.hook.in_secrets(f.hook.ctx, &f.run, fixture_pos(), full, &in) != OK) {});
     f.paths.mounts = kept;
     // Another root.
     Str root = f.run.root;
     f.run.root = S("/elsewhere");
-    EXPECT_DIES(if (f.hook.in_secrets(f.hook.ctx, &f.run, fx_pos(), full, &in) != OK) {});
+    EXPECT_DIES(if (f.hook.in_secrets(f.hook.ctx, &f.run, fixture_pos(), full, &in) != OK) {});
     f.run.root = root;
     // As made, it answers.
-    EXPECT_OK_IN(&f.ctx, f.hook.in_secrets(f.hook.ctx, &f.run, fx_pos(), full, &in));
+    EXPECT_OK_IN(&f.ctx, f.hook.in_secrets(f.hook.ctx, &f.run, fixture_pos(), full, &in));
     EXPECT(in);
-    fx_deinit(&f);
+    fixture_deinit(&f);
 }
 
 TEST(read_only_mounts_folders_are_worked_out_once_a_run_so_a_change_s_check_allocates_nothing) {
     Fx f;
-    fx_init(&f);
-    sx_mkdir(&f.base, "frozen/open");
-    fx_mounts(&f, "ro = R/frozen ro\nopen = R/frozen/open\n");
-    Str inside = fx_r(&f, "R/frozen/open/a.txt");
-    Str beside = fx_r(&f, "R/notes.txt");
+    fixture_init(&f);
+    file_system_fixture_mkdir(&f.base, "frozen/open");
+    fixture_mounts(&f, "ro = R/frozen ro\nopen = R/frozen/open\n");
+    Str inside = fixture_r(&f, "R/frozen/open/a.txt");
+    Str beside = fixture_r(&f, "R/notes.txt");
     size_t values = f.base.values.used;
     size_t host = f.host.used;
     // A thousand changes' checks: the writable mount inside the read-only
     // one decides for its folder, and not a byte is taken for the folders.
     for (size_t i = 0; i < 1000; i++) {
-        fx_again(&f);
-        EXPECT_OK_IN(&f.ctx, f.hook.may_change(f.hook.ctx, &f.run, fx_pos(), S("x"), i % 2 == 0 ? inside : beside));
+        fixture_again(&f);
+        EXPECT_OK_IN(&f.ctx, f.hook.may_change(f.hook.ctx, &f.run, fixture_pos(), S("x"), i % 2 == 0 ? inside : beside));
     }
     EXPECT_EQ(f.base.values.used, values);
     EXPECT_EQ(f.host.used, host);
     // The read-only folder itself is refused, by a root path and by its name.
-    EXPECT(fx_said(&f, fx_change(&f, "replace", S("frozen/a.txt"), S("x")), CLASS_REFUSED, S("frozen/a.txt: mount `ro` is read-only")));
-    EXPECT(fx_said(&f, fx_change(&f, "replace", S("ro:a.txt"), S("x")), CLASS_REFUSED, S("ro:a.txt: mount `ro` is read-only")));
-    EXPECT_OK_IN(&f.ctx, fx_change(&f, "replace", S("frozen/open/b.txt"), S("x")));
-    fx_deinit(&f);
+    EXPECT(fixture_said(&f, fixture_change(&f, "replace", S("frozen/a.txt"), S("x")), CLASS_REFUSED, S("frozen/a.txt: mount `ro` is read-only")));
+    EXPECT(fixture_said(&f, fixture_change(&f, "replace", S("ro:a.txt"), S("x")), CLASS_REFUSED, S("ro:a.txt: mount `ro` is read-only")));
+    EXPECT_OK_IN(&f.ctx, fixture_change(&f, "replace", S("frozen/open/b.txt"), S("x")));
+    fixture_deinit(&f);
 }
 
 TEST(a_path_run_has_a_hook_always_metal_s_answers_nothing_resolved_no_hint_and_no_secret) {
     Fx f;
-    fx_init(&f);
-    EXPECT_DIES((void)path_run_make(&f.ctx, f.base.root, fx_charge, &f, NULL));
-    PathRun bare = path_run_make(&f.ctx, f.base.root, fx_charge, &f, &PATH_HOOK_NONE);
+    fixture_init(&f);
+    EXPECT_DIES((void)path_run_make(&f.ctx, f.base.root, fixture_charge, &f, NULL));
+    PathRun bare = path_run_make(&f.ctx, f.base.root, fixture_charge, &f, &PATH_HOOK_NONE);
     CheckedPath p;
     // A mount's spelling is a root path's part that is no strict name.
-    fx_again(&f);
-    EXPECT(fx_said(&f, path_arg(&bare, fx_pos(), S("read"), S("k:tok"), false, &p), CLASS_ARGUMENT, S("`read`: \"k:tok\" has a part (\"k:tok\") that is not a name: no `.`, `..`, empty parts or characters a strict name refuses")));
-    fx_again(&f);
-    EXPECT_OK_IN(&f.ctx, path_arg(&bare, fx_pos(), S("read"), S("a/b"), false, &p));
-    EXPECT_STR(p.full.s, fx_r(&f, "R/a/b"));
+    fixture_again(&f);
+    EXPECT(fixture_said(&f, path_arg(&bare, fixture_pos(), S("read"), S("k:tok"), false, &p), CLASS_ARGUMENT, S("`read`: \"k:tok\" has a part (\"k:tok\") that is not a name: no `.`, `..`, empty parts or characters a strict name refuses")));
+    fixture_again(&f);
+    EXPECT_OK_IN(&f.ctx, path_arg(&bare, fixture_pos(), S("read"), S("a/b"), false, &p));
+    EXPECT_STR(p.full.s, fixture_r(&f, "R/a/b"));
     bool yes = true;
-    EXPECT_OK_IN(&f.ctx, PATH_HOOK_NONE.names_secret(NULL, &bare, fx_pos(), f.base.root, &yes));
+    EXPECT_OK_IN(&f.ctx, PATH_HOOK_NONE.names_secret(NULL, &bare, fixture_pos(), f.base.root, &yes));
     EXPECT(!yes);
     yes = true;
-    EXPECT_OK_IN(&f.ctx, PATH_HOOK_NONE.in_secrets(NULL, &bare, fx_pos(), f.base.root, &yes));
+    EXPECT_OK_IN(&f.ctx, PATH_HOOK_NONE.in_secrets(NULL, &bare, fixture_pos(), f.base.root, &yes));
     EXPECT(!yes);
-    EXPECT_OK_IN(&f.ctx, PATH_HOOK_NONE.may_change(NULL, &bare, fx_pos(), S("a"), f.base.root));
-    fx_deinit(&f);
+    EXPECT_OK_IN(&f.ctx, PATH_HOOK_NONE.may_change(NULL, &bare, fixture_pos(), S("a"), f.base.root));
+    fixture_deinit(&f);
 }
 
 TEST(a_root_path_s_names_are_the_core_s_to_check_before_the_hook_walks_its_links) {
     Fx f;
-    fx_init(&f);
-    sx_mkdir(&f.base, "elsewhere");
-    fx_link(&f, "elsewhere", "lnk");
+    fixture_init(&f);
+    file_system_fixture_mkdir(&f.base, "elsewhere");
+    fixture_link(&f, "elsewhere", "lnk");
     CheckedPath p;
     // A bad part after a link: the core's message, never the link's.
-    fx_again(&f);
-    EXPECT(fx_said(&f, path_arg(&f.run, fx_pos(), S("read"), S("lnk//x"), false, &p), CLASS_ARGUMENT, S("`read`: \"lnk//x\" has a part (\"\") that is not a name: no `.`, `..`, empty parts or characters a strict name refuses")));
-    fx_again(&f);
-    EXPECT(fx_said(&f, path_arg(&f.run, fx_pos(), S("read"), S("lnk/../x"), false, &p), CLASS_ARGUMENT, S("`read`: \"lnk/../x\" climbs out of the root with `..`: a folder beside it is reached through a mount, such as `repos:<name>/...` (`shale --help` lists this box's mounts)")));
+    fixture_again(&f);
+    EXPECT(fixture_said(&f, path_arg(&f.run, fixture_pos(), S("read"), S("lnk//x"), false, &p), CLASS_ARGUMENT, S("`read`: \"lnk//x\" has a part (\"\") that is not a name: no `.`, `..`, empty parts or characters a strict name refuses")));
+    fixture_again(&f);
+    EXPECT(fixture_said(&f, path_arg(&f.run, fixture_pos(), S("read"), S("lnk/../x"), false, &p), CLASS_ARGUMENT, S("`read`: \"lnk/../x\" climbs out of the root with `..`: a folder beside it is reached through a mount, such as `repos:<name>/...` (`shale --help` lists this box's mounts)")));
     // Every part a name: the hook's walk refuses the link.
-    fx_again(&f);
-    EXPECT(fx_stopped(&f, path_arg(&f.run, fx_pos(), S("read"), S("lnk/x"), false, &p), CLASS_REFUSED, S("lnk is a symbolic link: the file system follows none")));
-    fx_deinit(&f);
+    fixture_again(&f);
+    EXPECT(fixture_stopped(&f, path_arg(&f.run, fixture_pos(), S("read"), S("lnk/x"), false, &p), CLASS_REFUSED, S("lnk is a symbolic link: the file system follows none")));
+    fixture_deinit(&f);
 }
 
 TEST_MAIN(

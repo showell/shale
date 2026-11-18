@@ -175,15 +175,15 @@ static inline STATUS_MUST_USE Status parse_library_name_was(Parser *p, Str path,
         return OK;
     }
     Msg m;
-    msg_init(&m, p->arena);
+    message_init(&m, p->arena);
     for (size_t k = 0; k < p->extra.len; k++) {
         const ParseExtra *e = &at(p->extra, k);
         if (parse_index_at(e->index, name) < 0 && !(e->is_library && parse_index_at(e->library.consts, name) >= 0)) continue;
-        msg_str(&m, e->prelude.name);
-        msg_str(&m, S("'s"));
+        message_str(&m, e->prelude.name);
+        message_str(&m, S("'s"));
         if (e->is_library) {
-            msg_str(&m, S(", by the `use` at line "));
-            msg_u64(&m, e->library.use_line);
+            message_str(&m, S(", by the `use` at line "));
+            message_u64(&m, e->library.use_line);
         }
         if (m.s != OK) return STOP;
         *was = buf_view(&m.b);
@@ -191,8 +191,8 @@ static inline STATUS_MUST_USE Status parse_library_name_was(Parser *p, Str path,
     }
     uint32_t fi = 0;
     if (ParseFunctionNames_get(&p->function_names, name, &fi)) {
-        msg_str(&m, S("the script's function at line "));
-        msg_u64(&m, at(p->functions, fi).pos.line);
+        message_str(&m, S("the script's function at line "));
+        message_u64(&m, at(p->functions, fi).pos.line);
         if (m.s != OK) return STOP;
         *was = buf_view(&m.b);
         return OK;
@@ -203,8 +203,8 @@ static inline STATUS_MUST_USE Status parse_library_name_was(Parser *p, Str path,
     }
     bool twice = parse_index_before(functions, is_const ? functions.len : i, name) >= 0 || (is_const && parse_index_before(consts, i, name) >= 0);
     if (twice) {
-        msg_str(&m, path);
-        msg_str(&m, S("'s own, twice"));
+        message_str(&m, path);
+        message_str(&m, S("'s own, twice"));
         if (m.s != OK) return STOP;
         *was = buf_view(&m.b);
     }

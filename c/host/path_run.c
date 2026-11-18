@@ -166,13 +166,13 @@ SLICE_TYPE(MsgArgs, const MsgArg);
 // brace item's comma would split a preprocessor count, and TCC 0.9.27
 // refuses `sizeof` of the compound literal when an item calls a function.
 typedef const MsgArg MsgArgArray[];
-#define MSG_ARGS(...) msg_args_of((MsgArgArray){__VA_ARGS__, {{NULL, 0}, MSG_END}})
+#define MSG_ARGS(...) message_args_of((MsgArgArray){__VA_ARGS__, {{NULL, 0}, MSG_END}})
 
 // DRAGON: bounds. The walk to MSG_END is unchecked, so a list without its
 // end would be read past.
 // REMEDY: only MSG_ARGS calls this, and it appends the end to every list it
 // makes.
-static MsgArgs msg_args_of(const MsgArg *items) {
+static MsgArgs message_args_of(const MsgArg *items) {
     MsgArgs open = {items, SIZE_MAX};
     size_t n = 0;
     while (at_unchecked(open, n, "MSG_ARGS ends every list with MSG_END").kind != MSG_END) n++;
@@ -186,7 +186,7 @@ typedef struct {
 } MsgNum;
 
 // `n` in decimal, as Zig's `{d}`, its digits in `room`.
-static Str msg_num(MsgNum *room, uint64_t n) {
+static Str message_num(MsgNum *room, uint64_t n) {
     Bytes d = {room->digits, sizeof room->digits};
     size_t k = d.len;
     do {
@@ -200,7 +200,7 @@ static Str msg_num(MsgNum *room, uint64_t n) {
 // `fmt`, Zig's format string, with each `{s}`, `{d}` or `{t}` the next of
 // `args` and `{{` and `}}` one brace. A placeholder with no argument, or an
 // argument left over, is a bug in the C.
-static STATUS_MUST_USE Status msg_format(Buf *b, Str fmt, MsgArgs args) {
+static STATUS_MUST_USE Status message_format(Buf *b, Str fmt, MsgArgs args) {
     size_t k = 0;
     for (size_t i = 0; i < fmt.len; i++) {
         char c = at(fmt, i);
@@ -248,7 +248,7 @@ static STATUS_MUST_USE Status path_fail(PathRun *r, Pos pos, StopClass cls, Str 
         if (names) c_bug("path_run: a stop's message names a secrets mount's folder");
     }
     Buf b = buf_make(r->ctx->values);
-    Status built = msg_format(&b, fmt, args);
+    Status built = message_format(&b, fmt, args);
     return run_fail_built(r->ctx, pos, cls, &b, built, fmt);
 }
 

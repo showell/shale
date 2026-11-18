@@ -194,16 +194,16 @@ typedef struct {
     Status s;
 } Msg;
 
-static inline void msg_init(Msg *m, Arena *a) {
+static inline void message_init(Msg *m, Arena *a) {
     m->b = buf_make(a);
     m->s = OK;
 }
 
-static inline void msg_str(Msg *m, Str s) {
+static inline void message_str(Msg *m, Str s) {
     if (m->s == OK) m->s = buf_str(&m->b, s);
 }
 
-static inline void msg_u64(Msg *m, uint64_t n) {
+static inline void message_u64(Msg *m, uint64_t n) {
     if (m->s == OK) m->s = buf_u64(&m->b, n);
 }
 
@@ -227,21 +227,21 @@ static inline STATUS_MUST_USE Status parse_set_stop(Parser *p, Pos pos, StopClas
 static inline STATUS_MUST_USE Status parse_fail(Parser *p, Pos pos, StopClass cls, Str message) {
     if (cls == CLASS_SYNTAX && p->after_long && pos.line == p->tok.line && pos.column == p->tok.column) {
         Msg m;
-        msg_init(&m, p->arena);
-        msg_str(&m, message);
-        msg_str(&m, S(" (the long string at "));
-        msg_u64(&m, p->after_long_open.line);
-        msg_str(&m, S(":"));
-        msg_u64(&m, p->after_long_open.column);
-        msg_str(&m, S(" closed at "));
-        msg_u64(&m, p->after_long_string.close_line);
-        msg_str(&m, S(":"));
-        msg_u64(&m, p->after_long_string.close_column);
-        msg_str(&m, S("; if it holds `"));
+        message_init(&m, p->arena);
+        message_str(&m, message);
+        message_str(&m, S(" (the long string at "));
+        message_u64(&m, p->after_long_open.line);
+        message_str(&m, S(":"));
+        message_u64(&m, p->after_long_open.column);
+        message_str(&m, S(" closed at "));
+        message_u64(&m, p->after_long_string.close_line);
+        message_str(&m, S(":"));
+        message_u64(&m, p->after_long_string.close_column);
+        message_str(&m, S("; if it holds `"));
         if (m.s == OK) m.s = lex_closer_text(&m.b, p->after_long_string.level, 66);
-        msg_str(&m, S("`, open it with `"));
+        message_str(&m, S("`, open it with `"));
         if (m.s == OK) m.s = lex_opener_text(&m.b, p->after_long_string.level + 1, 66);
-        msg_str(&m, S("`)"));
+        message_str(&m, S("`)"));
         if (m.s == OK) message = buf_view(&m.b);
     }
     return parse_set_stop(p, pos, cls, message);
@@ -267,8 +267,8 @@ SLICE_TYPE(StrParts, const Str);
 static inline STATUS_MUST_USE Status parse_fail_parts(Parser *p, Pos pos, StopClass cls, StrPieces parts, size_t n) {
     StrParts all = {parts.piece, n};
     Msg m;
-    msg_init(&m, p->arena);
-    for (size_t k = 0; k < all.len; k++) msg_str(&m, at(all, k));
+    message_init(&m, p->arena);
+    for (size_t k = 0; k < all.len; k++) message_str(&m, at(all, k));
     return parse_fail_msg(p, pos, cls, &m);
 }
 
@@ -307,21 +307,21 @@ static inline Str parse_describe(Parser *p, Token t) {
     default: break;
     }
     Msg m;
-    msg_init(&m, p->arena);
+    message_init(&m, p->arena);
     if (t.tag == TAG_NAME) {
-        msg_str(&m, S("the name `"));
-        msg_str(&m, t.text);
-        msg_str(&m, S("`"));
+        message_str(&m, S("the name `"));
+        message_str(&m, t.text);
+        message_str(&m, S("`"));
         return m.s == OK ? buf_view(&m.b) : S("a name");
     }
     if (t.tag == TAG_INT) {
-        msg_str(&m, S("the number "));
-        msg_str(&m, t.text);
+        message_str(&m, S("the number "));
+        message_str(&m, t.text);
         return m.s == OK ? buf_view(&m.b) : S("a number");
     }
-    msg_str(&m, S("`"));
-    msg_str(&m, t.text);
-    msg_str(&m, S("`"));
+    message_str(&m, S("`"));
+    message_str(&m, t.text);
+    message_str(&m, S("`"));
     return m.s == OK ? buf_view(&m.b) : t.text;
 }
 

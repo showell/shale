@@ -34,7 +34,7 @@ static void json_hex2(Msg *m, uint8_t c) {
     static const char hex[] = "0123456789abcdef";
     Str digits = {hex, 16};
     char pair[2] = {at(digits, c >> 4), at(digits, c & 15)};
-    msg_str(m, (Str){pair, 2});
+    message_str(m, (Str){pair, 2});
 }
 
 // Zig's `failAt`: `said`, then where in the text it is, by byte and by line
@@ -59,8 +59,8 @@ static STATUS_MUST_USE Status json_fail_at(JsonReader *jr, size_t at_, Msg *said
 
 static STATUS_MUST_USE Status json_fail_lit(JsonReader *jr, size_t at_, Str said) {
     Msg m;
-    msg_init(&m, jr->r->ctx.values);
-    msg_str(&m, said);
+    message_init(&m, jr->r->ctx.values);
+    message_str(&m, said);
     return json_fail_at(jr, at_, &m);
 }
 
@@ -162,10 +162,10 @@ static STATUS_MUST_USE Status json_string(JsonReader *jr, Str *out) {
         }
         if (c < 0x20) {
             Msg m;
-            msg_init(&m, r->ctx.values);
-            msg_str(&m, S("a control byte (0x"));
+            message_init(&m, r->ctx.values);
+            message_str(&m, S("a control byte (0x"));
             json_hex2(&m, c);
-            msg_str(&m, S(") inside a string, which JSON writes as an escape"));
+            message_str(&m, S(") inside a string, which JSON writes as an escape"));
             return json_fail_at(jr, jr->i, &m);
         }
         if (c != '\\') {
@@ -189,11 +189,11 @@ static STATUS_MUST_USE Status json_string(JsonReader *jr, Str *out) {
         case 'u': break;
         default: {
             Msg m;
-            msg_init(&m, r->ctx.values);
-            msg_str(&m, S("the escape `\\"));
+            message_init(&m, r->ctx.values);
+            message_str(&m, S("the escape `\\"));
             char one = (char)e;
-            msg_str(&m, (Str){&one, 1});
-            msg_str(&m, S("`, which JSON has not"));
+            message_str(&m, (Str){&one, 1});
+            message_str(&m, S("`, which JSON has not"));
             return json_fail_at(jr, jr->i - 2, &m);
         }
         }
@@ -266,10 +266,10 @@ static STATUS_MUST_USE Status json_number(JsonReader *jr, Value *out) {
     int64_t n = 0;
     if (!json_parse_i64(text, &n)) {
         Msg m;
-        msg_init(&m, jr->r->ctx.values);
-        msg_str(&m, S("the integer "));
-        msg_str(&m, text);
-        msg_str(&m, S(" is past 64 bits"));
+        message_init(&m, jr->r->ctx.values);
+        message_str(&m, S("the integer "));
+        message_str(&m, text);
+        message_str(&m, S(" is past 64 bits"));
         return json_fail_at(jr, start, &m);
     }
     value_int(out, n);
@@ -279,10 +279,10 @@ static STATUS_MUST_USE Status json_number(JsonReader *jr, Value *out) {
 static STATUS_MUST_USE Status json_word(JsonReader *jr, Str w, const Value *v, Value *out) {
     if (!str_starts_with(str_sub(jr->s, jr->i, jr->s.len), w)) {
         Msg m;
-        msg_init(&m, jr->r->ctx.values);
-        msg_str(&m, S("`"));
-        msg_str(&m, w);
-        msg_str(&m, S("` was expected"));
+        message_init(&m, jr->r->ctx.values);
+        message_str(&m, S("`"));
+        message_str(&m, w);
+        message_str(&m, S("` was expected"));
         return json_fail_at(jr, jr->i, &m);
     }
     jr->i += w.len;
@@ -300,9 +300,9 @@ static STATUS_MUST_USE Status json_value(JsonReader *jr, Value *out);
 
 static STATUS_MUST_USE Status json_fail_after(JsonReader *jr, Str before) {
     Msg m;
-    msg_init(&m, jr->r->ctx.values);
-    msg_str(&m, before);
-    msg_str(&m, json_shown(json_byte(jr)));
+    message_init(&m, jr->r->ctx.values);
+    message_str(&m, before);
+    message_str(&m, json_shown(json_byte(jr)));
     return json_fail_at(jr, jr->i, &m);
 }
 
@@ -322,10 +322,10 @@ static STATUS_MUST_USE Status json_object_members(JsonReader *jr, Table *t) {
         Value was;
         if (ValueMap_get(&t->map, key, &was)) {
             Msg m;
-            msg_init(&m, r->ctx.values);
-            msg_str(&m, S("the key \""));
-            msg_str(&m, key);
-            msg_str(&m, S("\" is in this object twice"));
+            message_init(&m, r->ctx.values);
+            message_str(&m, S("the key \""));
+            message_str(&m, key);
+            message_str(&m, S("\" is in this object twice"));
             return json_fail_at(jr, key_at, &m);
         }
         if (v.tag == VALUE_NIL && jr->has_null) v = jr->null_as;
@@ -439,12 +439,12 @@ static STATUS_MUST_USE Status json_value(JsonReader *jr, Value *out) {
     }
     if (c == '-' || json_is_digit(c)) return json_number(jr, out);
     Msg m;
-    msg_init(&m, jr->r->ctx.values);
-    msg_str(&m, S("a value was expected, not "));
-    msg_str(&m, json_shown(c));
-    msg_str(&m, S(" (0x"));
+    message_init(&m, jr->r->ctx.values);
+    message_str(&m, S("a value was expected, not "));
+    message_str(&m, json_shown(c));
+    message_str(&m, S(" (0x"));
     json_hex2(&m, c);
-    msg_str(&m, S(")"));
+    message_str(&m, S(")"));
     return json_fail_at(jr, jr->i, &m);
 }
 

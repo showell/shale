@@ -453,10 +453,10 @@ static inline STATUS_MUST_USE Status parse_function(Parser *p, Pos pos) {
     Str shown = name;
     if (p->in_prelude != PARSE_SCRIPT) {
         Msg m;
-        msg_init(&m, p->arena);
-        msg_str(&m, parse_prelude_name(p, p->in_prelude));
-        msg_str(&m, S("'s "));
-        msg_str(&m, name);
+        message_init(&m, p->arena);
+        message_str(&m, parse_prelude_name(p, p->in_prelude));
+        message_str(&m, S("'s "));
+        message_str(&m, name);
         if (m.s != OK) return STOP;
         shown = buf_view(&m.b);
         if (p->in_prelude == 0) {

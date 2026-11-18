@@ -563,7 +563,7 @@ static STATUS_MUST_USE Status paths_note_before(Paths *h, PathRun *r, Pos pos, S
         size_t room = PATHS_JOURNAL_MAX - h->journal_bytes;
         if ((uint64_t)st.st_size > room) {
             MsgNum most;
-            return path_fail(r, pos, CLASS_REFUSED, S("--undo-on-stop keeps at most {d} bytes of what a run changes, and {s} would pass it"), MSG_ARGS(MSG_FROM_HOST(msg_num(&most, PATHS_JOURNAL_MAX)), MSG_FROM_HOST(abs)));
+            return path_fail(r, pos, CLASS_REFUSED, S("--undo-on-stop keeps at most {d} bytes of what a run changes, and {s} would pass it"), MSG_ARGS(MSG_FROM_HOST(message_num(&most, PATHS_JOURNAL_MAX)), MSG_FROM_HOST(abs)));
         }
         Str bytes = S("");
         FileSystemErr re = file_system_read_file(h->arena, os_str_own(abs), room + 1, &bytes);
@@ -741,7 +741,7 @@ static inline STATUS_MUST_USE Status paths_refuse_secret_args(Paths *h, PathRun 
             PathsNames n = PATHS_NAMES_NONE;
             TRY(paths_names_folder(r, pos, at(argv, i), cwd, dir, &n));
             MsgNum num;
-            Str nth = msg_num(&num, i + 1);
+            Str nth = message_num(&num, i + 1);
             if (n == PATHS_NAMES_INSIDE) {
                 return path_fail(r, pos, CLASS_REFUSED, S("`{s}`'s argument {d} names the mount `{s}`'s folder, which holds secrets: hand one over as `secrets`"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_HOST(nth), MSG_FROM_HOST(m->name)));
             }

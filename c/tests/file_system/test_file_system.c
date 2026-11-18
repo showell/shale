@@ -16,19 +16,19 @@ TEST(strict_names_held_and_names_refused) {
     char x96[96];
     char x97[97];
     Lits oks = LITS("a", "plan.md", "Plan-2.reactions.jsonl", "0f3a.png", "_session_secret", "a b");
-    for (size_t i = 0; i < oks.len; i++) EXPECT(path_strict_name(sx_cs(at(oks, i))));
+    for (size_t i = 0; i < oks.len; i++) EXPECT(path_strict_name(file_system_fixture_cs(at(oks, i))));
     EXPECT(path_strict_name(rep('x', 96, x96)));
     Lits bads = LITS("", ".", "..", "what?", "a:b", "a/b", "a\\b", "trailing.", "trailing ", "caf\xc3\xa9", "tab\t");
-    for (size_t i = 0; i < bads.len; i++) EXPECT(!path_strict_name(sx_cs(at(bads, i))));
+    for (size_t i = 0; i < bads.len; i++) EXPECT(!path_strict_name(file_system_fixture_cs(at(bads, i))));
     EXPECT(!path_strict_name(rep('x', 97, x97)));
 }
 
 TEST(write_read_append_read_at_stat_list_remove) {
     Sx f;
-    sx_init(&f, &f.refused);
+    file_system_fixture_init(&f, &f.refused);
     const FileSystem *s = &f.file_system;
     Arena *a = &f.values;
-    OsStr topic = sx_at(&f, "data/chat/1_2/sessions/topic.md");
+    OsStr topic = file_system_fixture_at(&f, "data/chat/1_2/sessions/topic.md");
     EXPECT_EQ(file_system_replace(s, a, topic, S("hello")), FILE_SYSTEM_OK);
     uint64_t size = 0;
     EXPECT_EQ(file_system_append(s, topic, S(" world"), &size), FILE_SYSTEM_OK);
@@ -41,82 +41,82 @@ TEST(write_read_append_read_at_stat_list_remove) {
     FileSystemStat st;
     EXPECT_EQ(file_system_stat(s, topic, &st), FILE_SYSTEM_OK);
     EXPECT_EQ(st.size, 11);
-    EXPECT_EQ(file_system_stat(s, sx_at(&f, "data/chat/1_2"), &st), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_stat(s, file_system_fixture_at(&f, "data/chat/1_2"), &st), FILE_SYSTEM_OK);
     EXPECT_EQ(st.kind, FILE_SYSTEM_KIND_DIRECTORY);
     // append makes a file that is not there, and its folders.
-    EXPECT_EQ(file_system_append(s, sx_at(&f, "data/new/x.log"), S("abc"), &size), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_append(s, file_system_fixture_at(&f, "data/new/x.log"), S("abc"), &size), FILE_SYSTEM_OK);
     EXPECT_EQ(size, 3);
     FileSystemEntries es;
-    EXPECT_EQ(file_system_list(s, a, sx_at(&f, "data/chat/1_2/sessions"), &es), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_list(s, a, file_system_fixture_at(&f, "data/chat/1_2/sessions"), &es), FILE_SYSTEM_OK);
     EXPECT_EQ(es.len, 1);
     EXPECT_STR(at(es, 0).name, S("topic.md"));
     EXPECT_EQ(at(es, 0).kind, FILE_SYSTEM_KIND_FILE);
-    EXPECT_EQ(file_system_list(s, a, sx_at(&f, "data/nowhere"), &es), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_list(s, a, file_system_fixture_at(&f, "data/nowhere"), &es), FILE_SYSTEM_OK);
     EXPECT_EQ(es.len, 0);
-    EXPECT_EQ(file_system_stat(s, sx_at(&f, "data/nothing.md"), &st), FILE_SYSTEM_FILE_NOT_FOUND);
+    EXPECT_EQ(file_system_stat(s, file_system_fixture_at(&f, "data/nothing.md"), &st), FILE_SYSTEM_FILE_NOT_FOUND);
     EXPECT_EQ(file_system_remove(s, topic), FILE_SYSTEM_OK);
     // Gone already: fine.
     EXPECT_EQ(file_system_remove(s, topic), FILE_SYSTEM_OK);
     bool has = true;
     EXPECT_EQ(file_system_has(s, topic, &has), FILE_SYSTEM_OK);
     EXPECT(!has);
-    EXPECT_EQ(file_system_remove_tree(s, a, sx_at(&f, "data/chat")), FILE_SYSTEM_OK);
-    EXPECT_EQ(file_system_has(s, sx_at(&f, "data/chat"), &has), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_remove_tree(s, a, file_system_fixture_at(&f, "data/chat")), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_has(s, file_system_fixture_at(&f, "data/chat"), &has), FILE_SYSTEM_OK);
     EXPECT(!has);
-    EXPECT_EQ(file_system_has(s, sx_at(&f, "data/new/x.log"), &has), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_has(s, file_system_fixture_at(&f, "data/new/x.log"), &has), FILE_SYSTEM_OK);
     EXPECT(has);
-    sx_deinit(&f);
+    file_system_fixture_deinit(&f);
 }
 
 TEST(a_name_that_is_not_strict_is_refused_before_anything_is_made) {
     Sx f;
-    sx_init(&f, &f.refused);
+    file_system_fixture_init(&f, &f.refused);
     const FileSystem *s = &f.file_system;
     Arena *a = &f.values;
     char x97[97];
     uint64_t size = 0;
-    EXPECT_EQ(file_system_replace(s, a, sx_at(&f, "data/what?.md"), S("x")), FILE_SYSTEM_BAD_NAME);
-    OsStr long_name = sx_at(&f, "data");
+    EXPECT_EQ(file_system_replace(s, a, file_system_fixture_at(&f, "data/what?.md"), S("x")), FILE_SYSTEM_BAD_NAME);
+    OsStr long_name = file_system_fixture_at(&f, "data");
     EXPECT(file_system_join(a, long_name, rep('x', 97, x97), &long_name));
     EXPECT_EQ(file_system_append(s, long_name, S("x"), &size), FILE_SYSTEM_BAD_NAME);
-    EXPECT_EQ(file_system_make_dir(s, sx_at(&f, "data/trailing./inner")), FILE_SYSTEM_BAD_NAME);
-    EXPECT_EQ(file_system_remove_tree(s, a, sx_at(&f, "data/users/   ")), FILE_SYSTEM_BAD_NAME);
+    EXPECT_EQ(file_system_make_dir(s, file_system_fixture_at(&f, "data/trailing./inner")), FILE_SYSTEM_BAD_NAME);
+    EXPECT_EQ(file_system_remove_tree(s, a, file_system_fixture_at(&f, "data/users/   ")), FILE_SYSTEM_BAD_NAME);
     bool has = true;
-    EXPECT_EQ(file_system_has(s, sx_at(&f, "data/trailing."), &has), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_has(s, file_system_fixture_at(&f, "data/trailing."), &has), FILE_SYSTEM_OK);
     EXPECT(!has);
-    EXPECT(!sx_there(&f, "data"));
-    sx_deinit(&f);
+    EXPECT(!file_system_fixture_there(&f, "data"));
+    file_system_fixture_deinit(&f);
 }
 
 TEST(replace_makes_the_file_hold_exactly_the_data_keeps_its_name_and_leaves_no_sibling) {
     Sx f;
-    sx_init(&f, &f.refused);
+    file_system_fixture_init(&f, &f.refused);
     const FileSystem *s = &f.file_system;
     Arena *a = &f.values;
     Str text = S("");
     // New: made, folders and all.
-    EXPECT_EQ(file_system_replace(s, a, sx_at(&f, "data/players/next-id.txt"), S("4\n")), FILE_SYSTEM_OK);
-    EXPECT(sx_file(&f, "data/players/next-id.txt", &text));
+    EXPECT_EQ(file_system_replace(s, a, file_system_fixture_at(&f, "data/players/next-id.txt"), S("4\n")), FILE_SYSTEM_OK);
+    EXPECT(file_system_fixture_file(&f, "data/players/next-id.txt", &text));
     EXPECT_STR(text, S("4\n"));
     // Shorter than before: nothing of the old tail is left.
-    EXPECT_EQ(file_system_replace(s, a, sx_at(&f, "data/players/next-id.txt"), S("5")), FILE_SYSTEM_OK);
-    EXPECT(sx_file(&f, "data/players/next-id.txt", &text));
+    EXPECT_EQ(file_system_replace(s, a, file_system_fixture_at(&f, "data/players/next-id.txt"), S("5")), FILE_SYSTEM_OK);
+    EXPECT(file_system_fixture_file(&f, "data/players/next-id.txt", &text));
     EXPECT_STR(text, S("5"));
-    sx_put(&f, "data/chat/topic.count", "2 20\n");
+    file_system_fixture_put(&f, "data/chat/topic.count", "2 20\n");
     FileSystemEntries es;
     // A sibling a stop left behind is written over.
     Str sib = S("");
     EXPECT(path_temp_name(a, S("topic.count"), &sib));
-    OsStr left = sx_at(&f, "data/chat");
+    OsStr left = file_system_fixture_at(&f, "data/chat");
     EXPECT(file_system_join(a, left, sib, &left));
     EXPECT_EQ(file_system_write_file(left, S("stale"), 0644), FILE_SYSTEM_OK);
-    EXPECT_EQ(file_system_replace(s, a, sx_at(&f, "data/chat/topic.count"), S("3 30\n")), FILE_SYSTEM_OK);
-    EXPECT_EQ(file_system_list(s, a, sx_at(&f, "data/chat"), &es), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_replace(s, a, file_system_fixture_at(&f, "data/chat/topic.count"), S("3 30\n")), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_list(s, a, file_system_fixture_at(&f, "data/chat"), &es), FILE_SYSTEM_OK);
     EXPECT_EQ(es.len, 1);
-    EXPECT(sx_file(&f, "data/chat/topic.count", &text));
+    EXPECT(file_system_fixture_file(&f, "data/chat/topic.count", &text));
     EXPECT_STR(text, S("3 30\n"));
     // A name that is not strict is refused before anything is written.
-    EXPECT_EQ(file_system_replace(s, a, sx_at(&f, "data/what?"), S("x")), FILE_SYSTEM_BAD_NAME);
+    EXPECT_EQ(file_system_replace(s, a, file_system_fixture_at(&f, "data/what?"), S("x")), FILE_SYSTEM_BAD_NAME);
     // One sibling name per file, in any case, and short enough for any name.
     Str one = S("");
     Str two = S("");
@@ -130,14 +130,14 @@ TEST(replace_makes_the_file_hold_exactly_the_data_keeps_its_name_and_leaves_no_s
     EXPECT(path_temp_name(a, rep('x', 96, x96), &one));
     EXPECT_EQ(one.len, 13);
     EXPECT(path_strict_name(one));
-    sx_deinit(&f);
+    file_system_fixture_deinit(&f);
 }
 
 TEST(a_path_the_bare_metal_host_could_not_hold_is_refused_measured_as_it_would_spell_it) {
     Sx f;
-    sx_init(&f, &f.refused);
+    file_system_fixture_init(&f, &f.refused);
     Arena *a = &f.values;
-    OsStr data = sx_at(&f, "home/someone/a-long-host-path/prod/data");
+    OsStr data = file_system_fixture_at(&f, "home/someone/a-long-host-path/prod/data");
     FileSystem ls = {true, data.s};
     char x[96];
     char y[96];
@@ -166,71 +166,71 @@ TEST(a_path_the_bare_metal_host_could_not_hold_is_refused_measured_as_it_would_s
     EXPECT_EQ(file_system_has(&ls, deeper, &has), FILE_SYSTEM_OK);
     EXPECT(!has);
     // Not a path that only begins like the root.
-    OsStr free_path = sx_at(&f, "home/someone/a-long-host-path/prod/data2");
+    OsStr free_path = file_system_fixture_at(&f, "home/someone/a-long-host-path/prod/data2");
     EXPECT(file_system_join(a, free_path, rep('x', 96, x), &free_path) && file_system_join(a, free_path, rep('y', 96, y), &free_path) && file_system_join(a, free_path, rep('z', 96, z), &free_path));
     EXPECT_EQ(file_system_replace(&ls, a, free_path, S("free")), FILE_SYSTEM_OK);
-    sx_deinit(&f);
+    file_system_fixture_deinit(&f);
 }
 
 TEST(nothing_there_is_null_and_something_there_that_will_not_read_is_an_error) {
     Sx f;
-    sx_init(&f, &f.refused);
+    file_system_fixture_init(&f, &f.refused);
     const FileSystem *s = &f.file_system;
-    sx_put(&f, "a-file", "x");
-    sx_mkdir(&f, "a-directory");
+    file_system_fixture_put(&f, "a-file", "x");
+    file_system_fixture_mkdir(&f, "a-directory");
     Lits ab = LITS("not-here", "a-file/under-a-file");
     for (size_t i = 0; i < ab.len; i++) {
         bool found = true;
         FileSystemStat st;
-        EXPECT_EQ(file_system_stat_or_null(s, sx_at(&f, at(ab, i)), &found, &st), FILE_SYSTEM_OK);
+        EXPECT_EQ(file_system_stat_or_null(s, file_system_fixture_at(&f, at(ab, i)), &found, &st), FILE_SYSTEM_OK);
         EXPECT(!found);
     }
     bool found = false;
     FileSystemStat st;
-    EXPECT_EQ(file_system_stat_or_null(s, sx_at(&f, "a-file"), &found, &st), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_stat_or_null(s, file_system_fixture_at(&f, "a-file"), &found, &st), FILE_SYSTEM_OK);
     EXPECT(found);
     EXPECT_EQ(st.size, 1);
     // A folder read as a file is an error, not nothing.
     char one[1];
     size_t got = 0;
-    EXPECT_EQ(file_system_read_at(s, sx_at(&f, "a-directory"), 0, (Bytes){one, 1}, &got), FILE_SYSTEM_IS_DIR);
-    sx_deinit(&f);
+    EXPECT_EQ(file_system_read_at(s, file_system_fixture_at(&f, "a-directory"), 0, (Bytes){one, 1}, &got), FILE_SYSTEM_IS_DIR);
+    file_system_fixture_deinit(&f);
 }
 
 TEST(a_name_in_another_case_is_another_name_and_a_miss_is_not_found) {
     Sx f;
-    sx_init(&f, &f.refused);
+    file_system_fixture_init(&f, &f.refused);
     const FileSystem *s = &f.file_system;
     Arena *a = &f.values;
     Str text = S("");
-    EXPECT_EQ(file_system_replace(s, a, sx_at(&f, "data/chat/channels/Dev/sessions/plan.md"), S("one")), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_replace(s, a, file_system_fixture_at(&f, "data/chat/channels/Dev/sessions/plan.md"), S("one")), FILE_SYSTEM_OK);
     char three[3];
     size_t got = 0;
     // A read, a stat and a list in another case find nothing.
-    EXPECT_EQ(file_system_read_at(s, sx_at(&f, "data/chat/channels/Dev/sessions/PLAN.md"), 0, (Bytes){three, 3}, &got), FILE_SYSTEM_FILE_NOT_FOUND);
+    EXPECT_EQ(file_system_read_at(s, file_system_fixture_at(&f, "data/chat/channels/Dev/sessions/PLAN.md"), 0, (Bytes){three, 3}, &got), FILE_SYSTEM_FILE_NOT_FOUND);
     EXPECT_EQ(got, 0);
     bool has = true;
-    EXPECT_EQ(file_system_has(s, sx_at(&f, "data/chat/CHANNELS/Dev/sessions/plan.md"), &has), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_has(s, file_system_fixture_at(&f, "data/chat/CHANNELS/Dev/sessions/plan.md"), &has), FILE_SYSTEM_OK);
     EXPECT(!has);
     FileSystemStat st;
-    EXPECT_EQ(file_system_stat(s, sx_at(&f, "data/chat/channels/dev"), &st), FILE_SYSTEM_FILE_NOT_FOUND);
+    EXPECT_EQ(file_system_stat(s, file_system_fixture_at(&f, "data/chat/channels/dev"), &st), FILE_SYSTEM_FILE_NOT_FOUND);
     FileSystemEntries es;
-    EXPECT_EQ(file_system_list(s, a, sx_at(&f, "data/chat/channels/dev/sessions"), &es), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_list(s, a, file_system_fixture_at(&f, "data/chat/channels/dev/sessions"), &es), FILE_SYSTEM_OK);
     EXPECT_EQ(es.len, 0);
     // A write in another case makes another file, and the first is as it was.
-    EXPECT_EQ(file_system_replace(s, a, sx_at(&f, "data/chat/channels/Dev/sessions/Plan.md"), S("two")), FILE_SYSTEM_OK);
-    EXPECT_EQ(file_system_list(s, a, sx_at(&f, "data/chat/channels/Dev/sessions"), &es), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_replace(s, a, file_system_fixture_at(&f, "data/chat/channels/Dev/sessions/Plan.md"), S("two")), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_list(s, a, file_system_fixture_at(&f, "data/chat/channels/Dev/sessions"), &es), FILE_SYSTEM_OK);
     EXPECT_EQ(es.len, 2);
-    EXPECT(sx_file(&f, "data/chat/channels/Dev/sessions/plan.md", &text));
+    EXPECT(file_system_fixture_file(&f, "data/chat/channels/Dev/sessions/plan.md", &text));
     EXPECT_STR(text, S("one"));
-    EXPECT(sx_file(&f, "data/chat/channels/Dev/sessions/Plan.md", &text));
+    EXPECT(file_system_fixture_file(&f, "data/chat/channels/Dev/sessions/Plan.md", &text));
     EXPECT_STR(text, S("two"));
     // A removal in another case removes nothing.
-    EXPECT_EQ(file_system_remove(s, sx_at(&f, "data/chat/channels/Dev/sessions/PLAN.md")), FILE_SYSTEM_OK);
-    EXPECT_EQ(file_system_remove_tree(s, a, sx_at(&f, "data/chat/channels/DEV")), FILE_SYSTEM_OK);
-    EXPECT_EQ(file_system_has(s, sx_at(&f, "data/chat/channels/Dev/sessions/plan.md"), &has), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_remove(s, file_system_fixture_at(&f, "data/chat/channels/Dev/sessions/PLAN.md")), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_remove_tree(s, a, file_system_fixture_at(&f, "data/chat/channels/DEV")), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_has(s, file_system_fixture_at(&f, "data/chat/channels/Dev/sessions/plan.md"), &has), FILE_SYSTEM_OK);
     EXPECT(has);
-    sx_deinit(&f);
+    file_system_fixture_deinit(&f);
 }
 
 TEST(a_path_with_an_empty_part_is_refused_under_a_root_as_metal_refuses_it) {
@@ -245,29 +245,29 @@ TEST(a_path_with_an_empty_part_is_refused_under_a_root_as_metal_refuses_it) {
 
 TEST(a_replace_keeps_the_file_s_mode_on_linux_an_executable_script_stays_one) {
     Sx f;
-    sx_init(&f, &f.refused);
-    sx_put(&f, "data/run.sh", "old");
-    EXPECT_EQ(sx_chmod(&f, "data/run.sh", 0755), 0);
-    EXPECT_EQ(file_system_replace(&f.file_system, &f.values, sx_at(&f, "data/run.sh"), S("new")), FILE_SYSTEM_OK);
+    file_system_fixture_init(&f, &f.refused);
+    file_system_fixture_put(&f, "data/run.sh", "old");
+    EXPECT_EQ(file_system_fixture_chmod(&f, "data/run.sh", 0755), 0);
+    EXPECT_EQ(file_system_replace(&f.file_system, &f.values, file_system_fixture_at(&f, "data/run.sh"), S("new")), FILE_SYSTEM_OK);
     struct stat st;
-    EXPECT_EQ(file_system_stat_exact(sx_at(&f, "data/run.sh"), true, &st), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_stat_exact(file_system_fixture_at(&f, "data/run.sh"), true, &st), FILE_SYSTEM_OK);
     EXPECT_EQ(st.st_mode & 0777, 0755);
     Str text = S("");
-    EXPECT(sx_file(&f, "data/run.sh", &text));
+    EXPECT(file_system_fixture_file(&f, "data/run.sh", &text));
     EXPECT_STR(text, S("new"));
-    sx_deinit(&f);
+    file_system_fixture_deinit(&f);
 }
 
 TEST(a_replace_onto_a_folder_fails_and_leaves_no_temporary_file_beside_it) {
     Sx f;
-    sx_init(&f, &f.refused);
-    sx_mkdir(&f, "data/x");
-    EXPECT(file_system_replace(&f.file_system, &f.values, sx_at(&f, "data/x"), S("d")) != FILE_SYSTEM_OK);
+    file_system_fixture_init(&f, &f.refused);
+    file_system_fixture_mkdir(&f, "data/x");
+    EXPECT(file_system_replace(&f.file_system, &f.values, file_system_fixture_at(&f, "data/x"), S("d")) != FILE_SYSTEM_OK);
     FileSystemEntries es;
-    EXPECT_EQ(file_system_list(&f.file_system, &f.values, sx_at(&f, "data"), &es), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_list(&f.file_system, &f.values, file_system_fixture_at(&f, "data"), &es), FILE_SYSTEM_OK);
     EXPECT_EQ(es.len, 1);
     for (size_t i = 0; i < es.len; i++) EXPECT(!str_starts_with(at(es, i).name, S("~")));
-    sx_deinit(&f);
+    file_system_fixture_deinit(&f);
 }
 
 TEST(wyhash_its_test_vectors) {
@@ -287,7 +287,7 @@ TEST(wyhash_its_test_vectors) {
     };
     SLICE_TYPE(Vectors, const Vector);
     Vectors all = {vs, sizeof vs / sizeof *vs};
-    for (size_t i = 0; i < all.len; i++) EXPECT_EQ(wyhash(at(all, i).seed, sx_cs(at(all, i).input)), at(all, i).expected);
+    for (size_t i = 0; i < all.len; i++) EXPECT_EQ(wyhash(at(all, i).seed, file_system_fixture_cs(at(all, i).input)), at(all, i).expected);
 }
 
 TEST(dirname_and_basename_take_trailing_slashes_and_the_root) {

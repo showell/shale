@@ -62,20 +62,20 @@ static const char *const SRC_YIELD_KEEPS = "function w(i)\n  replace(\"f\" .. i 
 static const char *const OUT_YIELD_KEEPS = "";
 static const char *const REPORT_YIELD_KEEPS = "── effects (4) ──\nreplace f1.txt: ok\nreplace f2.txt: ok\nreplace f3.txt: ok\nremove f2.txt: ok\n── finished (134 steps)\n── used: 134 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes\n── steps: 134 in all; the most 103 (76%): script; 24 (17%): replace, 3 calls; 7 (5%): remove, 1 call\n";
 
-static Budgets bt_budgets(void) {
+static Budgets builtins_test_budgets(void) {
     Budgets b;
     cli_defaults(&b);
     return b;
 }
 
-static RanOpts bt_verbose(void) {
+static RanOpts builtins_test_verbose(void) {
     RanOpts o = {NULL, true, false};
     return o;
 }
 
 // Runs `src` on `x`, made with `ran_init` (and any files a test puts),
 // and holds its output and its report to Zig's.
-static bool bt_ran(Ran *x, const char *src, Budgets b, const char *out, const char *report) { // cstr: the test's literals
+static bool builtins_test_ran(Ran *x, const char *src, Budgets b, const char *out, const char *report) { // cstr: the test's literals
     ran_run(x, ran_cs(src), b);
     bool same_out = str_eq(buf_view(&x->r.out), ran_cs(out));
     Str said = ran_report_of(x, &x->host, true);
@@ -86,7 +86,7 @@ static bool bt_ran(Ran *x, const char *src, Budgets b, const char *out, const ch
 }
 
 // Whether the root's `rel` holds exactly `text`.
-static bool bt_holds(Ran *x, const char *rel, const char *text) { // cstr: test literals
+static bool builtins_test_holds(Ran *x, const char *rel, const char *text) { // cstr: test literals
     Str got = S("");
     char path[PATH_MAX];
     int n = snprintf(path, sizeof path, "root/%s", rel);
@@ -94,7 +94,7 @@ static bool bt_holds(Ran *x, const char *rel, const char *text) { // cstr: test 
     return str_eq(got, ran_cs(text));
 }
 
-static bool bt_absent(Ran *x, const char *rel) { // cstr: a test's literal
+static bool builtins_test_absent(Ran *x, const char *rel) { // cstr: a test's literal
     Str got = S("");
     char path[PATH_MAX];
     int n = snprintf(path, sizeof path, "root/%s", rel);
@@ -103,17 +103,17 @@ static bool bt_absent(Ran *x, const char *rel) { // cstr: a test's literal
 
 TEST(ls_stat_exists_and_is_dir_look_without_changing_and_name_a_missing_path) {
     static Ran x;
-    ran_init(&x, bt_verbose());
-    EXPECT(bt_ran(&x, SRC_LOOKS, bt_budgets(), OUT_LOOKS, REPORT_LOOKS));
+    ran_init(&x, builtins_test_verbose());
+    EXPECT(builtins_test_ran(&x, SRC_LOOKS, builtins_test_budgets(), OUT_LOOKS, REPORT_LOOKS));
     EXPECT_EQ(x.r.reads, 11);
-    EXPECT(bt_holds(&x, "d/a.txt", "a"));
+    EXPECT(builtins_test_holds(&x, "d/a.txt", "a"));
     ran_free(&x);
 }
 
 TEST(the_reads_whole_in_parts_by_lines_and_scans_across_a_chunks_edge) {
     static Ran x;
-    ran_init(&x, bt_verbose());
-    EXPECT(bt_ran(&x, SRC_READS, bt_budgets(), OUT_READS, REPORT_READS));
+    ran_init(&x, builtins_test_verbose());
+    EXPECT(builtins_test_ran(&x, SRC_READS, builtins_test_budgets(), OUT_READS, REPORT_READS));
     EXPECT_EQ(x.r.steps, 210059);
     EXPECT_EQ(x.r.read_bytes, 197217);
     ran_free(&x);
@@ -121,11 +121,11 @@ TEST(the_reads_whole_in_parts_by_lines_and_scans_across_a_chunks_edge) {
 
 TEST(the_read_budgets_stop_a_read_before_its_bytes_are_taken) {
     static Ran x;
-    ran_init(&x, bt_verbose());
-    Budgets b = bt_budgets();
+    ran_init(&x, builtins_test_verbose());
+    Budgets b = builtins_test_budgets();
     b.reads = 6;
     b.read_bytes = 40;
-    EXPECT(bt_ran(&x, SRC_READ_BUDGETS, b, OUT_READ_BUDGETS, REPORT_READ_BUDGETS));
+    EXPECT(builtins_test_ran(&x, SRC_READ_BUDGETS, b, OUT_READ_BUDGETS, REPORT_READ_BUDGETS));
     EXPECT_EQ(x.r.ctx.stop.budget, BUDGET_READ_BYTES);
     EXPECT_EQ(x.r.read_bytes, 36);
     ran_free(&x);
@@ -133,62 +133,62 @@ TEST(the_read_budgets_stop_a_read_before_its_bytes_are_taken) {
 
 TEST(walk_sorts_filters_skips_resumes_and_names_its_mistakes) {
     static Ran x;
-    ran_init(&x, bt_verbose());
-    EXPECT(bt_ran(&x, SRC_WALK, bt_budgets(), OUT_WALK, REPORT_WALK));
+    ran_init(&x, builtins_test_verbose());
+    EXPECT(builtins_test_ran(&x, SRC_WALK, builtins_test_budgets(), OUT_WALK, REPORT_WALK));
     EXPECT_EQ(x.r.reads, 36);
     ran_free(&x);
 }
 
 TEST(walk_in_parts_ends_each_with_more_and_keep_reads_reads_nothing) {
     static Ran x;
-    ran_init(&x, bt_verbose());
-    Budgets b = bt_budgets();
+    ran_init(&x, builtins_test_verbose());
+    Budgets b = builtins_test_budgets();
     b.call_entries = 3;
-    EXPECT(bt_ran(&x, SRC_WALK_PARTS, b, OUT_WALK_PARTS, REPORT_WALK_PARTS));
+    EXPECT(builtins_test_ran(&x, SRC_WALK_PARTS, b, OUT_WALK_PARTS, REPORT_WALK_PARTS));
     EXPECT_EQ(x.r.reads, 7);
     ran_free(&x);
 }
 
 TEST(every_change_is_logged_with_its_outcome_a_failed_one_too) {
     static Ran x;
-    ran_init(&x, bt_verbose());
-    EXPECT(bt_ran(&x, SRC_CHANGES, bt_budgets(), OUT_CHANGES, REPORT_CHANGES));
+    ran_init(&x, builtins_test_verbose());
+    EXPECT(builtins_test_ran(&x, SRC_CHANGES, builtins_test_budgets(), OUT_CHANGES, REPORT_CHANGES));
     EXPECT_EQ(x.r.changes, 9);
-    EXPECT(bt_holds(&x, "c/x.txt", "xy"));
-    EXPECT(bt_absent(&x, "c/new.txt"));
+    EXPECT(builtins_test_holds(&x, "c/x.txt", "xy"));
+    EXPECT(builtins_test_absent(&x, "c/new.txt"));
     ran_free(&x);
 }
 
 TEST(the_change_bytes_budget_stops_a_change_before_it_is_written) {
     static Ran x;
-    ran_init(&x, bt_verbose());
-    Budgets b = bt_budgets();
+    ran_init(&x, builtins_test_verbose());
+    Budgets b = builtins_test_budgets();
     b.changes = 3;
     b.change_bytes = 10;
-    EXPECT(bt_ran(&x, SRC_CHANGE_BUDGETS, b, OUT_CHANGE_BUDGETS, REPORT_CHANGE_BUDGETS));
-    EXPECT(bt_holds(&x, "a.txt", "12345"));
-    EXPECT(bt_absent(&x, "b.txt"));
+    EXPECT(builtins_test_ran(&x, SRC_CHANGE_BUDGETS, b, OUT_CHANGE_BUDGETS, REPORT_CHANGE_BUDGETS));
+    EXPECT(builtins_test_holds(&x, "a.txt", "12345"));
+    EXPECT(builtins_test_absent(&x, "b.txt"));
     EXPECT_EQ(x.r.change_bytes, 5);
     ran_free(&x);
 }
 
 TEST(the_changes_budget_stops_the_change_past_it) {
     static Ran x;
-    ran_init(&x, bt_verbose());
-    Budgets b = bt_budgets();
+    ran_init(&x, builtins_test_verbose());
+    Budgets b = builtins_test_budgets();
     b.changes = 2;
-    EXPECT(bt_ran(&x, SRC_CHANGE_COUNT, b, OUT_CHANGE_COUNT, REPORT_CHANGE_COUNT));
-    EXPECT(bt_holds(&x, "b.txt", "2"));
-    EXPECT(bt_absent(&x, "c.txt"));
+    EXPECT(builtins_test_ran(&x, SRC_CHANGE_COUNT, b, OUT_CHANGE_COUNT, REPORT_CHANGE_COUNT));
+    EXPECT(builtins_test_holds(&x, "b.txt", "2"));
+    EXPECT(builtins_test_absent(&x, "c.txt"));
     EXPECT_EQ(x.r.changes, 2);
     ran_free(&x);
 }
 
 TEST(edit_prints_its_diff_holds_word_and_all_and_says_where_old_parts) {
     static Ran x;
-    ran_init(&x, bt_verbose());
-    EXPECT(bt_ran(&x, SRC_EDIT, bt_budgets(), OUT_EDIT, REPORT_EDIT));
-    EXPECT(bt_holds(&x, "e.txt", "one 2\ntwo_x 2\nfour\n5\n6\n"));
+    ran_init(&x, builtins_test_verbose());
+    EXPECT(builtins_test_ran(&x, SRC_EDIT, builtins_test_budgets(), OUT_EDIT, REPORT_EDIT));
+    EXPECT(builtins_test_holds(&x, "e.txt", "one 2\ntwo_x 2\nfour\n5\n6\n"));
     ran_free(&x);
 }
 
@@ -196,10 +196,10 @@ TEST(edit_says_a_diff_as_one_line_without_verbose) {
     static Ran x;
     RanOpts o = {NULL, false, false};
     ran_init(&x, o);
-    ran_run(&x, S("replace(\"e.txt\", \"a\\nb\\n\")\nprint(edit(\"e.txt\", \"b\", \"c\\nd\"))\nprint(5000000 - budget().steps)\n"), bt_budgets());
+    ran_run(&x, S("replace(\"e.txt\", \"a\\nb\\n\")\nprint(edit(\"e.txt\", \"b\", \"c\\nd\"))\nprint(5000000 - budget().steps)\n"), builtins_test_budgets());
     EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("edit e.txt: 1 hunk, -1 +2 lines\n1\n80\n"));
-    EXPECT(bt_holds(&x, "e.txt", "a\nc\nd\n"));
+    EXPECT(builtins_test_holds(&x, "e.txt", "a\nc\nd\n"));
     ran_free(&x);
 }
 
@@ -215,10 +215,10 @@ TEST(edit_word_holds_only_the_edges_where_old_ends_in_a_word_byte) {
     ran_run(&x,
             S("function ed(p, a, b, o) return edit(p, a, b, o) end\nreplace(\"w.txt\", \"f(x) af(y) f(z)\\n(x)\\n\")\nprint(edit(\"w.txt\", \"f(\", \"g(\", {all = true, word = true}))\nprint(edit(\"w.txt\", \"(x)\\n\", \"[x]\\n\", {word = "
               "true}))\nprint(attempt(ed, \"w.txt\", \"a\", \"b\", {word = true}).error)\n"),
-            bt_budgets());
+            builtins_test_budgets());
     EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("edit w.txt: 1 hunk, -1 +1 lines\n2\nedit w.txt: 1 hunk, -1 +1 lines\n1\n`edit`: \"a\" is not in w.txt as a whole word: it is there, but each time inside a longer word\n"));
-    EXPECT(bt_holds(&x, "w.txt", "g(x) af(y) g(z)\n[x]\n"));
+    EXPECT(builtins_test_holds(&x, "w.txt", "g(x) af(y) g(z)\n[x]\n"));
     ran_free(&x);
 }
 
@@ -231,7 +231,7 @@ TEST(read_lines_at_the_call_bytes_cap_ends_a_part_at_its_last_whole_line) {
     static Ran x;
     RanOpts o = {NULL, false, false};
     ran_init(&x, o);
-    Budgets b = bt_budgets();
+    Budgets b = builtins_test_budgets();
     b.call_bytes = 11;
     ran_run(&x,
             S("function rl(p, o) return read_lines(p, o) end\nreplace(\"f.txt\", \"aaaa\\nbbbb\\ncccc\\n\")\nlocal p = read_lines(\"f.txt\")\nprint(#p.lines, p.lines[2], p.next, p.done)\np = read_lines(\"f.txt\", p.next)\nprint(#p.lines, "
@@ -245,19 +245,19 @@ TEST(read_lines_at_the_call_bytes_cap_ends_a_part_at_its_last_whole_line) {
 
 TEST(edits_write_writes_every_file_or_none_and_refuses_one_named_twice) {
     static Ran x;
-    ran_init(&x, bt_verbose());
-    EXPECT(bt_ran(&x, SRC_EDITS_WRITE, bt_budgets(), OUT_EDITS_WRITE, REPORT_EDITS_WRITE));
-    EXPECT(bt_holds(&x, "a.txt", "A a2\n"));
-    EXPECT(bt_holds(&x, "b.txt", "B\n"));
+    ran_init(&x, builtins_test_verbose());
+    EXPECT(builtins_test_ran(&x, SRC_EDITS_WRITE, builtins_test_budgets(), OUT_EDITS_WRITE, REPORT_EDITS_WRITE));
+    EXPECT(builtins_test_holds(&x, "a.txt", "A a2\n"));
+    EXPECT(builtins_test_holds(&x, "b.txt", "B\n"));
     ran_free(&x);
 }
 
 TEST(a_yield_keeps_the_effects_log) {
     static Ran x;
-    ran_init(&x, bt_verbose());
-    EXPECT(bt_ran(&x, SRC_YIELD_KEEPS, bt_budgets(), OUT_YIELD_KEEPS, REPORT_YIELD_KEEPS));
+    ran_init(&x, builtins_test_verbose());
+    EXPECT(builtins_test_ran(&x, SRC_YIELD_KEEPS, builtins_test_budgets(), OUT_YIELD_KEEPS, REPORT_YIELD_KEEPS));
     EXPECT_EQ(x.r.collections, 3);
-    EXPECT(bt_absent(&x, "f2.txt"));
+    EXPECT(builtins_test_absent(&x, "f2.txt"));
     ran_free(&x);
 }
 
@@ -266,7 +266,7 @@ TEST(attack_a_change_through_a_read_only_mount_is_refused_before_it_is_written) 
     RanOpts o = {"ro = D/ro ro\n", true, false};
     ran_init(&x, o);
     ran_put(&x, "ro/a.txt", "a");
-    EXPECT(bt_ran(&x, SRC_RO_MOUNT, bt_budgets(), OUT_RO_MOUNT, REPORT_RO_MOUNT));
+    EXPECT(builtins_test_ran(&x, SRC_RO_MOUNT, builtins_test_budgets(), OUT_RO_MOUNT, REPORT_RO_MOUNT));
     Str got = S("");
     EXPECT(ran_file(&x, "ro/a.txt", &got));
     EXPECT_STR(got, S("a"));
@@ -279,23 +279,23 @@ TEST(undo_on_stop_puts_back_a_file_changed_and_deletes_one_made) {
     RanOpts o = {NULL, true, true};
     ran_init(&x, o);
     ran_put(&x, "root/keep.txt", "old");
-    EXPECT(bt_ran(&x, SRC_UNDO, bt_budgets(), OUT_UNDO, REPORT_UNDO));
+    EXPECT(builtins_test_ran(&x, SRC_UNDO, builtins_test_budgets(), OUT_UNDO, REPORT_UNDO));
     EXPECT_STR(x.undone, ran_cs(UNDONE_UNDO));
-    EXPECT(bt_holds(&x, "keep.txt", "old"));
-    EXPECT(bt_absent(&x, "made.txt"));
+    EXPECT(builtins_test_holds(&x, "keep.txt", "old"));
+    EXPECT(builtins_test_absent(&x, "made.txt"));
     ran_free(&x);
 }
 
 // The bytes `a` has handed out and keeps: every chunk, but the newest's room
 // not yet bumped into.
-static size_t bt_arena_taken(const Arena *a) {
+static size_t builtins_test_arena_taken(const Arena *a) {
     if (a->chunk == NULL) return a->held;
     return a->held - (arena_chunk_len(a->chunk) - a->end);
 }
 
 // What a run of `n` creates through a mount (`exists`, then `replace`, as
 // the Linux prelude's `create` makes one) leaves in the values' arena.
-static size_t bt_creates_hold(size_t n) {
+static size_t builtins_test_creates_hold(size_t n) {
     static Ran x;
     RanOpts o = {"w = D/w\n", false, false};
     ran_init(&x, o);
@@ -305,12 +305,12 @@ static size_t bt_creates_hold(size_t n) {
         buf_lit(&src, " do\n  i = i + 1\n  local p = \"w:d/f\" .. i\n  if exists(p) then fail(p) end\n  replace(p, \"x\")\nend\nprint(i)\n") != OK) {
         abort();
     }
-    Budgets b = bt_budgets();
+    Budgets b = builtins_test_budgets();
     b.changes = 100000;
     ran_run(&x, buf_view(&src), b);
     EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_EQ(x.r.changes, n);
-    size_t taken = bt_arena_taken(&x.values);
+    size_t taken = builtins_test_arena_taken(&x.values);
     ran_free(&x);
     return taken;
 }
@@ -325,8 +325,8 @@ static size_t bt_creates_hold(size_t n) {
 // into the arena as well, a run of 20,000 creates once stopped on the 16 MiB
 // arena at about 6,000, which Zig finishes.
 TEST(many_creates_hold_under_900_bytes_of_the_arena_each) {
-    size_t few = bt_creates_hold(50);
-    size_t many = bt_creates_hold(550);
+    size_t few = builtins_test_creates_hold(50);
+    size_t many = builtins_test_creates_hold(550);
     size_t each = (many - few) / 500;
     EXPECT(each < 900);
 }
