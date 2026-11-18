@@ -473,23 +473,6 @@ pub fn build(b: *std.Build) void {
         b.step("cookbook-test", "Every cookbook recipe's self-test (`self_test=1`), each recipe that reads arg(\"self_test\"), by this tree's `shale` (the Roc name hunt needs ~/tools/roc-ast/bin/roc-ast, the method rewrite ~/tools/roc-types/bin/roc-types, the Go hunts ~/tools/go-ast/bin/go-ast)").dependOn(&run.step);
     }
 
-    // The frozen surface: tools/surface.shale reads what a script or a user
-    // can observe from the source, by this tree's own `shale`, and fails
-    // unless docs/SURFACE.txt says the same, so the surface cannot drift
-    // unnoticed (it is a record, no promise that the C matches). A change is
-    // `shale tools/surface.shale write=1`, its diff reviewed. In `test`.
-    {
-        const run = b.addSystemCommand(&.{ "sh", "-c", b.fmt(
-            "bin=\"$(cd \"$(dirname \"$0\")\" && pwd)/$(basename \"$0\")\"; cd '{s}' && SHALE_PRELUDE= \"$bin\" tools/surface.shale",
-            .{here},
-        ) });
-        run.addFileArg(runner.getEmittedBin());
-        run.has_side_effects = true;
-        run.stdio = .inherit;
-        test_step.dependOn(&run.step);
-        b.step("surface-check", "docs/SURFACE.txt is what tools/surface.shale reads from the source: the builtins, the stop texts, the budgets, the CLI, the mounts and the gate").dependOn(&run.step);
-    }
-
     // `zig build consumers` runs each application's own checks against
     // this checkout (they name it by path, `../shale`), one at a time,
     // cheapest first, so a check downstream cannot quietly stop checking

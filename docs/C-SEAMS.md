@@ -8,12 +8,10 @@ what is outside it. It holds no code. The C's style and its foundation (the
 arena, `Str`, `vec`, `map`, err.h) are in c/docs/style.md and c/foundation,
 and how the C is compiled is in c/docs/building.md.
 
-**What the port must match** is the golden tests: every input's output,
-report, stop and exit code. [`SURFACE.txt`](SURFACE.txt) records every
-builtin, stop text, budget, flag and report line, generated from the Zig
-and the preludes by `tools/surface.shale`; since 2026-11-18 (Steve) it is
-no promise that the C matches the Zig, and the C's words may improve on
-it. Where this page and the goldens disagree, the goldens win.
+**What the port must match** is the golden tests (`tests/golden/`): every
+input's output, report, stop and exit code, the record of every stop's
+text. Since 2026-11-18 (Steve) the C's words may improve on the Zig's.
+Where this page and the goldens disagree, the goldens win.
 
 ## Values
 
@@ -40,8 +38,8 @@ it. Where this page and the goldens disagree, the goldens win.
 
 ## Fidelity: what the arena may change
 
-Steve decided on 2026-11-17 that **arena byte counts are outside the frozen
-surface.** Only 4 of the 1,024 inputs the port was judged on observe them,
+Steve decided on 2026-11-17 that **arena byte counts are outside what the
+goldens hold exactly.** Only 4 of the 1,024 inputs the port was judged on observe them,
 so mirroring Zig's layouts would buy little: the C lays out its values,
 tables, frames, ops and tree for itself, with no `_Static_assert` against a
 Zig size and no Zig probe of them.
@@ -174,7 +172,7 @@ its error's Zig name for the message:
   `stat` or `real` of a secrets mount's files, no program handed its folder,
   and `run`'s `secrets` and `stdout_secret` the only ways in and out.
 - **`Host`**, `interp.Host`: `call(name, args)`, behind the core's
-  `host(...)`. Linux's has the names SURFACE.txt lists: `run` (fork by
+  `host(...)`. Linux's has the names c/host/host_call.c dispatches: `run` (fork by
   hand, `prctl`'s death signal, its own process group, the parent polling
   the pipes, a pidfd and a signalfd; `legacy_zig/src/shale_spawn.zig`), the jobs
   (`shale --reap` double-forked out of the caller's tree, a job's record as

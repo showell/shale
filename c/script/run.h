@@ -1,7 +1,7 @@
 // run.h: a run's state and the semantics every op and builtin shares: the steps
 // and the budgets, the output, the stack of frames' slots, indexing,
 // arithmetic, comparison, `..` chains and `attempt`'s answers. Its messages
-// are in the frozen surface (docs/SURFACE.txt), and a script sees its step
+// are held by the goldens (tests/golden/), and a script sees its step
 // charges through the budgets, so neither changes freely.
 
 #ifndef SHALE_RUN_H

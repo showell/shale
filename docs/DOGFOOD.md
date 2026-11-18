@@ -6,7 +6,7 @@ vehicle; these fixes are the yield.
 
 | Found | Friction | Fixed by |
 |---|---|---|
-| 2026-11-18 | `docs/SURFACE.txt` went stale when `grep_tree` became a host call, and no build tier runs `tools/surface.shale`, so nothing caught it | the roc-ast move regenerated it; the tier gap is open |
+| 2026-11-18 | docs/SURFACE.txt went stale when `grep_tree` became a host call, and no build tier ran tools/surface.shale, so nothing caught it | the roc-ast move regenerated it; on 2026-11-18 the file and its tools were deleted, and the goldens hold the texts |
 | 2026-11-18 | `git_worktree_add` can't make a new branch from a rev (`{branch, new, rev}` is refused), and a branch made by hand tracks origin/master, so a bare `git_push` pushes there | open |
 | 2026-11-18 | a `-- budget:` line inside a heredoc's long string stops the run as a misplaced budget line | open |
 | 2026-11-18 | a stop's line is cut at about 180 characters, hiding the why and the offending line | open |

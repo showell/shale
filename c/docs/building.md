@@ -37,7 +37,6 @@ merge, and defer it while you're about 90% sure it has nothing new to say.
 |---|---|---|---|
 | Every test, built and run | TCC | fast | does it compile, do the tests pass |
 | The discipline check and the C `shale --check` smoke test | TCC, Shale | fast | the style rules hold; the command still works |
-| `docs/SURFACE.txt` against `tools/surface.shale` (c/build/surface.shale) | Shale | fast | the surface's record is what the source says; a stale one fails naming `shale tools/surface.shale write=1` |
 | Every test under the sanitizers | GCC `-O0`, ASan and UBSan | full | use after free, overruns, leaks, undefined behavior |
 | The code at `-O2 -Werror`, run nowhere | GCC | full | the warnings only the optimizer finds (`-Wrestrict`, some `-Warray-bounds`) |
 | Every planted fault not yet proven | TCC, or GCC's ASan where the plant names `build = "asan"` | full | each test proven able to fail, once |

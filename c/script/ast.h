@@ -3,8 +3,8 @@
 // names a builtin or a function by index. All of it lives in the machine's
 // arena.
 //
-// Arena byte counts are outside the frozen surface, so the layouts here are
-// free to change.
+// Arena byte counts are outside what the goldens hold exactly, so the
+// layouts here are free to change.
 
 #ifndef SHALE_AST_H
 #define SHALE_AST_H

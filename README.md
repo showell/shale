@@ -280,7 +280,7 @@ enters `node_modules`; `walk_all` with `skip` does not. The `zig/` and
 
 ## Checks
 
-    shale c/build.shale           # the fast tier: every C test, the discipline, the surface, the gate: seconds
+    shale c/build.shale           # the fast tier: every C test, the discipline, the gate: seconds
     shale c/build.shale full=1    # adds the GCC release build, ASan, the planted faults, the cookbook's self-tests and the docs' citations
     shale tests/golden.shale      # a build held to every golden case, from the outside
 
@@ -305,12 +305,6 @@ browser build) and their tools are there, and get no fixes.
   reached past Shale for.
 - [docs/PORTING.md](docs/PORTING.md): which modules are bound to Linux,
   and what a port to another kernel would replace.
-- [docs/SURFACE.txt](docs/SURFACE.txt): a record of the surface, every
-  builtin, stop text, budget, flag and report line, generated from the
-  source by `tools/surface.shale` and checked against it by `zig build
-  surface-check` (in `test`) and by C's fast tier (`c/build/surface.shale`),
-  so a change shows in its diff. It is no promise that the C matches the
-  Zig: the goldens judge the C.
 - [docs/C-SEAMS.md](docs/C-SEAMS.md): the C port's shared design, its values,
   the arena's fidelity, the VM and the host's seams.
 - [c/docs/building.md](c/docs/building.md): how the C is compiled, with TCC,

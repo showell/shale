@@ -95,7 +95,7 @@ A case's frozen output is each step's ending, its stdout and its stderr
 the run left, by
 kind, mode and bytes (a git index by what it stages, below).
 
-**Arena bytes are outside the frozen surface** (docs/C-SEAMS.md,
+**Arena bytes are outside what the goldens hold exactly** (docs/C-SEAMS.md,
 "Fidelity"), and so is the exact step of a `budget kept` or `budget
 machine` stop, which hangs on the same layouts. An input that observes them
 is **judged by class**: its frozen run stops on the arena, kept or machine

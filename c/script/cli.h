@@ -1,7 +1,7 @@
 // cli.h: the `shale` command line, and the pieces of the Linux runner that need
 // no system call: the usage, the refusals and their words, a script's
 // `-- budget:` line, the mounts file and the report a stopped check prints.
-// Every text here is in the frozen surface (docs/SURFACE.txt).
+// Every text here is held by the goldens (tests/golden/).
 
 #ifndef SHALE_CLI_H
 #define SHALE_CLI_H

@@ -34,8 +34,7 @@ package of its own in `../tools/zig_ast`.
   every stop text, budget and report line. The golden tests in
   `../tests/golden` were frozen from it, and the harness still reads the
   Zig tests' scripts and `web/lessons.js` here when it collects their
-  inputs. `../tools/surface.shale` reads `docs/SURFACE.txt`'s surface from
-  this source.
+  inputs.
 - **Bare metal.** A bare-metal unikernel ran this Shale, compiled with its
   own `host_io`, as a site's script engine, until 2026-11-18.
 

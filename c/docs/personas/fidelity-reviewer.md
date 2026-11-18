@@ -28,13 +28,13 @@ For each C function, find its Zig original and compare:
 1. **Every branch.** List the Zig's branches and the C's. A branch on one
    side only is a finding.
 2. **Every stop.** Its class, its exact text, and the point at which it
-   fires. `docs/SURFACE.txt`, generated from the Zig, lists every stop
-   template; it is a record, not a promise (a stop's words may have been
-   improved since the cut-over), and the goldens judge.
+   fires. The goldens (`tests/golden/`) hold every stop's text as the C
+   gives it (a stop's words may have been improved since the cut-over),
+   and they judge.
 3. **Budgets.** Where the Zig charges a step, a read or a byte, the C
    charges the same amount at the same point. A charge moved before or
    after an effect changes where a run stops.
-4. **The arena.** Arena byte counts are outside the frozen surface: the C
+4. **The arena.** Arena byte counts are outside what the goldens hold exactly: the C
    lays out its values and allocates as it sees fit, and `budget().arena_bytes`
    or the exact step an arena stop lands on may differ. An arena stop's
    class and message are not outside it: a run that stops on the arena
