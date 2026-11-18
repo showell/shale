@@ -512,8 +512,14 @@ the script's from that line on. **Reach for one when recipes copy a
 helper**: a recipe runs from other repositories' roots, so a repo's prelude
 cannot serve it, and a library is found through a mount wherever it runs.
 A repo's prelude stays the tool for what every script at that root wants.
-The path is a mount's, never the root's or an absolute one; the file is a
-read of the run's. It holds functions and literal `const`s only, each from
+The path is a mount's, or beside the script's own file (`./items.shale`,
+`./sub/x.shale`), never the root's or an absolute one: a recipe and its
+library load together wherever they live, lanes included, so a lane's
+`shale build:lanes/x/cookbook/c/map_file.shale` loads the lane's
+`items.shale`, not the mount's. A `./` path is names only (no `..`), and a
+script on stdin or `-e` has no file to be beside, so it names its library
+through a mount. Either way the file is a read of the run's (no link, no
+secrets folder). It holds functions and literal `const`s only, each from
 the start of its line, and uses no other library; a name it shares with a
 builtin, a prelude, another library or the script's own function or local
 is refused at the `use`, naming both places. A stop inside it names its

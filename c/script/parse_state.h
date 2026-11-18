@@ -38,11 +38,13 @@ typedef struct {
 SLICE_TYPE(ParseExtras, ParseExtra);
 
 // The host's reader of a `use`d library: on OK, `*got` says whether `*out`
-// holds the source; when it doesn't, `*why` says why. STOP only when the arena
-// refuses.
+// holds the source; when it doesn't, `*why` says why. `*name` is what a stop
+// inside the library calls it: the path it was read by, which for a `./` path
+// is the mount's or the root's path of the file beside the script ("" leaves
+// it the path as written). STOP only when the arena refuses.
 typedef struct {
     void *ctx;
-    STATUS_MUST_USE Status (*load)(void *ctx, Arena *into, Str path, Str *why, Str *out, bool *got);
+    STATUS_MUST_USE Status (*load)(void *ctx, Arena *into, Str path, Str *why, Str *out, Str *name, bool *got);
 } ParseLoader;
 
 typedef struct {

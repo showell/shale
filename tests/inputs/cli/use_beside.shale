@@ -1,0 +1,11 @@
+-- differ-before: use/setup.shale
+-- differ-argv: tool/main.shale
+-- differ-argv: tool/up.shale
+-- differ-argv: tool/gone.shale
+-- differ-argv: tool/stops.shale
+-- A `use("./x.shale")` loads the file beside the script's own file, here
+-- under the root: tool/main.shale loads tool/lib.shale and
+-- tool/sub/deep.shale. A `..` is refused before anything is read, and a
+-- sibling that is not there is a store stop naming the path it looked at.
+-- A stop inside the library names it by that path too, `tool/lib.shale`.
+-- The scripts are use/setup.shale's.

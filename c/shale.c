@@ -211,12 +211,34 @@ static int not_ported(Out *o, Str what) {
 
 // ── `use`'s reader ──
 
+// Where a `use("./x.shale")` looks: beside the script's file, in a mount or
+// under the root, or nowhere, for a script with no file or one in a folder
+// the run may not read.
+typedef enum {
+    BESIDE_STDIN,
+    BESIDE_SOURCE,
+    BESIDE_MOUNT,
+    BESIDE_ROOT,
+    BESIDE_OUTSIDE,
+} BesideKind;
+
+typedef struct {
+    BesideKind kind;
+    // The script's folder as a path a `./` path's rest is appended to:
+    // `name:sub/dir/` in a mount, `sub/dir/` under the root ("" at its top),
+    // or the OS folder, for BESIDE_OUTSIDE's message.
+    Str dir;
+} Beside;
+
 typedef struct {
     Arena *arena;
     MountsItems mounts;
     Str mounts_from;
     Budgets budgets;
     Used used;
+    Beside beside;
+    // The root's real path, which a `./` path under the root is read below.
+    Str root_abs;
 } LibraryReader;
 
 // The stop a reader's failure becomes: `why`, the message the run stops
@@ -292,20 +314,43 @@ static uint64_t sat_sub(uint64_t a, uint64_t b) {
 // A library loaded over the Linux host's mounts: the path resolved as a
 // script's path to a mount is, the file read and charged as a `read` of it
 // is.
-static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str *why, Str *out, bool *got) {
+static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str *why, Str *out, Str *name_out, bool *got) {
     LibraryReader *r = ctx;
     Arena *a = r->arena;
     *got = false;
+    *name_out = S("");
     // `pathArg` charges a step a byte of the path.
     if (path.len > sat_sub(r->budgets.steps, r->used.steps)) {
         TRY(steps_ran_out(r, why));
         return OK;
     }
     r->used.steps += path.len;
-    size_t colon = cli_index_of(path, ':');
+    // A `./` path is the script folder's: in a mount it is read as that
+    // mount's path, under the root as the root's.
+    bool under_root = false;
+    if (str_starts_with(path, S("./"))) {
+        Str below = str_sub(path, 2, path.len);
+        switch (r->beside.kind) {
+        case BESIDE_STDIN: return reader_why(why, got, 1, a, S("a `./` path is beside the script's own file, and a script on stdin has none: name the library through a mount (`cookbook:c/items.shale`)"));
+        case BESIDE_SOURCE: return reader_why(why, got, 1, a, S("a `./` path is beside the script's own file, and a script given by `-e` has none: name the library through a mount (`cookbook:c/items.shale`)"));
+        case BESIDE_OUTSIDE: return reader_why(why, got, 3, a, S("a `./` path is beside the script's own file, and its folder, "), r->beside.dir, S(", is under neither the root nor a mount: name the library through a mount (`cookbook:c/items.shale`)"));
+        case BESIDE_MOUNT: break;
+        case BESIDE_ROOT: under_root = true; break;
+        }
+        Buf full = buf_make(a);
+        TRY(buf_str(&full, r->beside.dir));
+        TRY(buf_str(&full, below));
+        path = buf_view(&full);
+        *name_out = path;
+    }
+    size_t colon = under_root ? 0 : cli_index_of(path, ':');
     Str name = str_sub(path, 0, colon);
-    Mount *m = NULL;
-    for (size_t k = 0; k < r->mounts.len; k++) {
+    Mount root_folder = {0};
+    memset(&root_folder, 0, sizeof root_folder);
+    root_folder.name = S("");
+    root_folder.dir = r->root_abs;
+    Mount *m = under_root ? &root_folder : NULL;
+    for (size_t k = 0; !under_root && k < r->mounts.len; k++) {
         if (str_eq(at(r->mounts, k).name, name)) m = &at(r->mounts, k);
     }
     if (m == NULL) {
@@ -318,7 +363,8 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
         return reader_why(why, got, 9, a, S("\""), path, S("\": `"), name, S(":` is not a mount: the mounts are "), buf_view(&names), S(" ("), r->mounts_from, S(")"));
     }
     if (m->secrets) return reader_why(why, got, 5, a, S("\""), path, S("\": the mount `"), m->name, S("` holds secrets: only `run`'s `secrets` (or `http_get`'s `bearer`) may name its files"));
-    Str rest = str_sub(path, colon + 1, path.len);
+    Str rest = under_root ? path : str_sub(path, colon + 1, path.len);
+    Str prefix = under_root ? S("") : str_sub(path, 0, colon + 1);
     if (str_eq(rest, S("."))) rest = S("");
     if (rest.len > 0 && str_byte(rest, 0) == '/') return reader_why(why, got, 3, a, S("\""), path, S("\" is absolute inside its mount: a mount's paths are relative to it"));
     Str left = rest;
@@ -338,7 +384,7 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
         return reader_why(why, got, 5, a, S("the mount `"), m->name, S("` is "), m->dir, S(", which is not a folder there"));
     }
     bool linked = false;
-    TRY(refuse_links(r, m->dir, rest, str_sub(path, 0, colon + 1), why, &linked));
+    TRY(refuse_links(r, m->dir, rest, prefix, why, &linked));
     if (linked) return OK;
     Str full = m->dir;
     if (rest.len > 0) TRY(join(a, m->dir, rest, &full));
@@ -416,6 +462,74 @@ static STATUS_MUST_USE Status script_file(Arena *a, Str given, MountsItems mount
         }
     }
     *missing = true;
+    return OK;
+}
+
+// `p` up to and with its last `/`, or "" when it has none.
+static Str folder_of(Str p) {
+    size_t n = p.len;
+    while (n > 0 && str_byte(p, n - 1) != '/') n--;
+    return str_sub(p, 0, n);
+}
+
+// Where the script's `use("./x.shale")` looks (`Beside`). A script named
+// through a mount looks in that mount, beside its path. One named by an OS
+// path looks under the root when its folder's real path is there, else in
+// the mount whose folder holds it most closely, else nowhere the run may
+// read.
+static STATUS_MUST_USE Status script_beside(Arena *a, const Command *c, MountsItems mounts, Str root_abs, Str cwd_abs, Beside *out) {
+    out->dir = S("");
+    if (c->script == CLI_SCRIPT_STDIN) {
+        out->kind = BESIDE_STDIN;
+        return OK;
+    }
+    if (c->script == CLI_SCRIPT_SOURCE) {
+        out->kind = BESIDE_SOURCE;
+        return OK;
+    }
+    Str file = c->file;
+    size_t colon = cli_index_of(file, ':');
+    if (colon != SIZE_MAX && colon > 0 && cli_index_of(str_sub(file, 0, colon), '/') == SIZE_MAX) {
+        // Named through a mount: main has refused a name no mount has.
+        out->kind = BESIDE_MOUNT;
+        out->dir = folder_of(file);
+        if (out->dir.len == 0) out->dir = str_sub(file, 0, colon + 1);
+        return OK;
+    }
+    Str abs = file;
+    if (file.len == 0 || str_byte(file, 0) != '/') TRY(join(a, cwd_abs, file, &abs));
+    Str dir = folder_of(abs);
+    if (dir.len > 1) dir = str_sub(dir, 0, dir.len - 1);
+    Str real = real_or_same(a, dir);
+    if (mounts_in_folder(real, root_abs)) {
+        out->kind = BESIDE_ROOT;
+        Str below = str_sub(real, str_eq(root_abs, S("/")) ? 1 : root_abs.len, real.len);
+        if (below.len > 0 && str_byte(below, 0) == '/') below = str_sub(below, 1, below.len);
+        if (below.len > 0) TRY(join(a, below, S(""), &below));
+        out->dir = below;
+        return OK;
+    }
+    const Mount *best = NULL;
+    for (size_t k = 0; k < mounts.len; k++) {
+        const Mount *m = &at(mounts, k);
+        if (mounts_in_folder(real, m->dir) && (best == NULL || m->dir.len > best->dir.len)) best = m;
+    }
+    if (best == NULL) {
+        out->kind = BESIDE_OUTSIDE;
+        out->dir = real;
+        return OK;
+    }
+    out->kind = BESIDE_MOUNT;
+    Buf b = buf_make(a);
+    TRY(buf_str(&b, best->name));
+    TRY(buf_byte(&b, ':'));
+    Str below = str_sub(real, str_eq(best->dir, S("/")) ? 1 : best->dir.len, real.len);
+    if (below.len > 0 && str_byte(below, 0) == '/') below = str_sub(below, 1, below.len);
+    if (below.len > 0) {
+        TRY(buf_str(&b, below));
+        TRY(buf_byte(&b, '/'));
+    }
+    out->dir = buf_view(&b);
     return OK;
 }
 
@@ -533,7 +647,9 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     arena_init(&tree, b.machine_bytes + PARSE_ROOM, o->refused);
     Parser p;
     parse_init(&p, &tree, source, b.nesting);
-    LibraryReader reader = {a, mounts, mounts_from, b, none};
+    Beside beside = {BESIDE_STDIN, S("")};
+    if (script_beside(a, c, mounts, where.root_abs, where.cwd_abs, &beside) != OK) return not_ported(o, S("a script's folder past the arena"));
+    LibraryReader reader = {a, mounts, mounts_from, b, none, beside, where.root_abs};
     ParseLoader loader = {&reader, load_library};
     Program prog = {0};
     Status s = parse_program(&p, preludes_core(), preludes, loader, &prog);

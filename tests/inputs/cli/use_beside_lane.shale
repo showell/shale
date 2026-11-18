@@ -1,0 +1,9 @@
+-- differ-before: use/setup.shale
+-- differ-mounts: use/lane.mounts
+-- differ-argv: book:r.shale
+-- differ-argv: scratch:lanes/x/r.shale
+-- A recipe and its library, as a mount's checkout has them (`book:`), and
+-- a lane's copy of both (`scratch:lanes/x`), whose library says otherwise.
+-- The recipes are the same bytes; each loads its own sibling, so the
+-- lane's run says "lane" with no mounts of its own. The trees are
+-- use/setup.shale's.

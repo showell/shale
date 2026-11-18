@@ -26,15 +26,20 @@ typedef struct {
     Str path;
     Str source;
     int loads;
+    Str name;
 } FakeLibrary;
 
-static STATUS_MUST_USE Status fake_load(void *ctx, Arena *into, Str path, Str *why, Str *out, bool *got) {
+// A library at `f->path`, which a `./` path names as `f->name` when that is
+// set, as the Linux host names one by the mount's path it was read by.
+static STATUS_MUST_USE Status fake_load(void *ctx, Arena *into, Str path, Str *why, Str *out, Str *name, bool *got) {
     (void)into;
     FakeLibrary *f = ctx;
     f->loads++;
     *got = str_eq(path, f->path);
+    *name = S("");
     if (*got) {
         *out = f->source;
+        if (str_starts_with(path, S("./"))) *name = f->name;
     } else {
         *why = S("not found");
     }
@@ -275,7 +280,7 @@ TEST(a_later_prelude_is_checked_whole_before_the_script) {
 }
 
 TEST(a_use_binds_its_consts_on_its_line_and_its_functions_load_at_their_call) {
-    FakeLibrary lib = {S("cookbook:lib.shale"), S("const LIMIT = 3\nconst NAMES = {\"a\", \"b\"}\n\nfunction lim(x)\n  return twice(x)\nend\n"), 0};
+    FakeLibrary lib = {S("cookbook:lib.shale"), S("const LIMIT = 3\nconst NAMES = {\"a\", \"b\"}\n\nfunction lim(x)\n  return twice(x)\nend\n"), 0, S("")};
     Preludes none = {NULL, 0};
     Parsed r;
     parse_with(&r, S("use(\"cookbook:lib.shale\")\nprint(LIMIT, lim(\"x\"))\n"), none, &lib);
@@ -293,19 +298,56 @@ TEST(a_use_binds_its_consts_on_its_line_and_its_functions_load_at_their_call) {
     expect_stop(&r, 1, 1, CLASS_STORE, S("`use(\"cookbook:gone.shale\")`: not found"));
     arena_deinit(&r.arena);
     parse_with(&r, S("use(\"/abs/lib.shale\")\n"), none, &lib);
-    expect_stop(&r, 1, 1, CLASS_ARGUMENT, S("`use(\"/abs/lib.shale\")`: a library is named through a mount, `name:path` (`cookbook:roc/pinned.shale`), never by an absolute path or the root's: a script runs from other repositories' roots"));
+    expect_stop(&r, 1, 1, CLASS_ARGUMENT, S("`use(\"/abs/lib.shale\")`: a library is named through a mount, `name:path` (`cookbook:roc/pinned.shale`), or beside the script's own file, `./name.shale`; never by an absolute path or the root's: a script runs from other repositories' roots"));
     arena_deinit(&r.arena);
     // An empty path, whose text may hold NULL, names no mount, and the
     // loader is never asked for it.
-    FakeLibrary unasked = {S(""), S(""), 0};
+    FakeLibrary unasked = {S(""), S(""), 0, S("")};
     parse_with(&r, S("use(\"\")\n"), none, &unasked);
-    expect_stop(&r, 1, 1, CLASS_ARGUMENT, S("`use(\"\")`: a library is named through a mount, `name:path` (`cookbook:roc/pinned.shale`), never by an absolute path or the root's: a script runs from other repositories' roots"));
+    expect_stop(&r, 1, 1, CLASS_ARGUMENT, S("`use(\"\")`: a library is named through a mount, `name:path` (`cookbook:roc/pinned.shale`), or beside the script's own file, `./name.shale`; never by an absolute path or the root's: a script runs from other repositories' roots"));
     EXPECT_EQ(unasked.loads, 0);
     arena_deinit(&r.arena);
+    // A root's path, which is neither a mount's nor beside the script.
+    parse_with(&r, S("use(\"lib.shale\")\n"), none, &unasked);
+    expect_stop(&r, 1, 1, CLASS_ARGUMENT, S("`use(\"lib.shale\")`: a library is named through a mount, `name:path` (`cookbook:roc/pinned.shale`), or beside the script's own file, `./name.shale`; never by an absolute path or the root's: a script runs from other repositories' roots"));
+    EXPECT_EQ(unasked.loads, 0);
+    arena_deinit(&r.arena);
+    // A path beside the script reaches the loader as written, and its name
+    // is the library's.
+    FakeLibrary sibling = {S("./sub/lib.shale"), S("function near()\n  return 1\nend\n"), 0, S("cookbook:tools/sub/lib.shale")};
+    parse_with(&r, S("use(\"./sub/lib.shale\")\nprint(near())\n"), none, &sibling);
+    EXPECT(r.status == OK);
+    EXPECT_EQ(sibling.loads, 1);
+    EXPECT_STR(at(r.prog.functions, 0).name, S("cookbook:tools/sub/lib.shale's near"));
+    arena_deinit(&r.arena);
+    // The same file twice, known by the name it was read by.
+    parse_with(&r, S("use(\"./sub/lib.shale\")\nuse(\"./sub/lib.shale\")\n"), none, &sibling);
+    expect_stop(&r, 2, 1, CLASS_NAME, S("`use(\"./sub/lib.shale\")` again: it is used at line 1"));
+    EXPECT_EQ(sibling.loads, 3);
+    arena_deinit(&r.arena);
+    // A `..`, an empty part, a `.` part, a `:` or nothing after `./` is
+    // refused before the loader is asked.
+    Lits bad = LITS("../lib.shale", "./../lib.shale", "./a/../lib.shale", "./a//lib.shale", "./a/./lib.shale", "./a:lib.shale", "./", "./sub/");
+    for (size_t i = 0; i < bad.len; i++) {
+        const char *lit = at(bad, i); // cstr: a test's literal
+        Str path = {lit, strlen(lit)};
+        Arena scratch;
+        bool scratch_refused = false;
+        arena_init(&scratch, 1 << 16, &scratch_refused);
+        Buf text = buf_make(&scratch);
+        EXPECT((buf_lit(&text, "use(\"") == OK && buf_str(&text, path) == OK && buf_lit(&text, "\")\n") == OK));
+        Buf want = buf_make(&scratch);
+        EXPECT((buf_lit(&want, "`use(\"") == OK && buf_str(&want, path) == OK && buf_lit(&want, "\")`: a path beside the script's file is `./` and then names (`./items.shale`, `./sub/x.shale`), never `..`: a library outside the script's folder is named through a mount (`cookbook:c/items.shale`)") == OK));
+        parse_with(&r, buf_view(&text), none, &sibling);
+        expect_stop(&r, 1, 1, CLASS_ARGUMENT, buf_view(&want));
+        arena_deinit(&r.arena);
+        arena_deinit(&scratch);
+    }
+    EXPECT_EQ(sibling.loads, 3);
     parse_with(&r, S("function lim() return 1 end\nuse(\"cookbook:lib.shale\")\n"), none, &lib);
     expect_stop(&r, 2, 1, CLASS_NAME, S("`use(\"cookbook:lib.shale\")`: its function `lim` (cookbook:lib.shale:4) is the script's function at line 1 already"));
     arena_deinit(&r.arena);
-    FakeLibrary runs = {S("cookbook:bad.shale"), S("const X = now()\n"), 0};
+    FakeLibrary runs = {S("cookbook:bad.shale"), S("const X = now()\n"), 0, S("")};
     parse_with(&r, S("use(\"cookbook:bad.shale\")\n"), none, &runs);
     expect_stop(&r, 1, 1, CLASS_REFUSED, S("`use(\"cookbook:bad.shale\")`: cookbook:bad.shale:1:1: a library's `const X` is a literal (a string, a number, a boolean, or a list or map of them): a library runs nothing and reads no launch value where it is used"));
     arena_deinit(&r.arena);

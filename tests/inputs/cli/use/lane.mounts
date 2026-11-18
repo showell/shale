@@ -1,0 +1,3 @@
+# The mount use_beside_lane.shale's runs get beside the harness's own: the
+# "master" checkout of a recipe and its library, which use/setup.shale makes.
+book = scratch/master

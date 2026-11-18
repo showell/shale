@@ -216,7 +216,8 @@ The host chooses, not the script; a signed request names it
   again, and the functions declared after it see it. A table it names can
   still change. No const is read before its line has run: the top level
   below it and the functions declared after it are all that see it.
-- `use("mount:path.shale")`, at the top level only: a library's functions
+- `use("mount:path.shale")` or `use("./path.shale")`, beside the script's
+  file, at the top level only: a library's functions
   and `const`s, the script's from that line on ("Libraries: `use`").
 
 
@@ -1002,12 +1003,24 @@ print(SELF_TEST_PIN)                 -- and its const
 
 - **A statement at the top level**, with one string literal: never inside
   a block or a function, never a value.
-- **The path is a mount's** (`cookbook:...`, `repos:...`), never the
-  root's or an absolute one: a recipe runs from other repositories' roots,
-  where the root's paths are theirs. The file is read as `read` reads it,
-  through the same mounts and their rules (no link, no secrets folder),
-  and is one of the run's reads, its bytes among its read bytes, under
-  the source budget. A file that cannot be read stops the script, named.
+- **The path is a mount's** (`cookbook:...`, `repos:...`), **or beside the
+  script's own file** (`./items.shale`, `./sub/x.shale`); never the root's
+  or an absolute one: a recipe runs from other repositories' roots, where
+  the root's paths are theirs. A `./` path is relative to the folder of
+  the script file that holds the `use`, so a recipe and its library load
+  together wherever they live: in the mount's checkout, in a lane's copy
+  (`shale build:lanes/x/cookbook/c/map_file.shale` loads the lane's
+  library, with no mounts of its own), or under the root. It is `./` and
+  then names: no `..`, no mount, no empty part; a library outside the
+  script's folder is named through a mount. The script's folder is reached
+  as the run reaches any path: through the mount the script was named by,
+  else under the root or the mount that holds its real path, so a script
+  in a folder the run may not read, or one with no file (stdin, `-e`),
+  refuses a `./` path, saying to name the library through a mount. The
+  file is read as `read` reads it, through the same mounts and their rules
+  (no link, no secrets folder), and is one of the run's reads, its bytes
+  among its read bytes, under the source budget. A file that cannot be
+  read stops the script, named.
 - **It holds functions and `const`s only**, each from the start of its
   line, as a prelude holds functions. A `const` is a literal: a string, a
   number, a boolean, or a list or map of them, so a library runs nothing

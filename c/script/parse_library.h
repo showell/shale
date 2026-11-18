@@ -140,8 +140,9 @@ static inline STATUS_MUST_USE Status parse_library_source(Parser *q, size_t k) {
 }
 
 // Checks library `k` where it is used, in a parse of its own thrown away
-// after. A failure is a stop at the `use`, naming the library's line.
-static inline STATUS_MUST_USE Status parse_check_library(Parser *p, size_t k, Pos pos) {
+// after. A failure is a stop at the `use` (by its `path` as written), naming
+// the library's line.
+static inline STATUS_MUST_USE Status parse_check_library(Parser *p, size_t k, Pos pos, Str path) {
     Parser q;
     TRY(parse_throwaway(p, k, &q));
     if (parse_library_source(&q, k) == OK) return OK;
@@ -151,7 +152,7 @@ static inline STATUS_MUST_USE Status parse_check_library(Parser *p, size_t k, Po
     Str line = parse_num(p, q.stop.line, &refused);
     Str column = parse_num(p, q.stop.column, &refused);
     if (refused) return STOP;
-    return parse_fail_cat(p, pos, q.stop.cls, 10, S("`use(\""), name, S("\")`: "), name, S(":"), line, S(":"), column, S(": "), q.stop.message);
+    return parse_fail_cat(p, pos, q.stop.cls, 10, S("`use(\""), path, S("\")`: "), name, S(":"), line, S(":"), column, S(": "), q.stop.message);
 }
 
 // What a name of a library's already is here, or "" when it is nothing yet:
@@ -210,18 +211,19 @@ static inline STATUS_MUST_USE Status parse_library_name_was(Parser *p, Str path,
     return OK;
 }
 
-// Refuses a library's name that is already something here, naming both places.
-static inline STATUS_MUST_USE Status parse_library_names(Parser *p, Pos pos, Str path, PreludeFunctions functions, PreludeFunctions consts) {
+// Refuses a library's name that is already something here, naming both places:
+// the `use` by its `path` as written, the library's line by its `name`.
+static inline STATUS_MUST_USE Status parse_library_names(Parser *p, Pos pos, Str path, Str name, PreludeFunctions functions, PreludeFunctions consts) {
     for (int kind = 0; kind < 2; kind++) {
         PreludeFunctions list = kind == 0 ? functions : consts;
         for (size_t i = 0; i < list.len; i++) {
             Str was = {0};
-            TRY(parse_library_name_was(p, path, functions, consts, kind == 1, i, &was));
+            TRY(parse_library_name_was(p, name, functions, consts, kind == 1, i, &was));
             if (was.len == 0) continue;
             bool refused = false;
             Str line = parse_num(p, at(list, i).line, &refused);
             if (refused) return STOP;
-            return parse_fail_cat(p, pos, CLASS_NAME, 13, S("`use(\""), path, S("\")`: its "), kind == 0 ? S("function") : S("const"), S(" `"), at(list, i).name, S("` ("), path, S(":"), line, S(") is "), was, S(" already"));
+            return parse_fail_cat(p, pos, CLASS_NAME, 13, S("`use(\""), path, S("\")`: its "), kind == 0 ? S("function") : S("const"), S(" `"), at(list, i).name, S("` ("), name, S(":"), line, S(") is "), was, S(" already"));
         }
     }
     return OK;
@@ -240,6 +242,24 @@ static inline bool parse_use_path_ok(Str path) {
         if (!(lex_is_alpha(c) || lex_is_digit(c) || c == '_' || c == '-')) return false;
     }
     return colon + 1 < path.len && str_byte(path, colon + 1) != '/';
+}
+
+// Whether a `use`'s path is one beside the script's own file, `./` and then
+// parts that are each a name: none empty, none `.` or `..`, no `:`. The host
+// resolves it against the script's folder, so a recipe and its library load
+// together wherever the recipe's file is.
+static inline bool parse_use_beside_ok(Str path) {
+    if (path.len <= 2 || !str_starts_with(path, S("./"))) return false;
+    Str rest = str_sub(path, 2, path.len);
+    size_t start = 0;
+    for (size_t i = 0; i <= rest.len; i++) {
+        if (i < rest.len && str_byte(rest, i) == ':') return false;
+        if (i < rest.len && str_byte(rest, i) != '/') continue;
+        Str part = str_sub(rest, start, i);
+        if (part.len == 0 || str_eq(part, S(".")) || str_eq(part, S(".."))) return false;
+        start = i + 1;
+    }
+    return true;
 }
 
 // Binds each of library `k`'s `const`s on the `use`'s line: its literal parsed
@@ -281,9 +301,10 @@ static inline STATUS_MUST_USE Status parse_library_consts(Parser *p, size_t k, P
     return OK;
 }
 
-// `use("mount:path.shale")`: reads the library through the host's
-// `ParseLoader`, checks it, and adds it after the preludes, so its functions
-// load at their first call as a prelude's do. Its `const`s are bound here.
+// `use("mount:path.shale")` or `use("./path.shale")`, beside the script's
+// file: reads the library through the host's `ParseLoader`, checks it, and
+// adds it after the preludes, so its functions load at their first call as a
+// prelude's do. Its `const`s are bound here.
 static inline STATUS_MUST_USE Status parse_use_statement(Parser *p, Pos pos, Stmt *out) {
     if (p->in_function || p->frame.depth > 1) return parse_fail(p, pos, CLASS_REFUSED, S("`use` is a top-level statement only: a library's names are the whole script's, from its line on"));
     TRY(parse_advance(p));
@@ -294,8 +315,11 @@ static inline STATUS_MUST_USE Status parse_use_statement(Parser *p, Pos pos, Stm
     Token t = {0};
     TRY(parse_expect(p, TAG_RPAREN, S("`)` after the library's path: `use` takes one"), &t));
     if (p->loader.load == NULL) return parse_fail(p, pos, CLASS_HOST, S("`use`: this host loads no library"));
-    if (!parse_use_path_ok(path))
-        return parse_fail_cat(p, pos, CLASS_ARGUMENT, 3, S("`use(\""), path, S("\")`: a library is named through a mount, `name:path` (`cookbook:roc/pinned.shale`), never by an absolute path or the root's: a script runs from other repositories' roots"));
+    bool beside = str_starts_with(path, S("./")) || str_starts_with(path, S("../"));
+    if (beside && !parse_use_beside_ok(path))
+        return parse_fail_cat(p, pos, CLASS_ARGUMENT, 3, S("`use(\""), path, S("\")`: a path beside the script's file is `./` and then names (`./items.shale`, `./sub/x.shale`), never `..`: a library outside the script's folder is named through a mount (`cookbook:c/items.shale`)"));
+    if (!beside && !parse_use_path_ok(path))
+        return parse_fail_cat(p, pos, CLASS_ARGUMENT, 3, S("`use(\""), path, S("\")`: a library is named through a mount, `name:path` (`cookbook:roc/pinned.shale`), or beside the script's own file, `./name.shale`; never by an absolute path or the root's: a script runs from other repositories' roots"));
     for (size_t k = 0; k < p->extra.len; k++) {
         const ParseExtra *x = &at(p->extra, k);
         if (!x->is_library || !str_eq(x->prelude.name, path)) continue;
@@ -312,19 +336,31 @@ static inline STATUS_MUST_USE Status parse_use_statement(Parser *p, Pos pos, Stm
     }
     Str why = S("");
     Str source = S("");
+    Str name = S("");
     bool got = false;
-    TRY(p->loader.load(p->loader.ctx, p->arena, path, &why, &source, &got));
+    TRY(p->loader.load(p->loader.ctx, p->arena, path, &why, &source, &name, &got));
     if (!got) return parse_fail_cat(p, pos, CLASS_STORE, 4, S("`use(\""), path, S("\")`: "), why);
+    if (name.len == 0) name = path;
+    // A `./` path and a mount's may name one file: the file read is the one
+    // used again.
+    for (size_t k = 0; k < p->extra.len; k++) {
+        const ParseExtra *x = &at(p->extra, k);
+        if (!x->is_library || !str_eq(x->prelude.name, name)) continue;
+        bool refused = false;
+        Str line = parse_num(p, x->library.use_line, &refused);
+        if (refused) return STOP;
+        return parse_fail_cat(p, pos, CLASS_NAME, 4, S("`use(\""), path, S("\")` again: it is used at line "), line);
+    }
     // Indexed as a prelude is: each `function` and `const` from the start of
     // its line.
     PreludeFunctions functions;
     PreludeFunctions consts;
     TRY(parse_index(p->arena, source, parse_next_function, &functions));
     TRY(parse_index(p->arena, source, parse_next_const, &consts));
-    TRY(parse_library_names(p, pos, path, functions, consts));
+    TRY(parse_library_names(p, pos, path, name, functions, consts));
     ParseExtra x = {0};
     memset(&x, 0, sizeof x);
-    x.prelude.name = path;
+    x.prelude.name = name;
     x.prelude.source = source;
     x.index = functions;
     TRY(parse_slots(p->arena, functions.len, &x.loaded));
@@ -334,7 +370,7 @@ static inline STATUS_MUST_USE Status parse_use_statement(Parser *p, Pos pos, Stm
     size_t k = p->extra.len + 1;
     p->extra.len = k;
     at(p->extra, k - 1) = x;
-    TRY(parse_check_library(p, k, pos));
+    TRY(parse_check_library(p, k, pos, path));
     size_t from = p->stmts.len;
     Stmt s;
     parse_stmt_init(&s, pos, STMT_DO);
