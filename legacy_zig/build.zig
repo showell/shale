@@ -141,14 +141,14 @@ pub fn build(b: *std.Build) void {
     run_script.addPassthruArgs();
     b.step("script", "run a Shale script: zig build script -- [--root DIR] [--verbose] [--budget NAME=N]... [<file.shale> | -e SOURCE] [name=value ...]").dependOn(&run_script.step);
 
-    // zig-ast (tools/zig_ast, a package of its own with its own tests): Zig's
+    // zig-ast (../../zig-ast, a repo of its own with its own tests): Zig's
     // own tokenizer and parser in a program of its own, which the host's Zig
     // tools ask (src/shale_host_zig.zig), so no file of the host imports
     // std.zig's parser. `zig build` installs it beside `shale`. The host's
-    // copy of the wire (src/shale_zig_wire.zig) is tools/zig_ast/wire.zig's.
+    // copy of the wire (src/shale_zig_wire.zig) is zig-ast's wire.zig's.
     const zig_ast = b.dependency("zig_ast", .{ .target = target }).artifact("zig-ast");
     const zig_ast_install = b.addInstallArtifact(zig_ast, .{});
-    b.step("zig-ast", "zig-ast alone (tools/zig_ast), ReleaseSafe, into the prefix's bin").dependOn(&zig_ast_install.step);
+    b.step("zig-ast", "zig-ast alone (../../zig-ast), ReleaseSafe, into the prefix's bin").dependOn(&zig_ast_install.step);
 
     // Times Shale's hot paths (src/script_bench.zig). No gate runs it.
     const webbox_rs = b.dependency("webbox", .{ .target = target, .optimize = .safe });

@@ -23,8 +23,8 @@ Three files here are frozen copies of live ones, kept so the Zig still
 builds as it was: the preludes (`src/script/prelude.shale`,
 `src/shale_prelude_linux.shale`, `src/shale_prelude_git.shale`; the live
 ones are `../c/preludes/`) and the zig-ast wire (`src/shale_zig_wire.zig`;
-the live one is `../tools/zig_ast/wire.zig`). zig-ast itself is live, a
-package of its own in `../tools/zig_ast`.
+the live one is zig-ast's `wire.zig`). zig-ast itself is live, a repo of
+its own, [zig-ast](https://github.com/showell/zig-ast).
 
 ## Why it is kept
 
@@ -42,8 +42,9 @@ package of its own in `../tools/zig_ast`.
 
 It builds with the patched Zig that `zig-version` names (from
 [patched-zig-compiler](https://github.com/showell/patched-zig-compiler)),
-with [zig-webbox](https://github.com/showell/zig-webbox) checked out beside
-Shale's checkout:
+with [zig-webbox](https://github.com/showell/zig-webbox) and
+[zig-ast](https://github.com/showell/zig-ast) checked out beside Shale's
+checkout:
 
     cd legacy_zig && zig build        # zig-out/bin: shale, shale-gate, zig-ast
     cd legacy_zig && zig build test   # the unit tests

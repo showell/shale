@@ -124,7 +124,7 @@ zig_decls("bad.zig")
 -- Each of HOST_ZIG_SCRIPTS under each build's C `shale`, in fresh copies of
 -- the tree under c/out/host_zig. Gives how many ran.
 function host_zig_scripts(t, refreeze)
-  if not exists("tools:zig-ast/bin/zig-ast") then fail("host_zig: no tools:zig-ast/bin/zig-ast, which the Zig tools' scripts speak to: `shale tools/zig_ast/install.shale`") end
+  if not exists("tools:zig-ast/bin/zig-ast") then fail("host_zig: no tools:zig-ast/bin/zig-ast, which the Zig tools' scripts speak to: zig-ast's own repository builds it (github.com/showell/zig-ast, `shale install.shale` in its checkout)") end
   local base = OUT .. "/host_zig"
   if exists(base) then remove_tree(base) end
   mkdir(base)

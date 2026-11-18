@@ -173,11 +173,11 @@ own project, and for working on Shale itself.
 - **On the box:** the `shale` CLI, C Shale since 2026-11-17, is every
   top-level shell call an agent makes (`tools/shale-gate.sh`, the hook; [docs/SHALE-AGENTS.md](docs/SHALE-AGENTS.md)),
   with Zig's own parser behind `zig_decls`, `zig_move` and `zig_rename`:
-  zig-ast (`tools/zig_ast`), a program of its own that the host asks, so
-  the host imports no `std.zig` parser. It is a Zig package of its own,
-  with its own build and tests ([tools/zig_ast/README.md](tools/zig_ast/README.md));
-  `shale tools/zig_ast/install.shale` installs it where the host looks,
-  `~/tools/zig-ast/bin/zig-ast` under the `tools` mount.
+  zig-ast, a program of its own that the host asks, so the host imports no
+  `std.zig` parser. It is a repo of its own,
+  [zig-ast](https://github.com/showell/zig-ast), with its own build and
+  tests; `shale install.shale` in its checkout installs it where the host
+  looks, `~/tools/zig-ast/bin/zig-ast` under the `tools` mount.
 - **On a live site, until 2026-11-18:** Zig Shale ran signed scripts inside
   [angry-gopher](https://github.com/showell/angry-gopher) (lynrummy.com),
   on Linux and on
@@ -309,8 +309,8 @@ browser build) and their tools are there, and get no fixes.
   the arena's fidelity, the VM and the host's seams.
 - [c/docs/building.md](c/docs/building.md): how the C is compiled, with TCC,
   GCC and its sanitizers, during the port and after it.
-- [tools/zig_ast/README.md](tools/zig_ast/README.md): zig-ast, the program
-  behind the Zig builtins, and the wire C Shale speaks to it.
+- [zig-ast](https://github.com/showell/zig-ast): the program behind the
+  Zig builtins, and the wire C Shale speaks to it (its wire.zig).
 - [legacy_zig/README.md](legacy_zig/README.md): Zig Shale, the first
   implementation, deprecated and frozen.
 - [cookbook/zig/README.md](cookbook/zig/README.md): recipes for finding a

@@ -30,7 +30,7 @@ no system call:
 - `legacy_zig/src/shale_host_zig.zig` and `legacy_zig/src/shale_zig_wire.zig`: the Zig tools'
   half in the host. They check a call's arguments, read its files, ask
   zig-ast and act on its answer; they hold no Zig grammar. What reads Zig is
-  zig-ast (`tools/zig_ast`), a program over `std.zig` that the host starts
+  zig-ast (github.com/showell/zig-ast), a program over `std.zig` that the host starts
   once a run, its own process (`std.process.spawn`, with pipes); a port
   starts it its own way, or builds the program for its kernel.
 - `legacy_zig/src/shale_host_setup.zig`: the mounts, the preludes and the environment

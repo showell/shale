@@ -339,8 +339,8 @@ static STATUS_MUST_USE Status host_zig_proc_of(HostZigProc *p, Paths *h, Run *r,
         }
     }
     if (!has_exe) {
-        return run_failf(r, pos, CLASS_HOST, "`{s}`: no tools:zig-ast/bin/zig-ast, the program that reads Zig: Shale's `shale tools/zig_ast/install.shale` builds it",
-                         S("`"), who, S("`: no tools:zig-ast/bin/zig-ast, the program that reads Zig: Shale's `shale tools/zig_ast/install.shale` builds it"));
+        return run_failf(r, pos, CLASS_HOST, "`{s}`: no tools:zig-ast/bin/zig-ast, the program that reads Zig: zig-ast's own repository builds it (github.com/showell/zig-ast, `shale install.shale` in its checkout)",
+                         S("`"), who, S("`: no tools:zig-ast/bin/zig-ast, the program that reads Zig: zig-ast's own repository builds it (github.com/showell/zig-ast, `shale install.shale` in its checkout)"));
     }
     if (r->host_runs >= r->ctx.budgets.programs) return run_budget_stop(&r->ctx, pos, BUDGET_PROGRAMS);
     r->host_runs++;

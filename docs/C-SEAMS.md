@@ -204,11 +204,11 @@ The parsers Shale reads code with are programs, not part of the C:
 - **`roc-ast` and `go-ast`** already are: a recipe's `roc_tree` and
   `go_tree` run the tool under `run` and hand its `--flat` output to the
   host's reader (`legacy_zig/src/shale_host_flat_tree.zig`), which the C ports as is.
-- **`zig-ast`** (tools/zig_ast) holds `zig_rename`, `zig_decls`,
+- **`zig-ast`** ([its own repo](https://github.com/showell/zig-ast)) holds `zig_rename`, `zig_decls`,
   `zig_move`, `zig_imports` and `zig_tokens`, over Zig's own parser, so the
   C needs no Zig parser. The host starts one `zig-ast --serve` process a
   run, at its first Zig call, and speaks to it in framed requests and
   answers. **The C's host speaks the same wire to the same `zig-ast`
-  program**; the protocol's one home is `tools/zig_ast/wire.zig`, and the C
+  program**; the protocol's one home is that repo's `wire.zig`, and the C
   follows it, never a copy of it here.
 - `shale_tokens` stays the host's, since it is Shale's own lexer.
