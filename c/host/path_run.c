@@ -226,7 +226,8 @@ static STATUS_MUST_USE Status msg_format(Buf *b, Str fmt, MsgArgs args) {
 // Stops the run at `pos` with the message `fmt` of `args`, or `fmt` itself
 // when the arena refuses it, as Zig's `Run.fail` fell back to its format
 // string. The stops path_run.c and paths.c build from a path are made here,
-// and so are the host's (host_run.c's `host_fail`, which host_jobs.c uses).
+// and so are the host's (host.c's `host_fail`, which the rest of the host
+// uses).
 // DRAGON: the secrets rule. A host-made argument (an OS path, a mount's
 // folder) that names a secrets mount's folder would print where the tokens
 // are.

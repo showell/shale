@@ -130,8 +130,8 @@ caller to drop them in time, so these tests are written, under ASan, before
 A secrets mount's path must never appear in a message. **`path_fail`
 (c/host/path_run.c) checks the arguments the host makes**: a stop built
 there, which is every stop path_run.c and paths.c build from a path and
-every one host_run.c's `host_fail` and `host_fail_plain` make (host_jobs.c
-uses them too), asks the `PathHook`'s `names_secret` of each argument marked
+every one host.c's `host_fail` and `host_fail_plain` make (the rest of the
+host uses them too), asks the `PathHook`'s `names_secret` of each argument marked
 as the host's (an OS path, a mount's folder), and one that names a secrets
 mount's folder ends the process, a bug in the C, before any message is
 made. The script's own text is not checked: it may come back. `--undo-on-

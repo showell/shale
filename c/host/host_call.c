@@ -1,5 +1,6 @@
 // host_call.c: the Linux host's `host(name, ...)` calls, each sent to its
-// file: `run` and `sleep` (host_run.c), the jobs (host_jobs.c), `real` and
+// file: `run` and `sleep` (host_run.c, on host.c, host_refusals.c,
+// host_write_gate.c and host_run_secrets.c), the jobs (host_jobs.c), `real` and
 // `copy_mode` (here), the Zig tools (host_zig.c), `re_lines` and
 // `shale_tokens` (host_text.c),
 // `grep_tree` (host_grep_tree.c), `roc_tree` and `go_tree` (flat_tree.c),
@@ -7,9 +8,9 @@
 // `edits_write`, which `edits_all` calls, and `procs` and `proc_stop`
 // (host_procs.c).
 //
-// Include paths.c, builtins_change.c, host_run.c, host_jobs.c, host_procs.c,
-// host_json.c, host_text.c, host_grep_tree.c, flat_tree.c and host_zig.c
-// first.
+// Include paths.c, builtins_change.c, host_run.c (and the four before it),
+// host_jobs.c, host_procs.c, host_json.c, host_text.c, host_grep_tree.c,
+// flat_tree.c and host_zig.c first.
 
 // `copy_mode(from, to)`, which the prelude's `copy` calls after each file it
 // writes: `to` given `from`'s permission bits (0777's, never setuid's), so an

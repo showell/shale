@@ -4,7 +4,7 @@
 // carries on where an earlier one started; and `host_jobs_stop_with_run`,
 // which ends the jobs a stopped run started. The processes are jobs.c's.
 //
-// Include host_run.c and jobs.c first.
+// Include host_run.c (and the four before it) and jobs.c first.
 
 static bool host_ends_with(Str s, Str suffix) {
     return s.len >= suffix.len && str_eq(str_sub(s, s.len - suffix.len, s.len), suffix);
@@ -269,7 +269,7 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     TRY(run_charge(r, pos, argv.len));
     if (r->host_runs >= r->ctx.budgets.programs) return run_budget_stop(&r->ctx, pos, BUDGET_PROGRAMS);
     // No `secrets` on a job; the guards' order is the DRAGON at
-    // host_guard_program (host_run.c).
+    // host_guard_program (host_run_secrets.c).
     HostEnvOpt no_secrets;
     memset(&no_secrets, 0, sizeof no_secrets);
     HostProgram prog = {S("job_start"), argv, &o.cwd, &o.env, &no_secrets, host_given(&o.want)};

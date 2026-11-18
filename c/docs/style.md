@@ -138,7 +138,7 @@ and its self-test plants a break of each one.
 - **A string the kernel takes is an `OsStr`** (slice.h): a Str known to hold
   no NUL, made only by `os_str_of` (false for a NUL) and `os_str_own`
   (Shale's own string, whose NUL is a bug in the C). A script's string
-  becomes one through the host's `os_str` (host_run.c), which refuses a NUL
+  becomes one through the host's `os_str` (host.c), which refuses a NUL
   as CLASS_REFUSED naming the argument; a config file's through its parser
   (mounts.c's `mounts_parse`, naming the line). `str_cstr_into`,
   `arena_cstr` and `file_system_cstr` take an OsStr, so their one refusal

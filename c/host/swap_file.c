@@ -1,8 +1,8 @@
 // swap_file.c: a file written whole beside its target and renamed over it,
 // so a reader sees the old file or the new one and never a part. The
 // temporary file is made mode 0600 beside the target, synced, and renamed
-// into place. `run`'s `stdout_secret` (host_run.c) stores a secret this way,
-// and so do `shale --secrets`'s store and deny (secrets_mode.c).
+// into place. `run`'s `stdout_secret` (host_run_secrets.c) stores a secret
+// this way, and so do `shale --secrets`'s store and deny (secrets_mode.c).
 //
 // Include file_system.c first.
 

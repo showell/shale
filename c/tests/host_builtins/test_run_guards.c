@@ -1,5 +1,6 @@
 // test_run_guards.c: the guards `run` and the jobs hold before and while a
-// program runs (c/host/host_run.c, host_jobs.c, spawn.c, zig_ast.c), each
+// program runs (c/host/host_refusals.c, host_write_gate.c,
+// host_run_secrets.c, host_jobs.c, spawn.c, zig_ast.c), each
 // tried by the attack it guards against: a NUL inside an argument, a
 // secret's path shown to git, a log written through a read-only mount or
 // past the undo journal, a copy's mode given through a read-only mount, a

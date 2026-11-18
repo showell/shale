@@ -1,6 +1,7 @@
 // test_host_run.c: the Linux host's `run`, `sleep` and jobs (c/host/
-// host_run.c, jobs.c, host_jobs.c), each source run as the C `shale` runs
-// it (ran.c), with `host(...)` called bare since ran.c loads no prelude.
+// host_run.c and the four files before it, jobs.c, host_jobs.c), each
+// source run as the C `shale` runs it (ran.c), with `host(...)` called bare
+// since ran.c loads no prelude.
 // Every message is C Shale's own, as the goldens hold it.
 
 // A part of ran_tests.c (`TEST_PART`, test.h), which defines _GNU_SOURCE and

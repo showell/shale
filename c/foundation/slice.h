@@ -244,7 +244,7 @@ typedef struct {
 
 // `s` as an OsStr into `*out`, or false when it holds a NUL. The one search
 // for a NUL in a string bound for the kernel: a script's string comes here
-// through the host's `os_str` (host_run.c), which refuses it naming the
+// through the host's `os_str` (host.c), which refuses it naming the
 // argument, and a config file's through its parser (mounts.c's
 // `mounts_parse`), which names the line.
 // DRAGON: a NUL inside. A NUL inside `s` would end the kernel's copy early,

@@ -12,7 +12,7 @@
 // checked, so a pid the kernel has given to another since is never
 // signalled. A signal refused is a stop, never a success.
 //
-// Include host_run.c first.
+// Include host.c first.
 
 #include <dirent.h>
 #include <poll.h>
