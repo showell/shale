@@ -50,14 +50,14 @@ const GATE_PLANTS = {
 function build_gates(t)
   local specs = {}
   for b in t.builds do
-    push(specs, {name = "gate-" .. b, argv = compile_argv(b, "c/shale_gate.c", FOUNDATION, OUT .. "/" .. b .. "/shale-gate"), opts = {timeout_ms = 120000}})
+    push(specs, {name = "gate-" .. b, argv = compile_argv(b, "c/shale_gate.c", FOUNDATION, OUT .. "/" .. b .. "/shale-gate"), opts = {timeout_ms = COMPILE_TIMEOUT_MS}})
   end
   local answers = compile_jobs(t, "gate builds", specs)
   if answers == nil then return nil end
   local i = 0
   for a in answers do
     i = i + 1
-    if get(a, "code", -1) ~= 0 then fail("`" .. t.builds[i] .. "` could not compile c/shale_gate.c:\n" .. a.out) end
+    compile_held(t.builds[i], "c/shale_gate.c", a)
   end
   return nil
 end

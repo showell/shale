@@ -105,9 +105,9 @@ function host_compile(t, phase, name, src, bin)
   mkdir(dirname(bin))
   local argv = gcc_flags("release", FOUNDATION)
   for a in {host_define("release"), src, "-o", bin} do push(argv, a) end
-  local answers = compile_jobs(t, phase, {{name = name, argv = argv, opts = {timeout_ms = 120000}}})
+  local answers = compile_jobs(t, phase, {{name = name, argv = argv, opts = {timeout_ms = COMPILE_TIMEOUT_MS}}})
   if answers == nil then return nil end
-  if get(answers[1], "code", -1) ~= 0 then fail("could not compile " .. src .. ":\n" .. answers[1].out) end
+  compile_held("release", src, answers[1])
   return nil
 end
 

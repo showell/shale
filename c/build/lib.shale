@@ -6,6 +6,10 @@
 const FOUNDATION = "c/foundation"
 const OUT = "c/out"
 const WANT = "c-tests: the build's own test binary, made under c/out"
+-- Each compile's timeout, tcc's or GCC's: GCC's ASan compile of a big unity
+-- build takes over a minute on a busy box. A compile past it fails saying so
+-- (`compile_held`), never as a compile error.
+const COMPILE_TIMEOUT_MS = 150000
 
 -- ── The run: its programs, charged to phases ────────────────────────────
 
@@ -158,6 +162,17 @@ function compile_jobs(t, phase, specs)
   return run_jobs(t, phase, OUT .. "/jobs", specs)
 end
 
+-- A compile of `src` under `build` judged by its answer `a` (`run`'s, or a
+-- job's): one past COMPILE_TIMEOUT_MS stops the run saying it timed out,
+-- one ended by a signal says so, and one that exited non-zero stops with
+-- the compiler's output.
+function compile_held(build, src, a)
+  if a.ended == "timeout" then fail("`" .. build .. "`'s compile of " .. src .. " timed out after " .. (COMPILE_TIMEOUT_MS // 1000) .. " s (COMPILE_TIMEOUT_MS, c/build/lib.shale); what it printed:\n" .. a.out) end
+  if not has_key(a, "code") then fail("`" .. build .. "`'s compile of " .. src .. " ended (" .. a.ended .. ") with no exit code:\n" .. a.out) end
+  if a.code ~= 0 then fail("`" .. build .. "` could not compile " .. src .. ":\n" .. a.out) end
+  return nil
+end
+
 -- The flags of a GCC build, `include` the foundation's folder.
 function gcc_flags(build, include)
   local f = {"gcc", "-std=c11", "-Wall", "-Wextra", "-Werror", "-I" .. include}
@@ -216,8 +231,7 @@ end
 -- the run, naming it.
 function compile_to(t, phase, build, src, include, bin, extra?, mode?)
   local argv = compile_argv(build, src, include, bin, extra, mode)
-  local c = run_in(t, phase, argv, {timeout_ms = 120000, tail = 40})
-  if c.code ~= 0 then fail("`" .. build .. "` could not compile " .. src .. ":\n" .. c.out) end
+  compile_held(build, src, run_in(t, phase, argv, {timeout_ms = COMPILE_TIMEOUT_MS, tail = 40}))
   return nil
 end
 
@@ -408,7 +422,7 @@ function test_files(t, phase, build, srcs, extra?)
     else
       argv = compile_argv(build, src, FOUNDATION, bin, extra)
     end
-    push(specs, {name = build .. "-" .. name, argv = argv, opts = {timeout_ms = 120000}})
+    push(specs, {name = build .. "-" .. name, argv = argv, opts = {timeout_ms = COMPILE_TIMEOUT_MS}})
     push(bins, bin)
   end
   local answers = compile_jobs(t, phase, specs)
@@ -416,7 +430,7 @@ function test_files(t, phase, build, srcs, extra?)
   local i = 0
   for a in answers do
     i = i + 1
-    if get(a, "code", -1) ~= 0 then fail("`" .. build .. "` could not compile " .. srcs[i] .. ":\n" .. a.out) end
+    compile_held(build, srcs[i], a)
   end
   if build == "release" then return 0 end
   i = 0
@@ -531,9 +545,9 @@ function start_plant(t, phase, p, k, extra?)
   local bin = dir .. "/bin/" .. sub(basename(src), 1, #basename(src) - 2)
   if pooled then
     local argv = compile_argv("asan", src, dir .. "/foundation", bin, extra)
-    local answers = compile_jobs(t, phase, {{name = plant_job_name(phase, k), argv = argv, opts = {timeout_ms = 120000}}})
+    local answers = compile_jobs(t, phase, {{name = plant_job_name(phase, k), argv = argv, opts = {timeout_ms = COMPILE_TIMEOUT_MS}}})
     if answers == nil then return nil end
-    if get(answers[1], "code", -1) ~= 0 then fail("`asan` could not compile " .. src .. ":\n" .. answers[1].out) end
+    compile_held("asan", src, answers[1])
   else
     compile_to(t, phase, get(p, "build", "tcc"), src, dir .. "/foundation", bin, extra)
   end

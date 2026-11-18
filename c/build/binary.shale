@@ -19,7 +19,6 @@ not_option("c/build/binary.shale", "to", to)
 local t = block_start(false, build)
 must(run_in(t, "binary preludes", {"shale", "c/gen_preludes.shale"}, {timeout_ms = 60000, tail = 5}))
 local bin = OUT .. "/" .. build .. "/shale"
-local c = run_in(t, "binary " .. build, command_argv(build, bin), {timeout_ms = 300000, tail = 40})
-if c.code ~= 0 then fail("`" .. build .. "` could not compile c/shale.c:\n" .. c.out) end
+compile_held(build, "c/shale.c", run_in(t, "binary " .. build, command_argv(build, bin), {timeout_ms = COMPILE_TIMEOUT_MS, tail = 40}))
 must(run_in(t, "binary install", {"install", "-D", "-m", "755", real(bin), to}, {timeout_ms = 10000, tail = 5}))
 print("binary " .. build .. ": c/shale.c built to " .. bin .. ", installed at " .. to)
