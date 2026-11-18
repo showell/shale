@@ -655,11 +655,42 @@ static RUN_COLD STATUS_MUST_USE Status vm_print_lines(Run *r, Pos place, const V
     return OK;
 }
 
+// `print(m)` of one flat map: each key and its value on a line, a tab
+// between, in the order the keys were first set, a step a key. A map holding
+// a table stops as any table does, before a line is written.
+static RUN_COLD STATUS_MUST_USE Status vm_print_map(Run *r, Pos place, const Value *map) {
+    const Table *t = map->as.table;
+    size_t n = table_count(t);
+    TRY(run_charge(r, place, n));
+    for (size_t i = 0; i < n; i++) {
+        if (ValueMap_value_at(&t->map, i).tag != VALUE_TABLE) continue;
+        IntText it;
+        Str text = {0};
+        return builtin_scalar_text(r, place, map, &it, S("print"), &text);
+    }
+    for (size_t i = 0; i < n; i++) {
+        Value v = ValueMap_value_at(&t->map, i);
+        IntText it;
+        Str text = {0};
+        TRY(builtin_scalar_text(r, place, &v, &it, S("print"), &text));
+        TRY(run_write(r, place, ValueMap_key_at(&t->map, i)));
+        TRY(run_write(r, place, S("\t")));
+        TRY(run_write(r, place, text));
+        TRY(run_write(r, place, S("\n")));
+    }
+    return OK;
+}
+
 static RUN_COLD STATUS_MUST_USE Status vm_print(Machine *m, const VmOp *op) {
     Run *r = m->r;
     ConstValues vals = vm_args(m, op->a);
     Positions places = {m->code->positions.ptr, m->code->positions.len};
     const Value *one = vals.len == 1 ? &at(vals, 0) : NULL;
+    if (one != NULL && one->tag == VALUE_TABLE && one->as.table->kind == TABLE_MAP) {
+        TRY(vm_print_map(r, at(places, op->b), one));
+        m->operands.len -= op->a;
+        return vm_push_nil(m, op->pos);
+    }
     if (one != NULL && one->tag == VALUE_TABLE && one->as.table->kind == TABLE_LIST) {
         TRY(vm_print_lines(r, at(places, op->b), one));
         m->operands.len -= op->a;
