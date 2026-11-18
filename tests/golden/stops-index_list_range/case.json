@@ -1,1 +1,1 @@
-{"id":"stops-index_list_range","source":"stops","origin":"tools/differ/stops/index_list_range.shale","files":["index_list_range.shale"],"steps":[{"argv":["{case}/index_list_range.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}
+{"id":"stops-index_list_range","source":"stops","origin":"tests/inputs/stops/index_list_range.shale","files":["index_list_range.shale"],"steps":[{"argv":["{case}/index_list_range.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

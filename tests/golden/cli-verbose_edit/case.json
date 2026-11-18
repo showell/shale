@@ -1,1 +1,1 @@
-{"id":"cli-verbose_edit","source":"cli","origin":"tools/differ/cli/verbose_edit.shale","files":["verbose_edit.shale"],"steps":[{"argv":["--verbose","{case}/verbose_edit.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}
+{"id":"cli-verbose_edit","source":"cli","origin":"tests/inputs/cli/verbose_edit.shale","files":["verbose_edit.shale"],"steps":[{"argv":["--verbose","{case}/verbose_edit.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

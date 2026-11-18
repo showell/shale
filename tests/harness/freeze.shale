@@ -1,17 +1,17 @@
--- tools/differ/golden_freeze.shale: the goldens rebuilt from the oracle.
--- tests/golden.shale launches it (`freeze=1`) with the `differ` mount its
--- library is read through; that header has the arguments: `oracle`, `base`,
+-- tests/harness/freeze.shale: the goldens rebuilt from a C `shale`.
+-- tests/golden.shale launches it (`freeze=1`) with the `harness` mount its
+-- library is read through; that header has the arguments: `bin`, `base`,
 -- `dir`, `only` and `refreeze`.
 --
--- Every input the differ collects (tools/differ/lib.shale's `collect`) but
+-- Every input the harness collects (tests/harness/lib.shale's `collect`) but
 -- the cookbook's self-tests, which the C full tier runs live (c/build.shale,
 -- "The cookbook's self-tests"), is made a case, `<dir>/<id>/` (`case_id`: its origin, never a run's
--- numbering), and run twice under the oracle as the golden runner runs it
+-- numbering), and run twice under `bin` as the golden runner runs it
 -- (`case_steps`, then `launch`). The two runs masked (`masked_side`) must
 -- agree, or the input is nondeterministic and left out, said in
 -- `left_out.tsv` with the first line the runs differ at; so is every input of
 -- LEFT_OUT, with why. An input the differ judges by class (`layout_observer`:
--- its oracle stops on the arena, kept or machine budget, or it reads
+-- its run stops on the arena, kept or machine budget, or it reads
 -- `arena_bytes`) keeps that judgment in its `case.json`, so what is frozen is
 -- its stop's class, place and message, its numbers `#`.
 --
@@ -22,7 +22,7 @@
 --
 -- budget: programs=200000 steps=2000000000 reads=2000000 read_bytes=8000000000 arena_bytes=1500000000 changes=500000 change_bytes=4000000000 output_bytes=4000000 kept_bytes=268435456
 
-use("differ:lib.shale")
+use("harness:lib.shale")
 
 -- Inputs never frozen, by origin, with why (a nondeterministic one the two
 -- runs miss belongs here).
@@ -31,7 +31,7 @@ const LEFT_OUT = {
   {origin = "src/shale_procs_test.zig:87", why = "its stop's step count follows procs(), the box's process list, which moves between runs"},
 }
 
-local oracle = arg("oracle", "repos:shale/zig-out/bin/shale")
+local bin = arg("bin", "c/out/release/shale")
 local base = arg("base", "build:golden")
 local dir = arg("dir", "tests/golden")
 local only = arg("only", "")
@@ -119,15 +119,15 @@ function changed_from(old_dir, new_dir)
   return nil
 end
 
-refuse_second_run("tools/differ/golden_", base, "build:golden")
+refuse_second_run("tests/harness/", base, "build:golden")
 base = padded_base(base)
 local stage = base .. "/stage"
 if exists(stage) then remove_tree(stage) end
 mkdir(stage)
 local got = collect(base, {cookbook = false})
 if exists(base .. "/keep") then remove_tree(base .. "/keep") end
-local cfg = harness(base, "cookbook", false)
-install(oracle, cfg)
+local cfg = harness(base, "cookbook")
+install(bin, cfg)
 local started = clock()
 local root_real = real(".")
 local inputs_real = real(cfg.inputs)
@@ -162,9 +162,9 @@ for inp in got.inputs do
       c.judge = {class = #arena > 0, digits = ao.reads}
       c.arena = join(arena, " ")
       local sa = masked_side(cfg, da, #c.steps, c.prefixes, c.judge)
-      local d = differ_masked(sa, masked_side(cfg, db, #c.steps, c.prefixes, c.judge))
+      local d = masked_diff(sa, masked_side(cfg, db, #c.steps, c.prefixes, c.judge))
       if d ~= nil then
-        push(left, {origin = inp.origin, why = "nondeterministic under the oracle: " .. d.what .. " " .. d.where .. ": `" .. clip(d.a) .. "` then `" .. clip(d.b) .. "`"})
+        push(left, {origin = inp.origin, why = "nondeterministic under " .. bin .. ": " .. d.what .. " " .. d.where .. ": `" .. clip(d.a) .. "` then `" .. clip(d.b) .. "`"})
         remove_tree(cdir)
       else
         create(cdir .. "/case.json", json_write(c) .. "\n")
@@ -179,10 +179,10 @@ for inp in got.inputs do
   end
 end
 
-create(stage .. "/manifest.tsv", "# the golden cases (tools/differ/golden_freeze.shale): id, source, origin, steps, judged by class (arena stop, kept or machine stop, reads arena_bytes)\n" .. join(rows, "\n") .. "\n")
+create(stage .. "/manifest.tsv", "# the golden cases (tests/harness/freeze.shale): id, source, origin, steps, judged by class (arena stop, kept or machine stop, reads arena_bytes)\n" .. join(rows, "\n") .. "\n")
 local left_rows = {}
 for l in left do push(left_rows, l.origin .. "\t" .. l.why) end
-create(stage .. "/left_out.tsv", "# the inputs the differ collects that are not frozen: origin, why\n" .. join(left_rows, "\n") .. "\n")
+create(stage .. "/left_out.tsv", "# the inputs the harness collects that are not frozen: origin, why\n" .. join(left_rows, "\n") .. "\n")
 
 -- The new goldens against the frozen ones: a change or a loss is per case.
 local old = manifest_ids(dir .. "/manifest.tsv")

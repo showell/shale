@@ -1,1 +1,1 @@
-{"id":"stops-index_missing_key","source":"stops","origin":"tools/differ/stops/index_missing_key.shale","files":["index_missing_key.shale"],"steps":[{"argv":["{case}/index_missing_key.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}
+{"id":"stops-index_missing_key","source":"stops","origin":"tests/inputs/stops/index_missing_key.shale","files":["index_missing_key.shale"],"steps":[{"argv":["{case}/index_missing_key.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

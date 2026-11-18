@@ -1,6 +1,6 @@
--- tests/golden.shale: Shale's golden tests, every input the differ judges
--- frozen with the output the Zig oracle gave it, so a binary is tested with
--- no Zig at hand.
+-- tests/golden.shale: Shale's golden tests, the one judge of its behaviour:
+-- every input the harness collects, frozen with the output a C `shale` gave
+-- it, so a binary is held to that output byte for byte.
 --
 --   cd <shale> && shale tests/golden.shale [bin=<path>]
 --   cd <shale> && shale tests/golden.shale freeze=1 [refreeze=<id>,<id>]
@@ -8,11 +8,10 @@
 -- The cookbook's self-tests are not among them: the C full tier runs them
 -- live (c/build.shale, `cookbook_self_tests`).
 --
--- **The run** (tools/differ/golden_run.shale) runs every case of
+-- **The run** (tests/harness/run.shale) runs every case of
 -- tests/golden/manifest.tsv under `bin` (a Shale path; c/out/release/shale,
--- the C build under test, unset) as the differ runs an input, masks it as
--- the differ does, and prints each case that fails with its first differing
--- line, then the count. The arguments:
+-- the C build under test, unset), masks it, and prints each case that fails
+-- with its first differing line, then the count. The arguments:
 --   bin    the binary under test;
 --   base   the work folder (build:golden unset), the run's own folder padded
 --          below it to a fixed length (`padded_base`), so step counts that
@@ -21,41 +20,43 @@
 --   only   run only the cases whose id or origin holds this literal;
 --   keep   1: keep every case's run under `base`/keep (0: only the failures').
 --
--- **The freeze** (`freeze=1`, tools/differ/golden_freeze.shale) rebuilds the
--- goldens from the oracle and writes them only when no case's expected
--- output changed or went, but those `refreeze=` names: a re-freeze is a
--- deliberate act, a case at a time. Its arguments:
---   oracle    the binary whose output is frozen (repos:shale/zig-out/bin/shale);
+-- **The freeze** (`freeze=1`, tests/harness/freeze.shale) rebuilds the
+-- goldens from `bin` and writes them only when no case's expected output
+-- changed or went, but those `refreeze=` names: a re-freeze is a deliberate
+-- act, a case at a time, and its commit says why for each case. Its
+-- arguments:
+--   bin       the binary whose output is frozen (c/out/release/shale, the
+--             C build, unset);
 --   base      its work folder (build:golden unset, as the run's);
 --   dir       where the goldens go (tests/golden unset);
 --   only      freeze only the inputs whose origin holds this literal (a
 --             trial, into another `dir`);
 --   refreeze  the ids, by commas, whose change or loss is meant.
 --
--- tools/differ/README.md, "The golden tests", has the layout of a case and
--- the masks.
+-- tests/harness/README.md has the inputs, the layout of a case and the
+-- masks.
 --
 -- **This file launches the body**: a library is read through a mount, so
--- this writes a mounts file naming this checkout's tools/differ as
--- `differ`, beside the `build`, `tools`, `repos` and `scratch` mounts it was
--- given, and runs the body under it.
+-- this writes a mounts file naming this checkout's tests/harness as
+-- `harness`, beside the `build`, `tools` and `scratch` mounts it
+-- was given, and runs the body under it.
 --
 -- budget: programs=10 output_bytes=8000000
 
 const RUN_ARGS = {"bin", "base", "dir", "only", "keep"}
-const FREEZE_ARGS = {"oracle", "base", "dir", "only", "refreeze"}
+const FREEZE_ARGS = {"bin", "base", "dir", "only", "refreeze"}
 
 -- The mounts the body may want, by the words each gets.
-const PASSED_MOUNTS = {{name = "build", words = ""}, {name = "tools", words = " ro tools"}, {name = "repos", words = " ro"}, {name = "scratch", words = ""}}
+const PASSED_MOUNTS = {{name = "build", words = ""}, {name = "tools", words = " ro tools"}, {name = "scratch", words = ""}}
 
 local freeze = arg("freeze", 0) == 1
-local body = "tools/differ/golden_run.shale"
+local body = "tests/harness/run.shale"
 local names = RUN_ARGS
 if freeze then
-  body = "tools/differ/golden_freeze.shale"
+  body = "tests/harness/freeze.shale"
   names = FREEZE_ARGS
 end
-local text = "differ = " .. real("tools/differ") .. " ro\n"
+local text = "harness = " .. real("tests/harness") .. " ro\n"
 for m in PASSED_MOUNTS do
   local r = attempt(real, m.name .. ":.")
   if r.ok then text = text .. m.name .. " = " .. r.value .. m.words .. "\n" end

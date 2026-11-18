@@ -1,13 +1,12 @@
--- tools/differ/lib.shale: the differential harness's functions, shared by
--- the differ (tools/differ/differ_run.shale) and the golden tests
--- (tools/differ/golden_run.shale, tools/differ/golden_freeze.shale): how the
--- inputs are collected, how one runs in a fresh work folder with its mounts
--- and argv, and how two runs are compared, with the masks (`fresh_mask`, the
--- `── time:` line, the arena's numbers). A library takes no arguments, so
--- every folder is the caller's: `harness` makes the run's `cfg`, whose
--- `base`, `work`, `keep`, `inputs` and `bin` are its Shale paths. It is
--- `use`d through the `differ` mount that tools/differ.shale and
--- tests/golden.shale write (`use` takes a mount's path, never the root's).
+-- tests/harness/lib.shale: the golden tests' functions, shared by their run
+-- (tests/harness/run.shale) and their freeze (tests/harness/freeze.shale):
+-- how the inputs are collected, how one runs in a fresh work folder with its
+-- mounts and argv, and how a run is masked and compared with its frozen
+-- output (`fresh_mask`, the `── time:` line, the arena's numbers). A library
+-- takes no arguments, so every folder is the caller's: `harness` makes the
+-- run's `cfg`, whose `base`, `work`, `keep`, `inputs` and `bin` are its Shale
+-- paths. It is `use`d through the `harness` mount that tests/golden.shale
+-- writes (`use` takes a mount's path, never the root's).
 
 -- The runner helpers of the Zig tests whose first string argument is a
 -- whole Shale source.
@@ -23,12 +22,12 @@ const DOCS = {"docs/SHALE.md", "docs/SHALE-AGENTS.md"}
 -- step counts hang on the lengths of the paths it is handed (a prelude scans
 -- them), so the folder a run's work, case, binary and home live in is padded
 -- to this length on every box, GitHub's /home/runner, a cloud's /root or a
--- laptop's: the goldens and the differ's two binaries see the same lengths.
+-- laptop's: the goldens hold wherever they are run and frozen.
 const WORK_PATH_BYTES = 160
 
 -- The wrapper that keeps a step's stdout and stderr apart: `run` gives the
 -- two as one.
-const WRAP = [=[exec "$@" <"$DIFFER_IN" >"$DIFFER_OUT" 2>"$DIFFER_ERR"]=]
+const WRAP = [=[exec "$@" <"$GOLDEN_IN" >"$GOLDEN_OUT" 2>"$GOLDEN_ERR"]=]
 
 const PINNED_NOW = "1700000000"
 const PINNED_GIT_DATE = "2023-11-14T22:13:20+00:00"
@@ -46,7 +45,7 @@ function hex_value(s)
   local v = 0
   for i = 1, #s do
     local d = find(HEX, lower(sub(s, i, i)))
-    if d == nil then fail("differ: `" .. s .. "` is not hexadecimal") end
+    if d == nil then fail("golden: `" .. s .. "` is not hexadecimal") end
     v = v * 16 + d - 1
   end
   return v
@@ -94,7 +93,7 @@ function zig_unquote(t)
       push(out, utf8_of(hex_value(sub(s, j + 3, close - 1))))
       i = close + 1
     else
-      fail("differ: a Zig escape `\\" .. c .. "` the harness does not read, in " .. t)
+      fail("golden: a Zig escape `\\" .. c .. "` the harness does not read, in " .. t)
     end
   end
   return join(out, "")
@@ -181,7 +180,7 @@ function collect_docs(c)
         start = n
       end
     end
-    if body ~= nil then fail("differ: " .. d .. ":" .. start .. ": a shale block with no closing fence") end
+    if body ~= nil then fail("golden: " .. d .. ":" .. start .. ": a shale block with no closing fence") end
   end
 end
 
@@ -201,7 +200,7 @@ end
 -- a String.raw template, so its text is the bytes between the backticks.
 function lesson_cells()
   local t = read("web/lessons.js")
-  if contains(t, "${") or contains(t, "\\`") then fail("differ: web/lessons.js holds `${` or an escaped backtick, which the harness does not read") end
+  if contains(t, "${") or contains(t, "\\`") then fail("golden: web/lessons.js holds `${` or an escaped backtick, which the harness does not read") end
   local cells = {}
   local lesson = 0
   local at = 1
@@ -254,9 +253,9 @@ const HARNESS_MOUNTS = {"cookbook", "tools", "scratch"}
 -- one below it): never `..`, a mount or an absolute path, so what an input
 -- names is the checkout's.
 function input_file(p, name, line)
-  if name == "" or starts_with(name, "/") or contains(name, ":") or contains(name, "..") then fail("differ: " .. p .. ": `" .. line .. "` names `" .. name .. "`: a file in the input's own folder") end
+  if name == "" or starts_with(name, "/") or contains(name, ":") or contains(name, "..") then fail("golden: " .. p .. ": `" .. line .. "` names `" .. name .. "`: a file in the input's own folder") end
   local f = dirname(p) .. "/" .. name
-  if not exists(f) then fail("differ: " .. p .. ": `" .. line .. "` names " .. f .. ", which is not there") end
+  if not exists(f) then fail("golden: " .. p .. ": `" .. line .. "` names " .. f .. ", which is not there") end
   return f
 end
 
@@ -271,16 +270,16 @@ function mount_lines(f)
   for l in lines(read(f)) do
     if trim(l) ~= "" and not starts_with(l, "#") then
       local m = re_find(l, "^([A-Za-z0-9_]+) = ([^ ]+)((?: [a-z]+)*)$")
-      if m == nil then fail("differ: " .. f .. ": `" .. l .. "` is not `name = <path> [words]`") end
+      if m == nil then fail("golden: " .. f .. ": `" .. l .. "` is not `name = <path> [words]`") end
       local name = m.groups[1]
       local path = m.groups[2]
-      if has_item(HARNESS_MOUNTS, name) then fail("differ: " .. f .. ": `" .. name .. "` is one of the harness's own mounts") end
+      if has_item(HARNESS_MOUNTS, name) then fail("golden: " .. f .. ": `" .. name .. "` is one of the harness's own mounts") end
       local parts = split(path, "/")
-      if parts[1] ~= "root" and parts[1] ~= "scratch" then fail("differ: " .. f .. ": `" .. path .. "` is not below the run's `root` or `scratch`") end
+      if parts[1] ~= "root" and parts[1] ~= "scratch" then fail("golden: " .. f .. ": `" .. path .. "` is not below the run's `root` or `scratch`") end
       for part in parts do
-        if part == "" or part == "." or part == ".." then fail("differ: " .. f .. ": `" .. path .. "` has an empty, `.` or `..` part") end
+        if part == "" or part == "." or part == ".." then fail("golden: " .. f .. ": `" .. path .. "` has an empty, `.` or `..` part") end
       end
-      if contains(m.groups[3], " tools") then fail("differ: " .. f .. ": a `tools` mount would let `run` start any program under it") end
+      if contains(m.groups[3], " tools") then fail("golden: " .. f .. ": a `tools` mount would let `run` start any program under it") end
       push(out, {name = name, path = path, words = m.groups[3]})
     end
   end
@@ -288,7 +287,8 @@ function mount_lines(f)
 end
 
 -- A hand-written input file's launches, one input each. Each
--- `-- differ-argv:` line is an input of its own (the words after the
+-- `-- differ-argv:` line (the lines keep the name the inputs were frozen
+-- with: a case holds its input's bytes) is an input of its own (the words after the
 -- binary, `{script}` the file's own path; with none, one input, `{script}`
 -- alone), so one probe runs at several budgets with no copy of it. Every
 -- launch of the file takes its other lines: `-- differ-stdin:` (one line
@@ -357,14 +357,6 @@ function collect_dir(c, dir, source)
   return n
 end
 
--- docs/SURFACE.txt, the frozen surface, is to give one stop script for each
--- stop template it lists, written under build:differ/surface and collected
--- as `stops`. Until its format is settled this says what is there.
-function surface_status()
-  if not exists("docs/SURFACE.txt") then return "docs/SURFACE.txt is not here yet: the stops are tools/differ/stops/ alone" end
-  return "docs/SURFACE.txt is here, and no generator reads it yet: write `surface_stops` to fill build:differ/surface from it"
-end
-
 -- Every input, its written sources under `base`/inputs. `opts.cookbook =
 -- false` leaves out the cookbook's self-tests (the golden tests', which the
 -- C full tier runs live instead).
@@ -377,10 +369,9 @@ function collect(base, opts?)
   collect_docs(c)
   if opts == nil or get(opts, "cookbook", true) then collect_cookbook(c) end
   collect_lessons(c)
-  collect_dir(c, "tools/differ/stops", "stops")
-  collect_dir(c, base .. "/surface", "stops")
-  collect_dir(c, "tools/differ/cli", "cli")
-  collect_dir(c, "tools/differ/store", "store")
+  collect_dir(c, "tests/inputs/stops", "stops")
+  collect_dir(c, "tests/inputs/cli", "cli")
+  collect_dir(c, "tests/inputs/store", "store")
   return {inputs = c.inputs, dups = c.dups}
 end
 
@@ -406,14 +397,13 @@ function launch(cfg, inp, dest)
   for step in inp.steps do
     k = k + 1
     replace(cfg.cap .. "/stdin", step.stdin)
-    cfg.env.DIFFER_OUT = real(dest) .. "/" .. k .. ".out"
-    cfg.env.DIFFER_ERR = real(dest) .. "/" .. k .. ".err"
+    cfg.env.GOLDEN_OUT = real(dest) .. "/" .. k .. ".out"
+    cfg.env.GOLDEN_ERR = real(dest) .. "/" .. k .. ".err"
     cfg.env.SHALE_MOUNTS = cfg.mounts_real
     if has_key(step, "mounts_file") then cfg.env.SHALE_MOUNTS = step.mounts_file end
-    local argv = {"sh", "-c", WRAP, "differ", cfg.bin_real}
-    if cfg.check then push(argv, "--check") end
+    local argv = {"sh", "-c", WRAP, "golden", cfg.bin_real}
     for a in step.argv do push(argv, a) end
-    local r = run(argv, {cwd = cfg.work .. "/root", timeout_ms = cfg.timeout_ms, tail = 5, env = cfg.env, want = "differ: the binary under test, its stdout and stderr kept apart"})
+    local r = run(argv, {cwd = cfg.work .. "/root", timeout_ms = cfg.timeout_ms, tail = 5, env = cfg.env, want = "golden: the binary under test, its stdout and stderr kept apart"})
     ms = ms + r.ms
     push(meta, k .. "\t" .. r.ended .. "\t" .. tostring(get(r, "code", "")) .. "\t" .. tostring(get(r, "signal", "")))
   end
@@ -498,10 +488,6 @@ function first_diff(a, b, judge)
   return nil
 end
 
-function side_dir(cfg, id, side)
-  return cfg.keep .. "/" .. id .. "/" .. side
-end
-
 -- ── `fresh_dir`'s names ──
 --
 -- The Linux prelude's `fresh_dir(parent, prefix)` names a folder
@@ -561,19 +547,6 @@ function fresh_mask(s, fm)
   return out
 end
 
--- A side's manifest with its `fresh_dir` names masked, sorted again by the
--- masked line (a random name sorts anywhere among its neighbours): each
--- entry `{masked, path, kind}`, `path` the file's own.
-function masked_manifest(d, fm)
-  local out = {}
-  for l in lines(read(d .. "/manifest")) do
-    local f = split(l, "\t")
-    push(out, {masked = fresh_mask(l, fm), path = f[1], kind = get(f, 2, "")})
-  end
-  sort(out, "masked")
-  return out
-end
-
 -- ── git's index ──
 --
 -- git writes a repository's index (`.git/index`, and a linked worktree's
@@ -599,153 +572,12 @@ function git_index_view(p)
   return r.out
 end
 
--- How one file the two trees both hold differs, or nil: `px` and `py` its
--- paths in each, `fx` and `fy` the sides' `fresh_dir` maps (nil: no names to
--- mask).
-function differ_file(dx, dy, px, py, fx, fy)
-  local a = dx .. "/tree/" .. px
-  local b = dy .. "/tree/" .. py
-  local label = px
-  if fx ~= nil then label = fresh_mask(px, fx) end
-  local ta = nil
-  local tb = nil
-  local how = ""
-  if is_git_index(px) then
-    ta = git_index_view(a)
-    tb = git_index_view(b)
-    how = " (what it stages)"
-  end
-  if ta == nil or tb == nil then
-    ta = read(a)
-    tb = read(b)
-    how = ""
-  end
-  if fx ~= nil then
-    ta = fresh_mask(ta, fx)
-    tb = fresh_mask(tb, fy)
-  end
-  local d = first_diff(ta, tb, EXACT)
-  if d ~= nil then return {what = "file " .. label .. how, where = "line " .. d.line, a = d.a, b = d.b} end
-  if fx == nil and how == "" and ta ~= tb then return {what = "file " .. label, where = "", a = "(bytes)", b = "(bytes)"} end
-  return nil
-end
-
--- The files of two trees whose paths hold `fresh_dir` names, compared file
--- by file with the names masked: the masked manifests matched, so the n-th
--- file of one is the n-th of the other.
-function differ_fresh_files(dx, dy, ex, ey, fx, fy)
-  for i = 1, #ex do
-    if ex[i].kind == "f" then
-      local d = differ_file(dx, dy, ex[i].path, ey[i].path, fx, fy)
-      if d ~= nil then return d end
-    end
-  end
-  return nil
-end
-
--- The masked lines of a masked manifest, as one text.
-function manifest_text(entries)
-  local l = {}
-  for e in entries do push(l, e.masked) end
-  return join(l, "\n") .. "\n"
-end
-
--- How two sides of one input differ, or nil: the first difference, in the
--- order a step's ending, stdout, stderr, then the files. `judge` is
--- `normal_lines`'s.
-function differ_sides(cfg, inp, x, y, judge)
-  local dx = side_dir(cfg, inp.id, x)
-  local dy = side_dir(cfg, inp.id, y)
-  local mx = lines(read(dx .. "/meta"))
-  local my = lines(read(dy .. "/meta"))
-  local prefixes = fresh_prefixes(read(inp.text_path))
-  local fx = fresh_map(prefixes)
-  local fy = fresh_map(prefixes)
-  for k = 1, #inp.steps do
-    local s = ""
-    if #inp.steps > 1 then s = " (step " .. k .. ")" end
-    if mx[k] ~= my[k] then return {what = "exit" .. s, where = "", a = mx[k], b = my[k]} end
-    for stream in {"out", "err"} do
-      local d = first_diff(fresh_mask(without_time(read(dx .. "/" .. k .. "." .. stream)), fx), fresh_mask(without_time(read(dy .. "/" .. k .. "." .. stream)), fy), judge)
-      if d ~= nil then
-        local what = "std" .. stream
-        if starts_with(d.a, "── used:") or starts_with(d.b, "── used:") then what = "used" end
-        return {what = what .. s, where = "line " .. d.line, a = d.a, b = d.b}
-      end
-    end
-  end
-  local left = #inp.steps + 1
-  if mx[left] ~= my[left] then return {what = "left running", where = "", a = mx[left], b = my[left]} end
-  local ex = masked_manifest(dx, fx)
-  local ey = masked_manifest(dy, fy)
-  local man = first_diff(manifest_text(ex), manifest_text(ey), EXACT)
-  if man ~= nil then return {what = "files", where = "entry " .. man.line, a = man.a, b = man.b} end
-  if #grep(dx .. "/manifest", "\tf\t") == 0 then return nil end
-  if fx.n > 0 or fy.n > 0 then return differ_fresh_files(dx, dy, ex, ey, fx, fy) end
-  -- Each file whose bytes differ is judged in turn, since a git index whose
-  -- bytes differ may stage the same.
-  local r = run({"diff", "-rq", "--no-dereference", real(dx) .. "/tree", real(dy) .. "/tree"}, {timeout_ms = 120000, whole = 16000000, width = 8192})
-  if r.code == 0 then return nil end
-  for l in lines(r.out) do
-    if l ~= "" then
-      local m = re_find(l, "^Files (.*) and (.*) differ$")
-      if m == nil then return {what = "files", where = "", a = l, b = ""} end
-      local rel = sub(m.groups[1], #real(dx) + #"/tree/" + 1)
-      local d = differ_file(dx, dy, rel, rel, nil, nil)
-      if d ~= nil then return d end
-    end
-  end
-  return nil
-end
-
--- The builtin families, most specific first: the area a stdout difference
--- is laid at when nothing else names one.
-const FAMILIES = {
-  {name = "the host: programs and jobs", calls = {"run(", "must(", "job_start(", "job_wait(", "job_alive(", "job_stop(", "procs(", "report_run("}},
-  {name = "the host: git", calls = {"git_"}},
-  {name = "the host: Zig, Roc and Go trees", calls = {"zig_", "roc_tree(", "go_tree(", "shale_tokens("}},
-  {name = "builtins: json", calls = {"json_read(", "json_write("}},
-  {name = "builtins: regex", calls = {"re_find(", "re_match(", "re_replace(", "re_find_all(", "re_lines(", "regex ="}},
-  {name = "builtins: store", calls = {"edit(", "replace(", "create(", "append(", "remove(", "mkdir(", "copy(", "read(", "grep(", "glob(", "walk(", "walk_all(", "stat(", "exists(", "count_lines(", "read_lines(", "grep_tree("}},
-  {name = "builtins: format", calls = {"table(", "pad(", "human(", "date(", "seconds("}},
-  {name = "builtins: text", calls = {"split(", "sub(", "find(", "trim(", "join(", "words(", "lines(", "substitute(", "upper(", "lower(", "like(", "between(", "rep("}},
-  {name = "builtins: lists and maps", calls = {"sort(", "push(", "pop(", "keys(", "take(", "last(", "same(", "reverse(", "unique("}},
-}
-
--- The area most likely responsible for a failure, from the class of the
--- stop that differs, else from what the input calls.
-function area_of(inp, d, text)
-  if inp.source == "cli" then return "the CLI" end
-  for v in {d.a, d.b} do
-    local m = re_find(v, "── stopped at [^ ]*: (\\w+)")
-    if m ~= nil then
-      local c = m.group
-      if c == "syntax" or c == "refused" or c == "name" then return "the lexer and parser (" .. c .. ")" end
-      if c == "type" or c == "index" or c == "arithmetic" then return "the VM (" .. c .. ")" end
-      if c == "budget" then return "the VM (budgets)" end
-      if c == "host" then return "the host" end
-      return "builtins (a stop, " .. c .. ")"
-    end
-    if starts_with(v, "shale:") then return "the CLI" end
-  end
-  if starts_with(d.what, "used") then return "the VM (accounting: the used line)" end
-  if starts_with(d.what, "exit") then return "the CLI (the exit)" end
-  if starts_with(d.what, "file") then return "builtins: store (the files written)" end
-  if starts_with(d.what, "left") then return "the host: programs and jobs" end
-  for f in FAMILIES do
-    for call in f.calls do
-      if contains(text, call) then return f.name end
-    end
-  end
-  return "the VM (output)"
-end
-
--- Whether an input observes the arena's layouts: its oracle stops on the
+-- Whether an input observes the arena's layouts: its frozen run stops on the
 -- arena budget (`stop`), or on the kept or the machine budget (`kept`, the
 -- budget's name, else ""), whose exact step hangs on how big a value is, or
 -- its source reads `arena_bytes` (from `budget()`) outside a comment, a
 -- `-- budget:` line among them (`reads`). Such an input is judged by class.
--- `d` is the oracle's run of it, of `nsteps` steps.
+-- `d` is the freeze's run of it, of `nsteps` steps.
 function layout_observer(d, nsteps, text)
   local stop = false
   local kept = ""
@@ -766,19 +598,10 @@ function layout_observer(d, nsteps, text)
   return {stop = stop, kept = kept, reads = reads}
 end
 
--- Whether the oracle's output holds `lit`.
-function oracle_holds(cfg, inp, lit)
-  local d = side_dir(cfg, inp.id, "old_a")
-  for k = 1, #inp.steps do
-    if contains(read(d .. "/" .. k .. ".out"), lit) or contains(read(d .. "/" .. k .. ".err"), lit) then return true end
-  end
-  return false
-end
-
 -- ── the run ──
 
 function install(from, cfg)
-  if not exists(from) then fail("differ: no binary at " .. from) end
+  if not exists(from) then fail("golden: no binary at " .. from) end
   must(run({"cp", real(from), cfg.bin_real}, {timeout_ms = 60000, tail = 5}))
 end
 
@@ -796,17 +619,6 @@ function mounts_file(cfg, f, lines)
   return real(f)
 end
 
--- The mounts file of each step that names its own (`mount_lines`), written
--- under `cfg.inputs` as `<id>.mounts` and kept as the step's `mounts_file`.
-function mounts_files(cfg, inputs)
-  for inp in inputs do
-    for step in inp.steps do
-      if has_key(step, "mount_lines") then step.mounts_file = mounts_file(cfg, cfg.inputs .. "/" .. inp.id .. ".mounts", step.mount_lines) end
-    end
-  end
-  return nil
-end
-
 -- `base` padded: a folder below it whose real path is WORK_PATH_BYTES
 -- long, named by `p`s (folders of 63 when one name would pass the store's
 -- 96), so where the base is on a box moves no step count. No symbolic link:
@@ -815,7 +627,7 @@ function padded_base(base)
   mkdir(base)
   local prefix = real(base)
   local left = WORK_PATH_BYTES - #prefix
-  if left < 2 then fail("differ: the base " .. base .. " is " .. prefix .. ", " .. #prefix .. " bytes: the run's folder is padded to " .. WORK_PATH_BYTES .. " bytes (WORK_PATH_BYTES, tools/differ/lib.shale), so a base's real path is at most " .. (WORK_PATH_BYTES - 2)) end
+  if left < 2 then fail("golden: the base " .. base .. " is " .. prefix .. ", " .. #prefix .. " bytes: the run's folder is padded to " .. WORK_PATH_BYTES .. " bytes (WORK_PATH_BYTES, tests/harness/lib.shale), so a base's real path is at most " .. (WORK_PATH_BYTES - 2)) end
   local p = base
   while left > 65 do
     p = p .. "/" .. rep("p", 63)
@@ -823,17 +635,17 @@ function padded_base(base)
   end
   p = p .. "/" .. rep("p", left - 1)
   mkdir(p)
-  if #real(p) ~= WORK_PATH_BYTES then fail("differ: the padded base " .. real(p) .. " is " .. #real(p) .. " bytes, not " .. WORK_PATH_BYTES) end
+  if #real(p) ~= WORK_PATH_BYTES then fail("golden: the padded base " .. real(p) .. " is " .. #real(p) .. " bytes, not " .. WORK_PATH_BYTES) end
   return p
 end
 
 -- The run's folders and environment under `base`, as every run shares them
--- (the differ's header, "Each input runs three times"): the binary's one
--- path, the cookbook copied from `cookbook_from` (the checkout's
--- `cookbook`), git's pinned identity, the
--- mounts file and the pinned environment. `check` runs every step as
--- `--check`.
-function harness(base, cookbook_from, check)
+-- (tests/harness/README.md, "A run"): the binary's one path, the cookbook
+-- copied from `cookbook_from` (the checkout's `cookbook`), git's pinned
+-- identity, the mounts file and the pinned environment. The identity's
+-- name and address are in every commit a case makes, so the goldens' files
+-- hold them: changing them refreezes every case that commits.
+function harness(base, cookbook_from)
   local cfg = {base = base, work = base .. "/work", keep = base .. "/keep", inputs = base .. "/inputs", bin = base .. "/bin", cap = base .. "/cap", case = base .. "/case"}
   mkdir(cfg.bin)
   mkdir(cfg.cap)
@@ -850,7 +662,6 @@ function harness(base, cookbook_from, check)
   replace_or_create(base .. "/mounts", cfg.mounts)
   replace_or_create(cfg.cap .. "/stdin", "")
   cfg.mounts_real = real(base .. "/mounts")
-  cfg.check = check
   cfg.bin_real = real(cfg.bin) .. "/shale"
   cfg.timeout_ms = 300000
   cfg.hashes = {}
@@ -860,7 +671,7 @@ function harness(base, cookbook_from, check)
     PATH = real(cfg.bin) .. ":/usr/local/bin:/usr/bin:/bin", TZ = "UTC", LC_ALL = "C",
     GIT_CEILING_DIRECTORIES = cfg.base_real, GIT_CONFIG_NOSYSTEM = "1", GIT_CONFIG_GLOBAL = real(base .. "/gitconfig"),
     GIT_AUTHOR_DATE = PINNED_GIT_DATE, GIT_COMMITTER_DATE = PINNED_GIT_DATE,
-    DIFFER_IN = real(cfg.cap .. "/stdin"), DIFFER_OUT = "", DIFFER_ERR = "",
+    GOLDEN_IN = real(cfg.cap .. "/stdin"), GOLDEN_OUT = "", GOLDEN_ERR = "",
   }
   return cfg
 end
@@ -877,7 +688,7 @@ end
 -- own names, a step's stdin as `stdin-K.txt`), `case.json` (its steps'
 -- argv, `{case}/<name>` for a file of its own, the stdin's file and the
 -- step's own mounts; the `fresh_dir` prefixes its source passes; how it is
--- judged) and `expected/`, the oracle's run as `masked_side` gives it. A
+-- judged) and `expected/`, the frozen run as `masked_side` gives it. A
 -- case runs from one folder, `cfg.case`, so the paths its output names are
 -- the same in every run.
 
@@ -889,7 +700,7 @@ function portable(cfg, s)
   return substitute(out, cfg.tools_real, "{tools}", {missing_ok = true})
 end
 
--- A stream's text as the differ compares it: `normal_lines` joined, its
+-- A stream's text as a case's run is compared: `normal_lines` joined, its
 -- final newline kept.
 function normal_text(text, judge)
   local out = join(normal_lines(text, judge), "\n")
@@ -909,7 +720,7 @@ function sha256(cfg, text)
 end
 
 -- The files a run left, as one text: the manifest's lines masked as the
--- differ masks them (sorted again by the masked line), then each regular
+-- run's masks have them (sorted again by the masked line), then each regular
 -- file's SHA-256 after its line, its bytes masked (a git index by what it
 -- stages). A file's size is its masked bytes' and a folder's is `-`: a
 -- folder's size is the filesystem's, and a file that names the base would
@@ -944,7 +755,7 @@ end
 
 -- One run under `d` as the goldens hold it: `{name, text}` for its endings
 -- (`meta`), each step's stdout and stderr (`K.out`, `K.err`) and its files
--- (`files`), each masked as the differ masks them and `portable`.
+-- (`files`), each masked and `portable`.
 function masked_side(cfg, d, nsteps, prefixes, judge)
   local fm = fresh_map(prefixes)
   local out = {{name = "meta", text = read(d .. "/meta")}}
@@ -960,7 +771,7 @@ end
 
 -- How two `masked_side`s differ, or nil: the first file that does and its
 -- first differing line.
-function differ_masked(want, got)
+function masked_diff(want, got)
   for i = 1, #want do
     local d = first_diff(want[i].text, got[i].text, EXACT)
     if d ~= nil then return {what = want[i].name, where = "line " .. d.line, a = d.a, b = d.b} end
@@ -1012,7 +823,7 @@ end
 -- `zig-tests-script-interp_test-192`).
 function case_id(inp)
   local o = inp.origin
-  for pre in {"^src/", "^tools/differ/(?:stops|cli|store)/", "^cookbook/", "^docs/", "^web/lessons\\.js: lessons "} do o = re_replace(o, pre, "") end
+  for pre in {"^src/", "^tests/inputs/(?:stops|cli|store)/", "^cookbook/", "^docs/", "^web/lessons\\.js: lessons "} do o = re_replace(o, pre, "") end
   o = re_replace(o, "\\.(?:zig|shale|md)\\b", "")
   o = re_replace(o, "[^A-Za-z0-9_]+", "-")
   o = re_replace(re_replace(o, "^-+", ""), "-+$", "")

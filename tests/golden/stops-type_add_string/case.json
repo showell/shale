@@ -1,1 +1,1 @@
-{"id":"stops-type_add_string","source":"stops","origin":"tools/differ/stops/type_add_string.shale","files":["type_add_string.shale"],"steps":[{"argv":["{case}/type_add_string.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}
+{"id":"stops-type_add_string","source":"stops","origin":"tests/inputs/stops/type_add_string.shale","files":["type_add_string.shale"],"steps":[{"argv":["{case}/type_add_string.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

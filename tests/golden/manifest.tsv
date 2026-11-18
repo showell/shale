@@ -1,4 +1,4 @@
-# the golden cases (tools/differ/golden_freeze.shale): id, source, origin, steps, judged by class (arena stop, kept or machine stop, reads arena_bytes)
+# the golden cases (tests/harness/freeze.shale): id, source, origin, steps, judged by class (arena stop, kept or machine stop, reads arena_bytes)
 zig-tests-script-agent_test-74	zig-tests	src/script/agent_test.zig:74	1	
 zig-tests-script-agent_test-75	zig-tests	src/script/agent_test.zig:75	1	
 zig-tests-script-agent_test-76	zig-tests	src/script/agent_test.zig:76	1	
@@ -957,173 +957,173 @@ lessons-1-12	lessons	web/lessons.js: lessons 1-12	23
 lessons-1-13	lessons	web/lessons.js: lessons 1-13	25	
 lessons-1-14	lessons	web/lessons.js: lessons 1-14	27	
 lessons-1-15	lessons	web/lessons.js: lessons 1-15	30	
-stops-argument_absolute_path	stops	tools/differ/stops/argument_absolute_path.shale	1	
-stops-argument_call_count	stops	tools/differ/stops/argument_call_count.shale	1	
-stops-argument_optional_count	stops	tools/differ/stops/argument_optional_count.shale	1	
-stops-argument_run_no_timeout	stops	tools/differ/stops/argument_run_no_timeout.shale	1	
-stops-argument_unread_value	stops	tools/differ/stops/argument_unread_value.shale	1	
-stops-argument_use_absolute	stops	tools/differ/stops/argument_use_absolute.shale	1	
-stops-argument_wrong_count	stops	tools/differ/stops/argument_wrong_count.shale	1	
-stops-arithmetic_divide_zero	stops	tools/differ/stops/arithmetic_divide_zero.shale	1	
-stops-arithmetic_overflow	stops	tools/differ/stops/arithmetic_overflow.shale	1	
-stops-budget_arena	stops	tools/differ/stops/budget_arena.shale	1	stop
-stops-budget_arena_creates	stops	tools/differ/stops/budget_arena_creates.shale	1	
-stops-budget_arena_job_poll	stops	tools/differ/stops/budget_arena_job_poll.shale	1	
-stops-budget_call_depth	stops	tools/differ/stops/budget_call_depth.shale	1	
-stops-budget_changes	stops	tools/differ/stops/budget_changes.shale	1	
-stops-budget_nesting	stops	tools/differ/stops/budget_nesting.shale	1	
-stops-budget_output	stops	tools/differ/stops/budget_output.shale	1	
-stops-budget_programs	stops	tools/differ/stops/budget_programs.shale	1	
-stops-budget_reads	stops	tools/differ/stops/budget_reads.shale	1	
-stops-budget_steps	stops	tools/differ/stops/budget_steps.shale	1	
-stops-fail_must	stops	tools/differ/stops/fail_must.shale	1	
-stops-fail_own	stops	tools/differ/stops/fail_own.shale	1	
-stops-host_no_program	stops	tools/differ/stops/host_no_program.shale	1	
-stops-index_key_twice	stops	tools/differ/stops/index_key_twice.shale	1	
-stops-index_list_range	stops	tools/differ/stops/index_list_range.shale	1	
-stops-index_missing_key	stops	tools/differ/stops/index_missing_key.shale	1	
-stops-name_attempt_missing	stops	tools/differ/stops/name_attempt_missing.shale	1	
-stops-name_const_assigned	stops	tools/differ/stops/name_const_assigned.shale	1	
-stops-name_function_below	stops	tools/differ/stops/name_function_below.shale	1	
-stops-name_local_twice	stops	tools/differ/stops/name_local_twice.shale	1	
-stops-name_script_local_assigned_again	stops	tools/differ/stops/name_script_local_assigned_again.shale	1	
-stops-name_script_local_in_function	stops	tools/differ/stops/name_script_local_in_function.shale	1	
-stops-name_undeclared	stops	tools/differ/stops/name_undeclared.shale	1	
-stops-refused_attributes	stops	tools/differ/stops/refused_attributes.shale	1	
-stops-refused_bitwise	stops	tools/differ/stops/refused_bitwise.shale	1	
-stops-refused_call_without_parens	stops	tools/differ/stops/refused_call_without_parens.shale	1	
-stops-refused_escape_decimal	stops	tools/differ/stops/refused_escape_decimal.shale	1	
-stops-refused_float_division	stops	tools/differ/stops/refused_float_division.shale	1	
-stops-refused_function_value	stops	tools/differ/stops/refused_function_value.shale	1	
-stops-refused_goto	stops	tools/differ/stops/refused_goto.shale	1	
-stops-refused_hex	stops	tools/differ/stops/refused_hex.shale	1	
-stops-refused_local_function	stops	tools/differ/stops/refused_local_function.shale	1	
-stops-refused_long_string	stops	tools/differ/stops/refused_long_string.shale	1	
-stops-refused_lua_library	stops	tools/differ/stops/refused_lua_library.shale	1	
-stops-refused_method_call	stops	tools/differ/stops/refused_method_call.shale	1	
-stops-refused_multiple_assignment	stops	tools/differ/stops/refused_multiple_assignment.shale	1	
-stops-refused_run_shell	stops	tools/differ/stops/refused_run_shell.shale	1	
-stops-refused_use_in_function	stops	tools/differ/stops/refused_use_in_function.shale	1	
-stops-store_create_twice	stops	tools/differ/stops/store_create_twice.shale	1	
-stops-store_dotdot	stops	tools/differ/stops/store_dotdot.shale	1	
-stops-store_missing_file	stops	tools/differ/stops/store_missing_file.shale	1	
-stops-store_use_missing	stops	tools/differ/stops/store_use_missing.shale	1	
-stops-syntax_after_use	stops	tools/differ/stops/syntax_after_use.shale	1	
-stops-syntax_bad_token	stops	tools/differ/stops/syntax_bad_token.shale	1	
-stops-syntax_break_outside	stops	tools/differ/stops/syntax_break_outside.shale	1	
-stops-syntax_end_unopened	stops	tools/differ/stops/syntax_end_unopened.shale	1	
-stops-syntax_integer_too_big	stops	tools/differ/stops/syntax_integer_too_big.shale	1	
-stops-syntax_long_comment_unclosed	stops	tools/differ/stops/syntax_long_comment_unclosed.shale	1	
-stops-syntax_long_string_closed_early	stops	tools/differ/stops/syntax_long_string_closed_early.shale	1	
-stops-syntax_number_into_name	stops	tools/differ/stops/syntax_number_into_name.shale	1	
-stops-syntax_optional_first	stops	tools/differ/stops/syntax_optional_first.shale	1	
-stops-syntax_return_not_last	stops	tools/differ/stops/syntax_return_not_last.shale	1	
-stops-syntax_stray_byte	stops	tools/differ/stops/syntax_stray_byte.shale	1	
-stops-syntax_string_unclosed	stops	tools/differ/stops/syntax_string_unclosed.shale	1	
-stops-syntax_unclosed	stops	tools/differ/stops/syntax_unclosed.shale	1	
-stops-type_add_string	stops	tools/differ/stops/type_add_string.shale	1	
-stops-type_index_number	stops	tools/differ/stops/type_index_number.shale	1	
-stops-type_table_mixed	stops	tools/differ/stops/type_table_mixed.shale	1	
-cli-arg_integer	cli	tools/differ/cli/arg_integer.shale	1	
-cli-arg_not_integer	cli	tools/differ/cli/arg_not_integer.shale	1	
-cli-args_stdin	cli	tools/differ/cli/args_stdin.shale	1	
-cli-budget_flag	cli	tools/differ/cli/budget_flag.shale	1	
-cli-budget_flag_unknown	cli	tools/differ/cli/budget_flag_unknown.shale	1	
-cli-budget_half	cli	tools/differ/cli/budget_half.shale	1	
-cli-budget_header	cli	tools/differ/cli/budget_header.shale	1	
-cli-budget_header_late	cli	tools/differ/cli/budget_header_late.shale	1	
-cli-dash_e	cli	tools/differ/cli/dash_e.shale	1	
-cli-exit_codes	cli	tools/differ/cli/exit_codes.shale	1	
-cli-help	cli	tools/differ/cli/help.shale	1	
-cli-missing_mount_script	cli	tools/differ/cli/missing_mount_script.shale	1	
-cli-missing_script	cli	tools/differ/cli/missing_script.shale	1	
-cli-mount_script	cli	tools/differ/cli/mount_script.shale	1	
-cli-now_pinned	cli	tools/differ/cli/now_pinned.shale	1	
-cli-quiet_edit	cli	tools/differ/cli/quiet_edit.shale	1	
-cli-script_on_stdin	cli	tools/differ/cli/script_on_stdin.shale	1	
-cli-undo_on_stop	cli	tools/differ/cli/undo_on_stop.shale	1	
-cli-unknown_flag	cli	tools/differ/cli/unknown_flag.shale	1	
-cli-unread_arg	cli	tools/differ/cli/unread_arg.shale	1	
-cli-verbose_edit	cli	tools/differ/cli/verbose_edit.shale	1	
-cli-version	cli	tools/differ/cli/version.shale	1	
-store-call_bytes	store	tools/differ/store/call_bytes.shale []	2	
-store-call_bytes-budget-call_bytes-2	store	tools/differ/store/call_bytes.shale [--budget call_bytes=2]	2	
-store-call_bytes-budget-call_bytes-3	store	tools/differ/store/call_bytes.shale [--budget call_bytes=3]	2	
-store-call_bytes-budget-call_bytes-5	store	tools/differ/store/call_bytes.shale [--budget call_bytes=5]	2	
-store-call_bytes-budget-call_bytes-6	store	tools/differ/store/call_bytes.shale [--budget call_bytes=6]	2	
-store-call_bytes-budget-call_bytes-39	store	tools/differ/store/call_bytes.shale [--budget call_bytes=39]	2	
-store-call_bytes-budget-call_bytes-40	store	tools/differ/store/call_bytes.shale [--budget call_bytes=40]	2	
-store-call_bytes-budget-call_bytes-47	store	tools/differ/store/call_bytes.shale [--budget call_bytes=47]	2	
-store-call_bytes-budget-call_bytes-48	store	tools/differ/store/call_bytes.shale [--budget call_bytes=48]	2	
-store-call_bytes-budget-call_bytes-99	store	tools/differ/store/call_bytes.shale [--budget call_bytes=99]	2	
-store-call_bytes-budget-call_bytes-100	store	tools/differ/store/call_bytes.shale [--budget call_bytes=100]	2	
-store-edit_diffs	store	tools/differ/store/edit_diffs.shale	2	
-store-edit_refusals	store	tools/differ/store/edit_refusals.shale	2	
-store-edits_write_batches	store	tools/differ/store/edits_write_batches.shale	2	
-store-links	store	tools/differ/store/links.shale	2	
-store-mount_read_only	store	tools/differ/store/mount_read_only.shale	2	
-store-mount_walk	store	tools/differ/store/mount_walk.shale	2	
-store-read_edges	store	tools/differ/store/read_edges.shale	2	
-store-secrets_planted	store	tools/differ/store/secrets_planted.shale	2	
-store-store_budgets	store	tools/differ/store/store_budgets.shale []	2	
-store-store_budgets-budget-reads-1	store	tools/differ/store/store_budgets.shale [--budget reads=1]	2	
-store-store_budgets-budget-reads-2	store	tools/differ/store/store_budgets.shale [--budget reads=2]	2	
-store-store_budgets-budget-reads-3	store	tools/differ/store/store_budgets.shale [--budget reads=3]	2	
-store-store_budgets-budget-reads-4	store	tools/differ/store/store_budgets.shale [--budget reads=4]	2	
-store-store_budgets-budget-reads-5	store	tools/differ/store/store_budgets.shale [--budget reads=5]	2	
-store-store_budgets-budget-reads-6	store	tools/differ/store/store_budgets.shale [--budget reads=6]	2	
-store-store_budgets-budget-reads-7	store	tools/differ/store/store_budgets.shale [--budget reads=7]	2	
-store-store_budgets-budget-reads-8	store	tools/differ/store/store_budgets.shale [--budget reads=8]	2	
-store-store_budgets-budget-reads-9	store	tools/differ/store/store_budgets.shale [--budget reads=9]	2	
-store-store_budgets-budget-reads-10	store	tools/differ/store/store_budgets.shale [--budget reads=10]	2	
-store-store_budgets-budget-reads-11	store	tools/differ/store/store_budgets.shale [--budget reads=11]	2	
-store-store_budgets-budget-reads-12	store	tools/differ/store/store_budgets.shale [--budget reads=12]	2	
-store-store_budgets-budget-reads-13	store	tools/differ/store/store_budgets.shale [--budget reads=13]	2	
-store-store_budgets-budget-reads-14	store	tools/differ/store/store_budgets.shale [--budget reads=14]	2	
-store-store_budgets-budget-reads-15	store	tools/differ/store/store_budgets.shale [--budget reads=15]	2	
-store-store_budgets-budget-reads-16	store	tools/differ/store/store_budgets.shale [--budget reads=16]	2	
-store-store_budgets-budget-reads-17	store	tools/differ/store/store_budgets.shale [--budget reads=17]	2	
-store-store_budgets-budget-reads-18	store	tools/differ/store/store_budgets.shale [--budget reads=18]	2	
-store-store_budgets-budget-reads-19	store	tools/differ/store/store_budgets.shale [--budget reads=19]	2	
-store-store_budgets-budget-reads-20	store	tools/differ/store/store_budgets.shale [--budget reads=20]	2	
-store-store_budgets-budget-reads-21	store	tools/differ/store/store_budgets.shale [--budget reads=21]	2	
-store-store_budgets-budget-reads-22	store	tools/differ/store/store_budgets.shale [--budget reads=22]	2	
-store-store_budgets-budget-reads-23	store	tools/differ/store/store_budgets.shale [--budget reads=23]	2	
-store-store_budgets-budget-reads-24	store	tools/differ/store/store_budgets.shale [--budget reads=24]	2	
-store-store_budgets-budget-reads-25	store	tools/differ/store/store_budgets.shale [--budget reads=25]	2	
-store-store_budgets-budget-reads-26	store	tools/differ/store/store_budgets.shale [--budget reads=26]	2	
-store-store_budgets-budget-reads-27	store	tools/differ/store/store_budgets.shale [--budget reads=27]	2	
-store-store_budgets-budget-changes-1	store	tools/differ/store/store_budgets.shale [--budget changes=1]	2	
-store-store_budgets-budget-changes-2	store	tools/differ/store/store_budgets.shale [--budget changes=2]	2	
-store-store_budgets-budget-changes-3	store	tools/differ/store/store_budgets.shale [--budget changes=3]	2	
-store-store_budgets-budget-changes-4	store	tools/differ/store/store_budgets.shale [--budget changes=4]	2	
-store-store_budgets-budget-changes-5	store	tools/differ/store/store_budgets.shale [--budget changes=5]	2	
-store-store_budgets-budget-changes-6	store	tools/differ/store/store_budgets.shale [--budget changes=6]	2	
-store-store_budgets-budget-changes-7	store	tools/differ/store/store_budgets.shale [--budget changes=7]	2	
-store-store_budgets-budget-steps-25	store	tools/differ/store/store_budgets.shale [--budget steps=25]	2	
-store-store_budgets-budget-steps-50	store	tools/differ/store/store_budgets.shale [--budget steps=50]	2	
-store-store_budgets-budget-steps-75	store	tools/differ/store/store_budgets.shale [--budget steps=75]	2	
-store-store_budgets-budget-steps-100	store	tools/differ/store/store_budgets.shale [--budget steps=100]	2	
-store-store_budgets-budget-steps-125	store	tools/differ/store/store_budgets.shale [--budget steps=125]	2	
-store-store_budgets-budget-steps-150	store	tools/differ/store/store_budgets.shale [--budget steps=150]	2	
-store-store_budgets-budget-steps-175	store	tools/differ/store/store_budgets.shale [--budget steps=175]	2	
-store-store_budgets-budget-steps-200	store	tools/differ/store/store_budgets.shale [--budget steps=200]	2	
-store-store_budgets-budget-steps-225	store	tools/differ/store/store_budgets.shale [--budget steps=225]	2	
-store-store_budgets-budget-steps-250	store	tools/differ/store/store_budgets.shale [--budget steps=250]	2	
-store-store_budgets-budget-steps-275	store	tools/differ/store/store_budgets.shale [--budget steps=275]	2	
-store-store_budgets-budget-steps-300	store	tools/differ/store/store_budgets.shale [--budget steps=300]	2	
-store-store_budgets-budget-steps-325	store	tools/differ/store/store_budgets.shale [--budget steps=325]	2	
-store-store_budgets-budget-steps-350	store	tools/differ/store/store_budgets.shale [--budget steps=350]	2	
-store-store_budgets-budget-steps-375	store	tools/differ/store/store_budgets.shale [--budget steps=375]	2	
-store-store_budgets-budget-steps-400	store	tools/differ/store/store_budgets.shale [--budget steps=400]	2	
-store-store_budgets-budget-steps-425	store	tools/differ/store/store_budgets.shale [--budget steps=425]	2	
-store-store_budgets-budget-steps-450	store	tools/differ/store/store_budgets.shale [--budget steps=450]	2	
-store-store_budgets-budget-steps-475	store	tools/differ/store/store_budgets.shale [--budget steps=475]	2	
-store-store_budgets-budget-steps-500	store	tools/differ/store/store_budgets.shale [--budget steps=500]	2	
-store-store_budgets-budget-steps-525	store	tools/differ/store/store_budgets.shale [--budget steps=525]	2	
-store-store_budgets-budget-steps-550	store	tools/differ/store/store_budgets.shale [--budget steps=550]	2	
-store-store_budgets-budget-steps-575	store	tools/differ/store/store_budgets.shale [--budget steps=575]	2	
-store-store_budgets-budget-steps-598	store	tools/differ/store/store_budgets.shale [--budget steps=598]	2	
-store-store_budgets-budget-steps-599	store	tools/differ/store/store_budgets.shale [--budget steps=599]	2	
-store-walk_options	store	tools/differ/store/walk_options.shale	2	
-store-walk_resume	store	tools/differ/store/walk_resume.shale	2	
+stops-argument_absolute_path	stops	tests/inputs/stops/argument_absolute_path.shale	1	
+stops-argument_call_count	stops	tests/inputs/stops/argument_call_count.shale	1	
+stops-argument_optional_count	stops	tests/inputs/stops/argument_optional_count.shale	1	
+stops-argument_run_no_timeout	stops	tests/inputs/stops/argument_run_no_timeout.shale	1	
+stops-argument_unread_value	stops	tests/inputs/stops/argument_unread_value.shale	1	
+stops-argument_use_absolute	stops	tests/inputs/stops/argument_use_absolute.shale	1	
+stops-argument_wrong_count	stops	tests/inputs/stops/argument_wrong_count.shale	1	
+stops-arithmetic_divide_zero	stops	tests/inputs/stops/arithmetic_divide_zero.shale	1	
+stops-arithmetic_overflow	stops	tests/inputs/stops/arithmetic_overflow.shale	1	
+stops-budget_arena	stops	tests/inputs/stops/budget_arena.shale	1	stop
+stops-budget_arena_creates	stops	tests/inputs/stops/budget_arena_creates.shale	1	
+stops-budget_arena_job_poll	stops	tests/inputs/stops/budget_arena_job_poll.shale	1	
+stops-budget_call_depth	stops	tests/inputs/stops/budget_call_depth.shale	1	
+stops-budget_changes	stops	tests/inputs/stops/budget_changes.shale	1	
+stops-budget_nesting	stops	tests/inputs/stops/budget_nesting.shale	1	
+stops-budget_output	stops	tests/inputs/stops/budget_output.shale	1	
+stops-budget_programs	stops	tests/inputs/stops/budget_programs.shale	1	
+stops-budget_reads	stops	tests/inputs/stops/budget_reads.shale	1	
+stops-budget_steps	stops	tests/inputs/stops/budget_steps.shale	1	
+stops-fail_must	stops	tests/inputs/stops/fail_must.shale	1	
+stops-fail_own	stops	tests/inputs/stops/fail_own.shale	1	
+stops-host_no_program	stops	tests/inputs/stops/host_no_program.shale	1	
+stops-index_key_twice	stops	tests/inputs/stops/index_key_twice.shale	1	
+stops-index_list_range	stops	tests/inputs/stops/index_list_range.shale	1	
+stops-index_missing_key	stops	tests/inputs/stops/index_missing_key.shale	1	
+stops-name_attempt_missing	stops	tests/inputs/stops/name_attempt_missing.shale	1	
+stops-name_const_assigned	stops	tests/inputs/stops/name_const_assigned.shale	1	
+stops-name_function_below	stops	tests/inputs/stops/name_function_below.shale	1	
+stops-name_local_twice	stops	tests/inputs/stops/name_local_twice.shale	1	
+stops-name_script_local_assigned_again	stops	tests/inputs/stops/name_script_local_assigned_again.shale	1	
+stops-name_script_local_in_function	stops	tests/inputs/stops/name_script_local_in_function.shale	1	
+stops-name_undeclared	stops	tests/inputs/stops/name_undeclared.shale	1	
+stops-refused_attributes	stops	tests/inputs/stops/refused_attributes.shale	1	
+stops-refused_bitwise	stops	tests/inputs/stops/refused_bitwise.shale	1	
+stops-refused_call_without_parens	stops	tests/inputs/stops/refused_call_without_parens.shale	1	
+stops-refused_escape_decimal	stops	tests/inputs/stops/refused_escape_decimal.shale	1	
+stops-refused_float_division	stops	tests/inputs/stops/refused_float_division.shale	1	
+stops-refused_function_value	stops	tests/inputs/stops/refused_function_value.shale	1	
+stops-refused_goto	stops	tests/inputs/stops/refused_goto.shale	1	
+stops-refused_hex	stops	tests/inputs/stops/refused_hex.shale	1	
+stops-refused_local_function	stops	tests/inputs/stops/refused_local_function.shale	1	
+stops-refused_long_string	stops	tests/inputs/stops/refused_long_string.shale	1	
+stops-refused_lua_library	stops	tests/inputs/stops/refused_lua_library.shale	1	
+stops-refused_method_call	stops	tests/inputs/stops/refused_method_call.shale	1	
+stops-refused_multiple_assignment	stops	tests/inputs/stops/refused_multiple_assignment.shale	1	
+stops-refused_run_shell	stops	tests/inputs/stops/refused_run_shell.shale	1	
+stops-refused_use_in_function	stops	tests/inputs/stops/refused_use_in_function.shale	1	
+stops-store_create_twice	stops	tests/inputs/stops/store_create_twice.shale	1	
+stops-store_dotdot	stops	tests/inputs/stops/store_dotdot.shale	1	
+stops-store_missing_file	stops	tests/inputs/stops/store_missing_file.shale	1	
+stops-store_use_missing	stops	tests/inputs/stops/store_use_missing.shale	1	
+stops-syntax_after_use	stops	tests/inputs/stops/syntax_after_use.shale	1	
+stops-syntax_bad_token	stops	tests/inputs/stops/syntax_bad_token.shale	1	
+stops-syntax_break_outside	stops	tests/inputs/stops/syntax_break_outside.shale	1	
+stops-syntax_end_unopened	stops	tests/inputs/stops/syntax_end_unopened.shale	1	
+stops-syntax_integer_too_big	stops	tests/inputs/stops/syntax_integer_too_big.shale	1	
+stops-syntax_long_comment_unclosed	stops	tests/inputs/stops/syntax_long_comment_unclosed.shale	1	
+stops-syntax_long_string_closed_early	stops	tests/inputs/stops/syntax_long_string_closed_early.shale	1	
+stops-syntax_number_into_name	stops	tests/inputs/stops/syntax_number_into_name.shale	1	
+stops-syntax_optional_first	stops	tests/inputs/stops/syntax_optional_first.shale	1	
+stops-syntax_return_not_last	stops	tests/inputs/stops/syntax_return_not_last.shale	1	
+stops-syntax_stray_byte	stops	tests/inputs/stops/syntax_stray_byte.shale	1	
+stops-syntax_string_unclosed	stops	tests/inputs/stops/syntax_string_unclosed.shale	1	
+stops-syntax_unclosed	stops	tests/inputs/stops/syntax_unclosed.shale	1	
+stops-type_add_string	stops	tests/inputs/stops/type_add_string.shale	1	
+stops-type_index_number	stops	tests/inputs/stops/type_index_number.shale	1	
+stops-type_table_mixed	stops	tests/inputs/stops/type_table_mixed.shale	1	
+cli-arg_integer	cli	tests/inputs/cli/arg_integer.shale	1	
+cli-arg_not_integer	cli	tests/inputs/cli/arg_not_integer.shale	1	
+cli-args_stdin	cli	tests/inputs/cli/args_stdin.shale	1	
+cli-budget_flag	cli	tests/inputs/cli/budget_flag.shale	1	
+cli-budget_flag_unknown	cli	tests/inputs/cli/budget_flag_unknown.shale	1	
+cli-budget_half	cli	tests/inputs/cli/budget_half.shale	1	
+cli-budget_header	cli	tests/inputs/cli/budget_header.shale	1	
+cli-budget_header_late	cli	tests/inputs/cli/budget_header_late.shale	1	
+cli-dash_e	cli	tests/inputs/cli/dash_e.shale	1	
+cli-exit_codes	cli	tests/inputs/cli/exit_codes.shale	1	
+cli-help	cli	tests/inputs/cli/help.shale	1	
+cli-missing_mount_script	cli	tests/inputs/cli/missing_mount_script.shale	1	
+cli-missing_script	cli	tests/inputs/cli/missing_script.shale	1	
+cli-mount_script	cli	tests/inputs/cli/mount_script.shale	1	
+cli-now_pinned	cli	tests/inputs/cli/now_pinned.shale	1	
+cli-quiet_edit	cli	tests/inputs/cli/quiet_edit.shale	1	
+cli-script_on_stdin	cli	tests/inputs/cli/script_on_stdin.shale	1	
+cli-undo_on_stop	cli	tests/inputs/cli/undo_on_stop.shale	1	
+cli-unknown_flag	cli	tests/inputs/cli/unknown_flag.shale	1	
+cli-unread_arg	cli	tests/inputs/cli/unread_arg.shale	1	
+cli-verbose_edit	cli	tests/inputs/cli/verbose_edit.shale	1	
+cli-version	cli	tests/inputs/cli/version.shale	1	
+store-call_bytes	store	tests/inputs/store/call_bytes.shale []	2	
+store-call_bytes-budget-call_bytes-2	store	tests/inputs/store/call_bytes.shale [--budget call_bytes=2]	2	
+store-call_bytes-budget-call_bytes-3	store	tests/inputs/store/call_bytes.shale [--budget call_bytes=3]	2	
+store-call_bytes-budget-call_bytes-5	store	tests/inputs/store/call_bytes.shale [--budget call_bytes=5]	2	
+store-call_bytes-budget-call_bytes-6	store	tests/inputs/store/call_bytes.shale [--budget call_bytes=6]	2	
+store-call_bytes-budget-call_bytes-39	store	tests/inputs/store/call_bytes.shale [--budget call_bytes=39]	2	
+store-call_bytes-budget-call_bytes-40	store	tests/inputs/store/call_bytes.shale [--budget call_bytes=40]	2	
+store-call_bytes-budget-call_bytes-47	store	tests/inputs/store/call_bytes.shale [--budget call_bytes=47]	2	
+store-call_bytes-budget-call_bytes-48	store	tests/inputs/store/call_bytes.shale [--budget call_bytes=48]	2	
+store-call_bytes-budget-call_bytes-99	store	tests/inputs/store/call_bytes.shale [--budget call_bytes=99]	2	
+store-call_bytes-budget-call_bytes-100	store	tests/inputs/store/call_bytes.shale [--budget call_bytes=100]	2	
+store-edit_diffs	store	tests/inputs/store/edit_diffs.shale	2	
+store-edit_refusals	store	tests/inputs/store/edit_refusals.shale	2	
+store-edits_write_batches	store	tests/inputs/store/edits_write_batches.shale	2	
+store-links	store	tests/inputs/store/links.shale	2	
+store-mount_read_only	store	tests/inputs/store/mount_read_only.shale	2	
+store-mount_walk	store	tests/inputs/store/mount_walk.shale	2	
+store-read_edges	store	tests/inputs/store/read_edges.shale	2	
+store-secrets_planted	store	tests/inputs/store/secrets_planted.shale	2	
+store-store_budgets	store	tests/inputs/store/store_budgets.shale []	2	
+store-store_budgets-budget-reads-1	store	tests/inputs/store/store_budgets.shale [--budget reads=1]	2	
+store-store_budgets-budget-reads-2	store	tests/inputs/store/store_budgets.shale [--budget reads=2]	2	
+store-store_budgets-budget-reads-3	store	tests/inputs/store/store_budgets.shale [--budget reads=3]	2	
+store-store_budgets-budget-reads-4	store	tests/inputs/store/store_budgets.shale [--budget reads=4]	2	
+store-store_budgets-budget-reads-5	store	tests/inputs/store/store_budgets.shale [--budget reads=5]	2	
+store-store_budgets-budget-reads-6	store	tests/inputs/store/store_budgets.shale [--budget reads=6]	2	
+store-store_budgets-budget-reads-7	store	tests/inputs/store/store_budgets.shale [--budget reads=7]	2	
+store-store_budgets-budget-reads-8	store	tests/inputs/store/store_budgets.shale [--budget reads=8]	2	
+store-store_budgets-budget-reads-9	store	tests/inputs/store/store_budgets.shale [--budget reads=9]	2	
+store-store_budgets-budget-reads-10	store	tests/inputs/store/store_budgets.shale [--budget reads=10]	2	
+store-store_budgets-budget-reads-11	store	tests/inputs/store/store_budgets.shale [--budget reads=11]	2	
+store-store_budgets-budget-reads-12	store	tests/inputs/store/store_budgets.shale [--budget reads=12]	2	
+store-store_budgets-budget-reads-13	store	tests/inputs/store/store_budgets.shale [--budget reads=13]	2	
+store-store_budgets-budget-reads-14	store	tests/inputs/store/store_budgets.shale [--budget reads=14]	2	
+store-store_budgets-budget-reads-15	store	tests/inputs/store/store_budgets.shale [--budget reads=15]	2	
+store-store_budgets-budget-reads-16	store	tests/inputs/store/store_budgets.shale [--budget reads=16]	2	
+store-store_budgets-budget-reads-17	store	tests/inputs/store/store_budgets.shale [--budget reads=17]	2	
+store-store_budgets-budget-reads-18	store	tests/inputs/store/store_budgets.shale [--budget reads=18]	2	
+store-store_budgets-budget-reads-19	store	tests/inputs/store/store_budgets.shale [--budget reads=19]	2	
+store-store_budgets-budget-reads-20	store	tests/inputs/store/store_budgets.shale [--budget reads=20]	2	
+store-store_budgets-budget-reads-21	store	tests/inputs/store/store_budgets.shale [--budget reads=21]	2	
+store-store_budgets-budget-reads-22	store	tests/inputs/store/store_budgets.shale [--budget reads=22]	2	
+store-store_budgets-budget-reads-23	store	tests/inputs/store/store_budgets.shale [--budget reads=23]	2	
+store-store_budgets-budget-reads-24	store	tests/inputs/store/store_budgets.shale [--budget reads=24]	2	
+store-store_budgets-budget-reads-25	store	tests/inputs/store/store_budgets.shale [--budget reads=25]	2	
+store-store_budgets-budget-reads-26	store	tests/inputs/store/store_budgets.shale [--budget reads=26]	2	
+store-store_budgets-budget-reads-27	store	tests/inputs/store/store_budgets.shale [--budget reads=27]	2	
+store-store_budgets-budget-changes-1	store	tests/inputs/store/store_budgets.shale [--budget changes=1]	2	
+store-store_budgets-budget-changes-2	store	tests/inputs/store/store_budgets.shale [--budget changes=2]	2	
+store-store_budgets-budget-changes-3	store	tests/inputs/store/store_budgets.shale [--budget changes=3]	2	
+store-store_budgets-budget-changes-4	store	tests/inputs/store/store_budgets.shale [--budget changes=4]	2	
+store-store_budgets-budget-changes-5	store	tests/inputs/store/store_budgets.shale [--budget changes=5]	2	
+store-store_budgets-budget-changes-6	store	tests/inputs/store/store_budgets.shale [--budget changes=6]	2	
+store-store_budgets-budget-changes-7	store	tests/inputs/store/store_budgets.shale [--budget changes=7]	2	
+store-store_budgets-budget-steps-25	store	tests/inputs/store/store_budgets.shale [--budget steps=25]	2	
+store-store_budgets-budget-steps-50	store	tests/inputs/store/store_budgets.shale [--budget steps=50]	2	
+store-store_budgets-budget-steps-75	store	tests/inputs/store/store_budgets.shale [--budget steps=75]	2	
+store-store_budgets-budget-steps-100	store	tests/inputs/store/store_budgets.shale [--budget steps=100]	2	
+store-store_budgets-budget-steps-125	store	tests/inputs/store/store_budgets.shale [--budget steps=125]	2	
+store-store_budgets-budget-steps-150	store	tests/inputs/store/store_budgets.shale [--budget steps=150]	2	
+store-store_budgets-budget-steps-175	store	tests/inputs/store/store_budgets.shale [--budget steps=175]	2	
+store-store_budgets-budget-steps-200	store	tests/inputs/store/store_budgets.shale [--budget steps=200]	2	
+store-store_budgets-budget-steps-225	store	tests/inputs/store/store_budgets.shale [--budget steps=225]	2	
+store-store_budgets-budget-steps-250	store	tests/inputs/store/store_budgets.shale [--budget steps=250]	2	
+store-store_budgets-budget-steps-275	store	tests/inputs/store/store_budgets.shale [--budget steps=275]	2	
+store-store_budgets-budget-steps-300	store	tests/inputs/store/store_budgets.shale [--budget steps=300]	2	
+store-store_budgets-budget-steps-325	store	tests/inputs/store/store_budgets.shale [--budget steps=325]	2	
+store-store_budgets-budget-steps-350	store	tests/inputs/store/store_budgets.shale [--budget steps=350]	2	
+store-store_budgets-budget-steps-375	store	tests/inputs/store/store_budgets.shale [--budget steps=375]	2	
+store-store_budgets-budget-steps-400	store	tests/inputs/store/store_budgets.shale [--budget steps=400]	2	
+store-store_budgets-budget-steps-425	store	tests/inputs/store/store_budgets.shale [--budget steps=425]	2	
+store-store_budgets-budget-steps-450	store	tests/inputs/store/store_budgets.shale [--budget steps=450]	2	
+store-store_budgets-budget-steps-475	store	tests/inputs/store/store_budgets.shale [--budget steps=475]	2	
+store-store_budgets-budget-steps-500	store	tests/inputs/store/store_budgets.shale [--budget steps=500]	2	
+store-store_budgets-budget-steps-525	store	tests/inputs/store/store_budgets.shale [--budget steps=525]	2	
+store-store_budgets-budget-steps-550	store	tests/inputs/store/store_budgets.shale [--budget steps=550]	2	
+store-store_budgets-budget-steps-575	store	tests/inputs/store/store_budgets.shale [--budget steps=575]	2	
+store-store_budgets-budget-steps-598	store	tests/inputs/store/store_budgets.shale [--budget steps=598]	2	
+store-store_budgets-budget-steps-599	store	tests/inputs/store/store_budgets.shale [--budget steps=599]	2	
+store-walk_options	store	tests/inputs/store/walk_options.shale	2	
+store-walk_resume	store	tests/inputs/store/walk_resume.shale	2	

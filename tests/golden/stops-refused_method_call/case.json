@@ -1,1 +1,1 @@
-{"id":"stops-refused_method_call","source":"stops","origin":"tools/differ/stops/refused_method_call.shale","files":["refused_method_call.shale"],"steps":[{"argv":["{case}/refused_method_call.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}
+{"id":"stops-refused_method_call","source":"stops","origin":"tests/inputs/stops/refused_method_call.shale","files":["refused_method_call.shale"],"steps":[{"argv":["{case}/refused_method_call.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

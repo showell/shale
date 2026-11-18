@@ -1,1 +1,1 @@
-{"id":"stops-store_create_twice","source":"stops","origin":"tools/differ/stops/store_create_twice.shale","files":["store_create_twice.shale"],"steps":[{"argv":["{case}/store_create_twice.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}
+{"id":"stops-store_create_twice","source":"stops","origin":"tests/inputs/stops/store_create_twice.shale","files":["store_create_twice.shale"],"steps":[{"argv":["{case}/store_create_twice.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

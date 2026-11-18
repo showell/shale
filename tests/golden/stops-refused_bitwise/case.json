@@ -1,1 +1,1 @@
-{"id":"stops-refused_bitwise","source":"stops","origin":"tools/differ/stops/refused_bitwise.shale","files":["refused_bitwise.shale"],"steps":[{"argv":["{case}/refused_bitwise.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}
+{"id":"stops-refused_bitwise","source":"stops","origin":"tests/inputs/stops/refused_bitwise.shale","files":["refused_bitwise.shale"],"steps":[{"argv":["{case}/refused_bitwise.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

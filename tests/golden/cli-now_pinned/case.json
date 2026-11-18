@@ -1,1 +1,1 @@
-{"id":"cli-now_pinned","source":"cli","origin":"tools/differ/cli/now_pinned.shale","files":["now_pinned.shale"],"steps":[{"argv":["{case}/now_pinned.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}
+{"id":"cli-now_pinned","source":"cli","origin":"tests/inputs/cli/now_pinned.shale","files":["now_pinned.shale"],"steps":[{"argv":["{case}/now_pinned.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

@@ -1,1 +1,1 @@
-{"id":"stops-argument_call_count","source":"stops","origin":"tools/differ/stops/argument_call_count.shale","files":["argument_call_count.shale"],"steps":[{"argv":["{case}/argument_call_count.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}
+{"id":"stops-argument_call_count","source":"stops","origin":"tests/inputs/stops/argument_call_count.shale","files":["argument_call_count.shale"],"steps":[{"argv":["{case}/argument_call_count.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

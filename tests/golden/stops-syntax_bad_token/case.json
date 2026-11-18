@@ -1,1 +1,1 @@
-{"id":"stops-syntax_bad_token","source":"stops","origin":"tools/differ/stops/syntax_bad_token.shale","files":["syntax_bad_token.shale"],"steps":[{"argv":["{case}/syntax_bad_token.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}
+{"id":"stops-syntax_bad_token","source":"stops","origin":"tests/inputs/stops/syntax_bad_token.shale","files":["syntax_bad_token.shale"],"steps":[{"argv":["{case}/syntax_bad_token.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

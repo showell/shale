@@ -1,1 +1,1 @@
-{"id":"stops-budget_arena","source":"stops","origin":"tools/differ/stops/budget_arena.shale","files":["budget_arena.shale"],"steps":[{"argv":["{case}/budget_arena.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":true,"digits":false},"arena":"stop"}
+{"id":"stops-budget_arena","source":"stops","origin":"tests/inputs/stops/budget_arena.shale","files":["budget_arena.shale"],"steps":[{"argv":["{case}/budget_arena.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":true,"digits":false},"arena":"stop"}

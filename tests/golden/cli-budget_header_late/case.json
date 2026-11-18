@@ -1,1 +1,1 @@
-{"id":"cli-budget_header_late","source":"cli","origin":"tools/differ/cli/budget_header_late.shale","files":["budget_header_late.shale"],"steps":[{"argv":["{case}/budget_header_late.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}
+{"id":"cli-budget_header_late","source":"cli","origin":"tests/inputs/cli/budget_header_late.shale","files":["budget_header_late.shale"],"steps":[{"argv":["{case}/budget_header_late.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

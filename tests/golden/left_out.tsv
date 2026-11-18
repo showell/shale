@@ -1,2 +1,2 @@
-# the inputs the differ collects that are not frozen: origin, why
+# the inputs the harness collects that are not frozen: origin, why
 src/shale_procs_test.zig:87	its stop's step count follows procs(), the box's process list, which moves between runs

@@ -1,1 +1,1 @@
-{"id":"cli-version","source":"cli","origin":"tools/differ/cli/version.shale","files":[],"steps":[{"argv":["--version"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}
+{"id":"cli-version","source":"cli","origin":"tests/inputs/cli/version.shale","files":[],"steps":[{"argv":["--version"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

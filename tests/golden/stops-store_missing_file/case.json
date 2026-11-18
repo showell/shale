@@ -1,1 +1,1 @@
-{"id":"stops-store_missing_file","source":"stops","origin":"tools/differ/stops/store_missing_file.shale","files":["store_missing_file.shale"],"steps":[{"argv":["{case}/store_missing_file.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}
+{"id":"stops-store_missing_file","source":"stops","origin":"tests/inputs/stops/store_missing_file.shale","files":["store_missing_file.shale"],"steps":[{"argv":["{case}/store_missing_file.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

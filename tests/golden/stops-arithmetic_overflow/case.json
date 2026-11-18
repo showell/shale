@@ -1,1 +1,1 @@
-{"id":"stops-arithmetic_overflow","source":"stops","origin":"tools/differ/stops/arithmetic_overflow.shale","files":["arithmetic_overflow.shale"],"steps":[{"argv":["{case}/arithmetic_overflow.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}
+{"id":"stops-arithmetic_overflow","source":"stops","origin":"tests/inputs/stops/arithmetic_overflow.shale","files":["arithmetic_overflow.shale"],"steps":[{"argv":["{case}/arithmetic_overflow.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}
