@@ -806,15 +806,13 @@ function case_steps(cfg, dir, c)
 end
 
 -- Golden runs with one base share its work folder: a second run with the
--- same base (`base=`, `default` unset) of a script whose path holds
--- `script` stops this one before it touches anything.
-function refuse_second_run(script, base, default)
+-- same base (`base=`, which tests/golden.shale always gives) of a script
+-- whose path holds `script` stops this one before it touches anything.
+function refuse_second_run(script, base)
   for p in procs() do
     if p.name == "shale" and contains(p.args, script) then
       local m = re_find(p.args, " base=([^ ]+)")
-      local theirs = default
-      if m ~= nil then theirs = m.group end
-      if theirs == base then fail("golden: another golden run is using " .. base .. ": wait for it, or give this one its own `base=` (pid " .. p.pid .. ": " .. p.args .. ")") end
+      if m ~= nil and m.group == base then fail("golden: another golden run is using " .. base .. ": wait for it, or give this one its own `base=` (pid " .. p.pid .. ": " .. p.args .. ")") end
     end
   end
   return nil

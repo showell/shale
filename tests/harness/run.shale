@@ -16,13 +16,14 @@
 use("harness:lib.shale")
 
 local bin = arg("bin", "c/out/release/shale")
-local base = arg("base", "build:golden")
+local base = arg("base", "")
+if base == "" then fail("golden: `base=` names the work folder: launch through tests/golden.shale, which gives this checkout's own") end
 local dir = arg("dir", "tests/golden")
 local only = arg("only", "")
 local keep_all = arg("keep", 0)
 if not exists(dir .. "/manifest.tsv") then fail("golden: no " .. dir .. "/manifest.tsv: freeze the goldens first (`shale tests/golden.shale freeze=1`)") end
 
-refuse_second_run("tests/harness/", base, "build:golden")
+refuse_second_run("tests/harness/", base)
 base = padded_base(base)
 if exists(base .. "/keep") then remove_tree(base .. "/keep") end
 local cfg = harness(base, "cookbook")

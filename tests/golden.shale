@@ -13,9 +13,10 @@
 -- the C build under test, unset), masks it, and prints each case that fails
 -- with its first differing line, then the count. The arguments:
 --   bin    the binary under test;
---   base   the work folder (build:golden unset), the run's own folder padded
---          below it to a fixed length (`padded_base`), so step counts that
---          hang on its path's length are the same on every box;
+--   base   the work folder (unset, this checkout's own: `checkout_base`
+--          below), the run's own folder padded below it to a fixed length
+--          (`padded_base`), so step counts that hang on its path's length
+--          are the same on every box;
 --   dir    the goldens (tests/golden unset);
 --   only   run only the cases whose id or origin holds this literal;
 --   keep   1: keep every case's run under `base`/keep (0: only the failures').
@@ -27,7 +28,7 @@
 -- arguments:
 --   bin       the binary whose output is frozen (c/out/release/shale, the
 --             C build, unset);
---   base      its work folder (build:golden unset, as the run's);
+--   base      its work folder (this checkout's own unset, as the run's);
 --   dir       where the goldens go (tests/golden unset);
 --   only      freeze only the inputs whose origin holds this literal (a
 --             trial, into another `dir`);
@@ -49,6 +50,19 @@ const FREEZE_ARGS = {"bin", "base", "dir", "only", "refreeze"}
 -- The mounts the body may want, by the words each gets.
 const PASSED_MOUNTS = {{name = "build", words = ""}, {name = "tools", words = " ro tools"}, {name = "scratch", words = ""}}
 
+-- The default `base`: a folder of this checkout's own under `build:golden`,
+-- named by the checkout's folder and the first 8 hex digits of its real
+-- path's SHA-256, so two checkouts' golden runs (two lanes' full tiers at
+-- once) never share a work folder. Its real path stays far below the 158
+-- bytes `padded_base` allows.
+function checkout_base()
+  local root = real(".")
+  local h = sub(trim(must(run({"sha256sum"}, {stdin = root, timeout_ms = 10000, tail = 1})).out), 1, 8)
+  local name = re_replace(basename(root), "[^A-Za-z0-9_-]", "-")
+  if #name > 32 then name = sub(name, 1, 32) end
+  return "build:golden/" .. name .. "-" .. h
+end
+
 local freeze = arg("freeze", 0) == 1
 local body = "tests/harness/run.shale"
 local names = RUN_ARGS
@@ -67,6 +81,7 @@ if exists(mounts) then replace(mounts, text) else create(mounts, text) end
 local argv = {"shale", body}
 for n in names do
   local v = arg(n, "")
+  if n == "base" and v == "" then v = checkout_base() end
   if v ~= "" then push(argv, n .. "=" .. v) end
 end
 local r = run(argv, {timeout_ms = 14400000, tail = 100000, env = {SHALE_MOUNTS = real(mounts)}, not_re = "^── budgets from the script's header"})

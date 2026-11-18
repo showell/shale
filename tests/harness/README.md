@@ -8,10 +8,12 @@ the harness collects is frozen in `tests/golden/` with the output a C
     cd ~/showell_repos/shale && shale tests/golden.shale freeze=1 [refreeze=<id>,<id>]
 
 The run (`tests/harness/run.shale`) runs every case under `bin`
-(`c/out/release/shale`, the C build under test, unset) in `build:golden`
-(`base=`), and prints each case that fails with its first differing line,
-then the count. A second golden run with the same base stops before it
-touches anything. The C build's full tier runs it (`c/build.shale full=1`).
+(`c/out/release/shale`, the C build under test, unset) in a work folder,
+`base=`: unset, this checkout's own, `build:golden/<checkout's folder>-<8
+hex digits of its real path's SHA-256>` (tests/golden.shale's
+`checkout_base`), so two checkouts' runs never share one. It prints each
+case that fails with its first differing line, then the count. A second
+golden run with the same base stops before it touches anything. The C build's full tier runs it (`c/build.shale full=1`).
 tests/golden.shale's header has the arguments of both.
 
 **Its functions are a library**, `tests/harness/lib.shale`, which the run
@@ -178,7 +180,7 @@ run does; an input whose two runs differ is nondeterministic and left out,
 with the line they differ at, and so is each origin in
 `tests/harness/freeze.shale`'s `LEFT_OUT`, with why; it collects no
 cookbook self-test. It builds the new goldens in its padded folder under
-`build:golden` first, and writes them only when no case's expected output
+its base (the run's, this checkout's own unset) first, and writes them only when no case's expected output
 changed or went but those `refreeze=` names: **a re-freeze is a deliberate
 act, a case at a time**, and its commit says why for each case. A new case
 is added and counted. `only=` freezes the inputs whose origin holds a
