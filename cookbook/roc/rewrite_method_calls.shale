@@ -121,11 +121,14 @@
 -- When the types can't be read, the run stops rather than going on without
 -- them. That happens with no `root=` (roc-types reads an app, and reads a
 -- type module only through an app), a root that is not an app or that the
--- checker refuses, a file of the glob with a call to try that no root
--- imports, and a roc-types built for a different Roc than the tree's
--- `roc-version`. A file with no call to try needs no root, as a package's
--- header `main.roc` that nothing imports. With `types=0` every candidate
--- is tried.
+-- checker refuses, and a roc-types built for a different Roc than the
+-- tree's `roc-version`. A file of the glob with a call to try that no root
+-- imports is left untouched and the run goes on; such files are listed
+-- after the findings (`not reached by <roots>: <path>`), and the run then
+-- fails. A file with no call to try needs no root, as a package's header
+-- `main.roc` that nothing imports. The roots' types are read one root at a
+-- time, so a run holds one root's types at once. With `types=0` every
+-- candidate is tried.
 --
 -- A Shale run starts at most its `programs` budget of programs, and a very
 -- large tree needs more. The run then stops before a file it might not finish, prints `go on with
@@ -160,7 +163,7 @@
 -- others run with `types=0`. A plant with a `stop` must stop its child run
 -- with that text. The self-test fails at once when roc-types is not
 -- installed.
--- budget: steps=900000000 output_bytes=4000000 arena_bytes=2000000000 changes=100000 change_bytes=2000000000 call_depth=1000
+-- budget: steps=900000000 output_bytes=4000000 arena_bytes=2000000000 kept_bytes=256000000 changes=100000 change_bytes=2000000000 call_depth=1000
 
 const SELF_TEST = arg("self_test", "") == "1"
 const APPLY = SELF_TEST or arg("apply", "") == "1"
@@ -860,29 +863,47 @@ function paths_of_globs(globs)
   return paths
 end
 
--- The root each file is judged on, by path. With the types read, it is the
--- first of `roots` whose app reaches the file; otherwise the one root, or
--- the file itself when there is none. A file with a call to try (in the set
--- `open`) that no root reaches stops the run: the types can't judge it, and
--- a path spelled two ways (through a link) would quietly find no type for
--- any of its candidates. A file with none has nothing for the types to
--- judge, so it needs no root.
-function root_of_each_file(ctx, paths, from, roots, read_types, open)
+-- The root each file is judged on, by path, with the types judging each
+-- file's open candidates on the way. With the types read, a file's root is
+-- the first of `roots` whose app reaches it; otherwise the one root, or the
+-- file itself when there is none. The roots' types are read one at a time,
+-- and each is let go before the next is read, so a run holds one root's
+-- types however many it names (eight roots at once ran out of a 2 GB
+-- arena). A file with a call to try (in the set `open`) that no root
+-- reaches is in `unreached`, and the run goes on without it: the types
+-- can't judge it, and a path spelled two ways (through a link) would
+-- quietly find no type for any of its candidates. A file with none has
+-- nothing for the types to judge, so it needs no root.
+function roots_of_files(ctx, paths, from, roots, read_types, open, trees, judged)
   local out = {}
+  local unreached = {}
+  for k = from, #paths do
+    out[paths[k]] = #roots > 0 and roots[1] or paths[k]
+  end
+  if not read_types then return {root_of = out, unreached = unreached} end
+  local found = {}
+  for r in roots do
+    local types = types_by_region(ctx, r)
+    ctx.types_by_root[r] = true
+    for k = from, #paths do
+      local p = paths[k]
+      if has_key(open, p) and not has_key(found, p) and has_key(types.modules, real(p)) then
+        found[p] = true
+        out[p] = r
+        judge_by_types(judged[p].kind_counts, trees[p], judged[p].cands, p, types)
+      end
+    end
+    types = nil
+    yield()
+  end
   for k = from, #paths do
     local p = paths[k]
-    out[p] = #roots > 0 and roots[1] or p
-    if read_types and has_key(open, p) then
-      local real_path = real(p)
-      local found = ""
-      for r in roots do
-        if found == "" and has_key(ctx.types_by_root[r].modules, real_path) then found = r end
-      end
-      if found == "" then fail("rewrite_method_calls: the types: no root reaches " .. p .. ": roc-types checked " .. join(roots, ",") .. ", and none imports " .. real_path .. " (or the path goes through a link)") end
-      out[p] = found
+    if has_key(open, p) and not has_key(found, p) then
+      push(unreached, p)
+      judged[p].unreached = true
     end
   end
-  return out
+  return {root_of = out, unreached = unreached}
 end
 
 -- `trials=0`'s answer, the files of `paths` from the `from`th on as the
@@ -894,10 +915,11 @@ function counted_by_types(total, paths, from, judged)
   for k = from, #paths do
     local p = paths[k]
     local j = judged[p]
-    total.files = total.files + 1
+    local cands = j.unreached and {} or j.cands
+    if not j.unreached then total.files = total.files + 1 end
     for kind in keys(j.kind_counts) do incr(total.ctx.type_kind_counts, kind, j.kind_counts[kind]) end
-    total.candidates = total.candidates + #j.cands
-    for c in j.cands do
+    total.candidates = total.candidates + #cands
+    for c in cands do
       if c.why_left ~= "" then
         total.left = total.left + 1
         push(total.lines, p .. ":" .. c.line .. ": " .. c.module .. "." .. c.fn .. ": " .. c.why_left)
@@ -939,7 +961,7 @@ function run_all(paths, root, from, trees, use_types, roc, opts?)
     trees = parse_trees(paths)
     ctx.programs_used = 1
   end
-  local total = {candidates = 0, rewritten = 0, left = 0, unsettled = 0, lines = {}, files = 0, next = 0, ctx = ctx}
+  local total = {candidates = 0, rewritten = 0, left = 0, unsettled = 0, lines = {}, files = 0, next = 0, ctx = ctx, unreached = {}}
   -- Each file's candidates, `{cands, kind_counts, open_count, all_proven}`.
   local judged = {}
   local any_open = false
@@ -954,18 +976,16 @@ function run_all(paths, root, from, trees, use_types, roc, opts?)
         open[p] = true
       end
     end
-    judged[p] = {cands = cands, kind_counts = {}, open_count = 0, all_proven = false}
+    judged[p] = {cands = cands, kind_counts = {}, open_count = 0, all_proven = false, unreached = false}
   end
   -- The types judge only open candidates, so with none, roc-types never runs.
   local read_types = use_types and any_open
-  if read_types then
-    for r in roots do ctx.types_by_root[r] = types_by_region(ctx, r) end
-  end
-  local root_of = root_of_each_file(ctx, paths, from, roots, read_types, open)
+  local reach = roots_of_files(ctx, paths, from, roots, read_types, open, trees, judged)
+  local root_of = reach.root_of
+  total.unreached = reach.unreached
   for k = from, #paths do
     local p = paths[k]
     local j = judged[p]
-    if read_types and has_key(open, p) then judge_by_types(j.kind_counts, trees[p], j.cands, p, ctx.types_by_root[root_of[p]]) end
     j.all_proven = true
     for c in j.cands do
       if c.why_left == "" then
@@ -973,16 +993,18 @@ function run_all(paths, root, from, trees, use_types, roc, opts?)
         if not c.proven then j.all_proven = false end
       end
     end
-    if j.open_count == 0 then j.all_proven = false end
+    if j.open_count == 0 or j.unreached then j.all_proven = false end
   end
   if count_only then return counted_by_types(total, paths, from, judged) end
   local baselines = {}
   for k = from, #paths do
     local p = paths[k]
     local j = judged[p]
-    local cands = j.cands
+    local cands = j.unreached and {} or j.cands
     local r = root_of[p]
-    if j.all_proven and not has_key(ctx.confirmed, p) then
+    if j.unreached then
+      -- Not begun: listed after the findings.
+    elseif j.all_proven and not has_key(ctx.confirmed, p) then
       -- The programs left after this root's baseline (two, if it has none
       -- yet), the confirm's checks and test, and this file's own trial,
       -- should the confirm set it aside. Under `apply=1` each file in the
@@ -1002,13 +1024,13 @@ function run_all(paths, root, from, trees, use_types, roc, opts?)
       for c in cands do c.from_line = 0 end
     end
     local kept_by_confirm = get(ctx.confirmed, p, 0)
-    if j.open_count > 0 and kept_by_confirm == 0 and ctx.programs_used + PROGRAMS_PER_FILE > MAX_PROGRAMS then
+    if not j.unreached and j.open_count > 0 and kept_by_confirm == 0 and ctx.programs_used + PROGRAMS_PER_FILE > MAX_PROGRAMS then
       total.next = k
       return total
     end
     -- A file's type counts are added once it is begun, so a run that stops
     -- before it leaves them to the next run.
-    total.files = total.files + 1
+    if not j.unreached then total.files = total.files + 1 end
     for kind in keys(j.kind_counts) do incr(ctx.type_kind_counts, kind, j.kind_counts[kind]) end
     if #cands > 0 then
       local kept = kept_by_confirm
@@ -1069,7 +1091,8 @@ const EXPECT = {
   NotApp = {stop = "is not an app", root = "Proven", types = true},
   Pin = {stop = "roc-types reads Roc nightly-2026-11-03-34bd006", root = "TypedApp", types = true, tree_pin = "nightly-2026-10-29-a0a9fc2"},
   Second = {left = 0, root = "TypedApp,SecondApp", types = true, confirms = 1, rounds = 0},
-  Unreached = {stop = "no root reaches", root = "TypedApp,SecondApp", types = true},
+  -- A file no root reaches is listed, and the run goes on to the next.
+  Unreached = {file = "Proven", with = "Unreached", left = 0, unreached = 1, root = "TypedApp,SecondApp", types = true, confirms = 1, rounds = 0},
   Beside = {file = "Proven", with = "NoCalls", left = 0, root = "TypedApp", types = true, confirms = 1, rounds = 0},
   -- A qualified type whose last segment names the module proves nothing,
   -- and the compiler agrees: the trial refuses both calls.
@@ -1127,6 +1150,8 @@ function self_test_plant(name)
     report_check(failures, read(p) == read(PLANTS_DIR .. "/" .. file .. ".roc"), name .. ": counted, and left as it was")
   end
   if types_from ~= "" then report_check(failures, got.ctx.programs_used == 1, name .. ": the types read from a file, so roc-ast the one program (" .. got.ctx.programs_used .. ")") end
+  local want_unreached = get(want, "unreached", 0)
+  report_check(failures, #got.unreached == want_unreached, name .. ": " .. #got.unreached .. " not reached by a root, want " .. want_unreached .. " (" .. join(got.unreached, ", ") .. ")")
   local left = got.lines
   report_check(failures, #left == want.left, name .. ": " .. #left .. " left, want " .. want.left .. (#left > 0 and (" (" .. join(left, "; ") .. ")") or ""))
   if has_key(want, "why") then report_check(failures, #left > 0 and contains(join(left, "\n"), want.why), name .. ": left because " .. want.why) end
@@ -1209,4 +1234,6 @@ else
     push(finding_lines, "types: the first arguments of the candidates the types judged: " .. join(kinds, ", "))
   end
   print_findings(summary, finding_lines)
+  for u in total.unreached do print("not reached by " .. ROOT .. ": " .. u) end
+  if #total.unreached > 0 then fail("rewrite_method_calls: no root reaches " .. #total.unreached .. " file(s) with a call to try, listed above: their calls were left untried") end
 end
