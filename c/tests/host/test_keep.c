@@ -202,10 +202,25 @@ static STATUS_MUST_USE Status oracle(Arena *a, Str out, KeepOptions o, Str *said
         for (size_t d = 1; !keep && d <= o.before && i + d < lines.len; d++) keep = at(hits, i + d);
         if (!keep) continue;
         Str l = at(lines, i);
-        if (l.len > o.width) {
+        if (l.len > KEEP_LINE_MAX) {
             Buf b = buf_make(a);
-            TRY(buf_str(&b, str_sub(l, 0, o.width)));
+            TRY(buf_str(&b, str_sub(l, 0, o.width < KEEP_LINE_MAX ? o.width : KEEP_LINE_MAX)));
             TRY(buf_lit(&b, KEEP_CUT_MARK));
+            l = buf_view(&b);
+        } else if (l.len > o.width) {
+            // Its middle left out, half the width kept from each end (the
+            // odd byte at the front), each end short of a split character.
+            Buf b = buf_make(a);
+            size_t back = o.width / 2;
+            size_t front = o.width - back;
+            while (front > 0 && (str_byte(l, front) & 0xc0) == 0x80) front--;
+            while (back > 0 && (str_byte(l, l.len - back) & 0xc0) == 0x80) back--;
+            size_t left = l.len - front - back;
+            TRY(buf_str(&b, str_sub(l, 0, front)));
+            TRY(buf_lit(&b, " " KEEP_CUT_MARK " "));
+            TRY(buf_u64(&b, left));
+            TRY(left == 1 ? buf_lit(&b, " byte left out " KEEP_CUT_MARK " ") : buf_lit(&b, " bytes left out " KEEP_CUT_MARK " "));
+            TRY(buf_str(&b, str_sub(l, l.len - back, l.len)));
             l = buf_view(&b);
         }
         TRY(Strs_push(&passed, l));
@@ -298,8 +313,10 @@ TEST(head_and_tail_and_the_filter_against_the_oracle_on_3000_random_outputs) {
         fnv_u64(&fp, got.kept);
         arena_deinit(&a);
     }
-    // Zig's test of the same 3000 rounds, folded the same way.
-    EXPECT_EQ(fp, 0xa929a50cc0904effULL);
+    // The same 3000 rounds, folded the same way. Zig's test folds them to
+    // 0xa929a50cc0904eff, its cut at the end; the C's cut leaves the middle
+    // out (2026-11-18), so this is the C's own.
+    EXPECT_EQ(fp, 13155226867527416834ULL);
 }
 
 TEST(the_first_random_round_exactly) {
@@ -419,6 +436,31 @@ TEST(an_arena_refused_anywhere_stops_and_never_answers_wrong) {
     EXPECT(refused > 5);
 }
 
+TEST(a_long_line_keeps_both_ends_and_says_how_much_is_left_out) {
+    bool refused = false;
+    Arena a;
+    arena_init(&a, 1 << 20, &refused);
+    KeepOptions o;
+    keep_options_default(&o);
+    o.head = 4;
+    o.width = 10;
+    // A line `width` long is whole; one byte more leaves one out; a stop's
+    // line keeps its start and its why, its `─` (3 bytes) never split.
+    Kept k;
+    EXPECT(kept_of(&a, S("0123456789\n0123456789A\n── stopped at x:1:1: fail: the why\n"), o, 7, &k));
+    EXPECT_STR(k.out, S("0123456789\n01234 \xe2\x80\xa6 1 byte left out \xe2\x80\xa6 6789A\n"
+                        "─ \xe2\x80\xa6 30 bytes left out \xe2\x80\xa6 e why\n"));
+    EXPECT_EQ(k.kept, 3);
+    KeepOptions odd;
+    keep_options_default(&odd);
+    odd.head = 1;
+    odd.width = 5;
+    Kept j;
+    EXPECT(kept_of(&a, S("abcdefghijklmnopqrstuvwxyz"), odd, 3, &j));
+    EXPECT_STR(j.out, S("abc \xe2\x80\xa6 21 bytes left out \xe2\x80\xa6 yz\n"));
+    arena_deinit(&a);
+}
+
 TEST(memory_stays_bounded_over_a_flood_of_lines) {
     // A million lines through a tail of 3: the slots are written over, never
     // taken anew, so the arena holds a few chunks, not the output.
@@ -443,4 +485,4 @@ TEST(memory_stays_bounded_over_a_flood_of_lines) {
 
 TEST_MAIN(TEST_CASE(the_prng_gives_xoshiro256s_first_draws), TEST_CASE(head_and_tail_and_the_filter_against_the_oracle_on_3000_random_outputs),
           TEST_CASE(the_first_random_round_exactly), TEST_CASE(the_edges), TEST_CASE(an_arena_refused_anywhere_stops_and_never_answers_wrong),
-          TEST_CASE(memory_stays_bounded_over_a_flood_of_lines))
+          TEST_CASE(a_long_line_keeps_both_ends_and_says_how_much_is_left_out), TEST_CASE(memory_stays_bounded_over_a_flood_of_lines))

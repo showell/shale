@@ -190,7 +190,11 @@ has none of it):
   or `whole` (bytes), are required (unless `stdout_secret`); the rest are
   `cwd`, `stdin`, `env`, `secrets`, `stdout_secret`, `secret_replace`,
   `log`, `want`, `cpu_budget_ms`, `stage`, and the filters `re`, `not_re`, `nocase`,
-  `before`, `after` and `width` (`Opts` in `src/shale_host_run.zig`). Its
+  `before`, `after` and `width` (`Opts` in `src/shale_host_run.zig`).
+  **A line longer than `width` keeps both ends**, its middle said as `… N
+  bytes left out …` (`c/host/keep.c`'s `keep_cut`): a child `shale`'s stop
+  says where at its start and why at its end, and a cut at the end alone
+  hid the why. Shale itself never cuts a stop, nor `attempt`'s `error`. Its
   `cwd` is a path as every path is: under the root, or through a mount
   (`cwd = "repos:shale"` runs a sibling repo's step from another's
   checkout); `..` and an absolute path are refused. **What `run` refuses**

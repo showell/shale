@@ -18,6 +18,29 @@ TEST(arithmetic_and_print_take_their_counted_steps) {
     ran_free(&x);
 }
 
+TEST(a_long_stop_is_whole_in_attempts_error_and_in_the_report) {
+    // The run cuts no stop: a 526-byte message, its why at the end, comes
+    // back whole from `attempt` and is printed whole when it ends the run.
+    static Ran x;
+    ran_source(&x, S("local w = \"\"\nfor i = 1, 500 do w = w .. \"x\" end\n"
+                     "function g(m) fail(m) end\n"
+                     "local m = \"`edit`: \\\"\" .. w .. \"\\\" is not in f.zig\"\n"
+                     "local r = attempt(g, m)\n"
+                     "print(#r.error, r.error == m, sub(r.error, -12))\n"
+                     "fail(m)\n"),
+               ran_budgets());
+    EXPECT_EQ(x.ran, STOP);
+    EXPECT_STR(buf_view(&x.r.out), S("526\ttrue\tnot in f.zig\n"));
+    EXPECT_EQ(x.r.ctx.stop.message.len, 526);
+    Str report = ran_report(&x, &x.host);
+    EXPECT(str_starts_with(report, S("── stopped at stdin:7:1: fail: `edit`: \"xxxx")));
+    Str why = S("xxxx\" is not in f.zig (");
+    bool found = false;
+    for (size_t i = 0; i + why.len <= report.len && !found; i++) found = str_eq(str_sub(report, i, i + why.len), why);
+    EXPECT(found);
+    ran_free(&x);
+}
+
 TEST(the_step_budget_stops_one_past_it) {
     static Ran x;
     Budgets b = ran_budgets();
@@ -369,7 +392,7 @@ TEST(a_value_of_the_cs_own_enums_past_their_cases_ends_the_process) {
     EXPECT_EQ_I(flat_int((size_t)INT64_MAX), INT64_MAX);
 }
 
-TEST_PART(vm, TEST_CASE(a_value_of_the_cs_own_enums_past_their_cases_ends_the_process), TEST_CASE(the_compilers_own_checks_end_the_process), TEST_CASE(a_store_builtin_on_a_run_with_no_store_ends_the_process), TEST_CASE(arithmetic_and_print_take_their_counted_steps), TEST_CASE(the_step_budget_stops_one_past_it),
+TEST_PART(vm, TEST_CASE(a_value_of_the_cs_own_enums_past_their_cases_ends_the_process), TEST_CASE(the_compilers_own_checks_end_the_process), TEST_CASE(a_store_builtin_on_a_run_with_no_store_ends_the_process), TEST_CASE(arithmetic_and_print_take_their_counted_steps), TEST_CASE(a_long_stop_is_whole_in_attempts_error_and_in_the_report), TEST_CASE(the_step_budget_stops_one_past_it),
           TEST_CASE(the_call_depth_budget_names_every_call), TEST_CASE(attempt_makes_a_stop_a_value_and_the_run_goes_on),
           TEST_CASE(a_budget_is_never_caught), TEST_CASE(a_chain_grows_its_string_in_place),
           TEST_CASE(yield_keeps_what_is_reached_and_charges_the_copy), TEST_CASE(the_output_budget_writes_what_fits),

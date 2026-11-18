@@ -3,7 +3,7 @@
 // the lines it matches from the stream; of the rest, `re` keeps those that
 // match, and `before` and `after` keep context lines around a match as grep
 // does. The first `head` lines and a ring of the last `tail` are kept, each
-// cut at `width`.
+// held to `width` bytes by leaving its middle out (`keep_cut`).
 //
 // An arena cannot free a small allocation, so a dropped line's buffer is
 // handed back to a slot and written over by a later line. Every line buffer
@@ -160,19 +160,62 @@ static STATUS_MUST_USE Status keep_slot_room(Arena *a, KeepSlot *s, size_t need)
     return OK;
 }
 
-// `l` cut into the scratch slot: cut to `width` and marked if longer or
-// `over`.
+// `l` cut into the scratch slot when it is longer than `width`: its middle
+// left out and said, `… N bytes left out …`, so both its ends are kept. A
+// line's end says why as often as its start says where (a Shale stop's
+// message, after its place; a test's verdict after its name), so a cut at
+// the end alone hid the why. A line past KEEP_LINE_MAX (`over`) has only
+// its first bytes here: it is cut at `width` and ends with the mark.
 static STATUS_MUST_USE Status keep_cut(Keep *k, Str l, bool over) {
-    bool whole = l.len <= k->o.width && !over;
-    size_t n = l.len < k->o.width ? l.len : k->o.width;
-    Str mark = S(KEEP_CUT_MARK);
-    size_t need = whole ? l.len : n + mark.len;
+    size_t width = k->o.width;
+    if (l.len <= width && !over) {
+        TRY(keep_slot_room(k->arena, &k->scratch, l.len));
+        if (l.len > 0) mem_copy(k->scratch.ptr, l.ptr, l.len);
+        k->scratch.len = l.len;
+        return OK;
+    }
+    // The mark is written straight into the slot: a Buf for it would take
+    // arena bytes for every cut line, which the arena never gives back.
+    Str open = over ? S(KEEP_CUT_MARK) : S(" " KEEP_CUT_MARK " ");
+    size_t front = l.len < width ? l.len : width;
+    size_t back = 0;
+    uint64_t left = 0;
+    size_t digits = 0;
+    if (!over) {
+        back = width / 2;
+        front = width - back;
+        // Neither cut splits a UTF-8 character: the front gives back, and
+        // the back takes up, a character's continuation bytes.
+        while (front > 0 && (str_byte(l, front) & 0xc0) == 0x80) front--;
+        while (back > 0 && (str_byte(l, l.len - back) & 0xc0) == 0x80) back--;
+        left = l.len - front - back;
+        digits = 1;
+        for (uint64_t n = left; n >= 10; n /= 10) digits++;
+    }
+    Str close = left == 1 ? S(" byte left out " KEEP_CUT_MARK " ") : S(" bytes left out " KEEP_CUT_MARK " ");
+    size_t need = front + open.len + (over ? 0 : digits + close.len) + back;
     TRY(keep_slot_room(k->arena, &k->scratch, need));
     Bytes room = {k->scratch.ptr, k->scratch.cap};
-    if (n > 0) mem_copy(room.ptr, l.ptr, n);
-    if (!whole) {
-        Bytes tail = SLICE_SUB(Bytes, room, n, need);
-        mem_copy(tail.ptr, mark.ptr, mark.len);
+    if (front > 0) mem_copy(room.ptr, l.ptr, front);
+    size_t at_byte = front;
+    Bytes o = SLICE_SUB(Bytes, room, at_byte, at_byte + open.len);
+    mem_copy(o.ptr, open.ptr, open.len);
+    at_byte += open.len;
+    if (!over) {
+        uint64_t n = left;
+        for (size_t d = digits; d > 0; d--) {
+            at(room, at_byte + d - 1) = (char)('0' + n % 10);
+            n /= 10;
+        }
+        at_byte += digits;
+        Bytes c = SLICE_SUB(Bytes, room, at_byte, at_byte + close.len);
+        mem_copy(c.ptr, close.ptr, close.len);
+        at_byte += close.len;
+    }
+    if (back > 0) {
+        Bytes end = SLICE_SUB(Bytes, room, at_byte, at_byte + back);
+        Str last = str_sub(l, l.len - back, l.len);
+        mem_copy(end.ptr, last.ptr, back);
     }
     k->scratch.len = need;
     return OK;
