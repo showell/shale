@@ -1,0 +1,17 @@
+# The symmetric functions: no argument is the subject, so a call of one is
+# written through its module, `U64.max(a, b)`, never `a.max(b)`
+# (roc-apps docs/roc-style.md, "A method call names a subject"). A call
+# counts when its first two arguments' types have one head (`U64` and
+# `U64`, `List(a)` and `List(b)`). One name a line; rewrite_method_calls
+# reads it through cookbook/roc/peer_calls.shale. A unit's `plus` and
+# `minus` are not here: they read as infix operators, spoken left to right.
+bitwise_and
+bitwise_or
+bitwise_xor
+compare
+concat
+map2
+map3
+map4
+max
+min

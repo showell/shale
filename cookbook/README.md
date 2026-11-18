@@ -168,16 +168,14 @@ steps left for the writer.
 - `roc/rename.shale`: renames one identifier across a tree of Roc code.
   `shale cookbook:roc/rename.shale from=portion to=share module=Pie`
 - `roc/rewrite_method_calls.shale`: rewrites `List.map(xs, f)` calls as method
-  calls, judged by the compiler; a peer call (`U64.max(a, b)`) stays, and a
-  peer method call is a `peer_receiver` finding, which `peers=undo` turns back. `shale --undo-on-stop cookbook:roc/rewrite_method_calls.shale apply=1`
+  calls, judged by the compiler; a symmetric function's call (`U64.max(a, b)`,
+  from `roc/symmetric_functions.txt`) stays, and its method call is a
+  `peer_receiver` finding, which `peers=undo` turns back. `shale --undo-on-stop cookbook:roc/rewrite_method_calls.shale apply=1`
 - `roc/peer_calls.shale` and `roc/number_literals.shale` (libraries):
   rewrite_method_calls' peer calls and its number literals whose type defaults.
   `use("./peer_calls.shale")`
 - `roc/types.shale` (library): every expression's type, from Roc's own type
   checker. `use("cookbook:roc/types.shale")`
-- `roc/write_builtin_signatures.shale`: writes the table of Roc's builtin
-  functions whose first two parameters are peers, from a pin's Builtin.roc, which
-  rewrite_method_calls reads. `shale cookbook:roc/write_builtin_signatures.shale pin=nightly-2026-11-03-34bd006`
 - `roc/wrap_long_lines.shale`: shortens long Roc lines by letting `roc fmt`
   lay out their groups. `shale cookbook:roc/wrap_long_lines.shale dir=roc width=100`
 

@@ -1,17 +1,14 @@
 -- A library for rewrite_method_calls, loaded with
 -- `use("./peer_calls.shale")`: which calls are peer calls. A method call
--- names a subject, so a function whose first two arguments are peers,
--- values of one type, as in `U64.max(a, b)`, `Str.concat(a, b)` or an app's
--- `relative(a : Color, b : Color)`, is called through its module: no
--- argument is the subject. The types are the checker's, as roc-types writes
--- them at the call, and an alias is read through to what it names, so a
--- `Hue : U32` and a `U32` are one type. A builtin's own declaration has the
--- last word, since a call's types can't tell a type variable from a type:
--- `List.fold : List(item), state, ...` takes no peers, though
--- `xs.fold([], f)` passes two lists. Those declarations are a table per Roc
--- pin, cookbook/roc/builtin_signatures/<pin>.txt, which
--- cookbook/roc/write_builtin_signatures.shale writes from the pin's
--- Builtin.roc (`peer_builtin_signatures`). A tree `t` here is the recipe's:
+-- names a subject, so a symmetric function, one where no argument is the
+-- subject, is called through its module: `U64.max(a, b)`, `Str.concat(a,
+-- b)`, `List.map2(xs, ys, f)`. The symmetric functions are a list of names,
+-- cookbook/roc/symmetric_functions.txt, and a call of one is a peer call
+-- when its first two arguments' types have one head, as roc-types writes
+-- them at the call with each alias read through to what it names (a `Hue :
+-- U32` is a `U32`), so an app's `concat : Doc, Str -> Doc` is none. A
+-- function off the list (`starts_with`, a unit's `plus`) keeps its method
+-- call, whatever its arguments. A tree `t` here is the recipe's:
 -- `t.nodes`, each `{kind, raw, name, method, span, has_span, kids, parent}`,
 -- and `t.text`.
 
@@ -101,76 +98,29 @@ function peer_module_of(ty)
 end
 
 -- Whether two arguments, of the types `a` and `b` as roc-types gives them
--- ("" where it gives none), are peers: `{peers, type, module}`, `type`
--- the first's with its aliases read through and `module` what it calls
--- through (`peer_module_of`).
+-- ("" where it gives none), are peers, values of one type: `{peers, type,
+-- module}`, `peers` when both types, their aliases read through, have one
+-- head to call through (`peer_module_of`: `List(U64)` and `List(Str)` are
+-- peers to `map2`), `type` the first's resolved and `module` that head.
 function peer_verdict(a, b, aliases)
   if a == "" or b == "" then return {peers = false, type = "", module = ""} end
   local ra = peer_resolved(a, aliases, 0)
-  return {peers = ra == peer_resolved(b, aliases, 0), type = ra, module = peer_module_of(ra)}
+  local m = peer_module_of(ra)
+  return {peers = m ~= "" and m == peer_module_of(peer_resolved(b, aliases, 0)), type = ra, module = m}
 end
 
--- Whether the builtin `module.fn`'s declaration says its first two
--- parameters are apart, in `builtins`, a table `peer_builtin_table` read.
-function peer_is_apart(builtins, module, fn)
-  return get(builtins, module .. "." .. fn, "") == "apart"
-end
-
--- The table of builtin declarations in `text`, a builtin_signatures file:
--- `Type.fn` to `peers` or `apart`, a line each, `#` lines its comments.
-function peer_builtin_table(text)
+-- The symmetric functions in `text`, cookbook/roc/symmetric_functions.txt:
+-- a set of names, one a line, `#` lines its comments.
+function peer_symmetric_table(text)
   local out = {}
   for l in lines(text) do
-    if l ~= "" and not starts_with(l, "#") then
-      local f = split(l, "\t")
-      if #f ~= 2 or (f[2] ~= "peers" and f[2] ~= "apart") then fail("peer_calls: a builtin signature line that is not `Type.fn<TAB>peers` or `apart`: " .. l) end
-      out[f[1]] = f[2]
+    local w = trim(l)
+    if w ~= "" and not starts_with(w, "#") then
+      if re_find(w, "^[a-z][a-z0-9_]*!?$") == nil then fail("peer_calls: symmetric_functions.txt: `" .. w .. "` is not a function's name") end
+      out[w] = true
     end
   end
   return out
-end
-
--- The shape of the type at node `i` of roc_tree's `nodes`, every type
--- variable as `*`, so `List(a)` and `List(b)` are one shape and `state` is
--- another than `List(item)`.
-function peer_shape(nodes, i)
-  local n = nodes[i]
-  local head = n.kind == "ty-var" and "*" or (n.kind .. " " .. get(n, "name", ""))
-  local parts = {}
-  for k in n.kids do push(parts, peer_shape(nodes, k)) end
-  return head .. "(" .. join(parts, ",") .. ")"
-end
-
--- Each function of two parameters or more that the roc_tree file `f` (a
--- Builtin.roc) declares inside a type's block, as a line `Type.fn<TAB>peers`
--- or `apart`, sorted: `Type` the innermost declaration's name, as roc-types
--- writes a builtin type (`U8`, never `Num.U8`), and `peers` when the first
--- two parameters have one shape (`peer_shape`). A name twice (SHA256's
--- and BLAKE3's `Digest.is_eq`) is one row when the two agree, and stops
--- the run when they don't.
-function peer_builtin_signatures(f)
-  local seen = {}
-  local out = {}
-  for i = 1, #f.nodes do
-    local n = f.nodes[i]
-    if n.kind == "s-type-anno" then
-      local fn = 0
-      for k in n.kids do
-        if fn == 0 and f.nodes[k].kind == "ty-fn" then fn = k end
-      end
-      local up = n.parent
-      while up > 0 and f.nodes[up].kind ~= "s-type-decl" do up = f.nodes[up].parent end
-      if fn > 0 and #f.nodes[fn].kids >= 3 and up > 0 then
-        local key = f.nodes[f.nodes[up].kids[1]].name .. "." .. n.name
-        local kids = f.nodes[fn].kids
-        local row = key .. "\t" .. (peer_shape(f.nodes, kids[1]) == peer_shape(f.nodes, kids[2]) and "peers" or "apart")
-        if has_key(seen, key) and seen[key] ~= row then fail("peer_calls: " .. f.path .. " declares " .. key .. " twice, its parameters peers in one and apart in the other") end
-        if not has_key(seen, key) then push(out, row) end
-        seen[key] = row
-      end
-    end
-  end
-  return sort(out)
 end
 
 -- A type's text for a finding: a long one by its head alone (`List(...)`).
@@ -180,22 +130,24 @@ function peer_short_type(ty)
   return m == "" and (sub(ty, 1, 37) .. "...") or (m .. "(...)")
 end
 
--- The method calls in tree `t` that pass an argument, `x.fn(y, ...)`, each
+-- The method calls in tree `t` of a function in the set `symmetric` that
+-- pass an argument, `x.max(y)`, each
 -- `{node, recv, first, fn, spanned}`: `recv` is the receiver's node, `first`
 -- the first argument's, and `spanned` whether every argument has a span,
 -- so its text can be moved.
-function peer_method_calls(t)
+function peer_method_calls(t, symmetric)
   local out = {}
   for i = 1, #t.nodes do
     local n = t.nodes[i]
     if n.kind == "e-method-call" and #n.kids == 2 and t.nodes[n.kids[1]].kind == "receiver" and #t.nodes[n.kids[1]].kids == 1 then
       local args = t.nodes[n.kids[2]]
-      if args.kind == "args" and #args.kids > 0 then
+      local fn = starts_with(n.method, ".") and sub(n.method, 2) or n.method
+      if args.kind == "args" and #args.kids > 0 and has_key(symmetric, fn) then
         local spanned = t.nodes[t.nodes[n.kids[1]].kids[1]].has_span
         for a in args.kids do
           if not t.nodes[a].has_span then spanned = false end
         end
-        push(out, {node = i, recv = t.nodes[n.kids[1]].kids[1], first = args.kids[1], fn = starts_with(n.method, ".") and sub(n.method, 2) or n.method, spanned = spanned})
+        push(out, {node = i, recv = t.nodes[n.kids[1]].kids[1], first = args.kids[1], fn = fn, spanned = spanned})
       end
     end
   end

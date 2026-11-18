@@ -185,29 +185,21 @@ end, and fails the run.
   call to try needs no root. `trials=0` counts without the compiler: a call
   the types prove counts as rewritable, one they leave open as `unsettled`,
   and nothing is written, so a report runs in seconds; a proven call the
-  compiler would refuse (a bare tag the call makes a `Try`) is counted, which
+  compiler would refuse (a literal whose type defaults) is counted, which
   only a trial catches. `types_from=` reads the root's types from a file a
-  gate kept, in place of running roc-types again. A call whose first two
-  arguments are peers, of one type once aliases are read through
-  (`U64.max(a, b)`, `Str.concat(a, b)`), stays a module call, its reason
-  `peers`; with the types, each peer method call (`a.max(b)`) is a
-  `peer_receiver` finding, counted in the summary, and `peers=undo` turns
-  them back into module calls, judged by the compiler as a rewrite is.
+  gate kept, in place of running roc-types again. A call of a symmetric
+  function ([symmetric_functions.txt](symmetric_functions.txt): `max`,
+  `min`, `compare`, `concat`, `map2`, the `bitwise_*` three) whose first two
+  arguments' types have one head, aliases read through (`U64.max(a, b)`,
+  `Str.concat(a, b)`), stays a module call, its reason `peers`; with the
+  types, each such method call (`a.max(b)`) is a `peer_receiver` finding,
+  counted in the summary, and `peers=undo` turns them back into module
+  calls, judged by the compiler as a rewrite is. Every other function, a
+  unit's `plus` or `starts_with`, keeps its method call.
 
       cd <repo> && shale --undo-on-stop <shale>/cookbook/roc/rewrite_method_calls.shale glob='app/*.roc' root=app/main.roc,app/Specs.roc
       cd <repo> && shale <shale>/cookbook/roc/rewrite_method_calls.shale glob='app/*.roc' root=app/main.roc trials=0
       cd <repo> && shale --undo-on-stop <shale>/cookbook/roc/rewrite_method_calls.shale glob='app/*.roc' root=app/main.roc peers=undo apply=1
-
-- [write_builtin_signatures.shale](write_builtin_signatures.shale) writes
-  `builtin_signatures/<pin>.txt`, the table of Roc's builtin functions of two
-  parameters or more, each `peers` (its first two parameters of one type, up to
-  type variables: `List.concat`, `List.map2`) or `apart` (`List.fold`'s list
-  and state), read from the pin's Builtin.roc by Roc's own parser.
-  rewrite_method_calls reads it, since a call's types can't tell a type
-  variable from a type, and stops on a pin that has none. `check=1` holds the
-  table to the source.
-
-      shale cookbook:roc/write_builtin_signatures.shale pin=nightly-2026-11-03-34bd006
 
 - [compare_machine_code.shale](compare_machine_code.shale) compares two builds of a Roc archive
   and says whether they hold the same machine code. Use it to confirm that
@@ -315,11 +307,11 @@ run on their own.
   more apps and lists the files none of them reaches. Used by
   `check_boundaries`, `check_errors`, `rewrite_method_calls` and `hunt_names`.
 - [peer_calls.shale](peer_calls.shale): which calls are peer calls, a
-  function's first two arguments of one type: `peer_aliases(trees)`, the
-  aliases the trees declare, `peer_verdict(a, b, aliases)`, two types
-  judged with aliases read through, `peer_method_calls(t)`, and the builtins'
-  table, `peer_builtin_signatures(f)` and `peer_builtin_table(text)`. Used by
-  `rewrite_method_calls` and `write_builtin_signatures`.
+  symmetric function's with its first two arguments of one type:
+  `peer_symmetric_table(text)`, the list of symmetric functions,
+  `peer_aliases(trees)`, the aliases the trees declare, `peer_verdict(a, b,
+  aliases)`, two types judged with aliases read through, and
+  `peer_method_calls(t, symmetric)`. Used by `rewrite_method_calls`.
 - [number_literals.shale](number_literals.shale): whether a value's type
   comes from unsuffixed number literals alone (`takes_literal_type`), so it
   defaults as a receiver. Used by `rewrite_method_calls`.

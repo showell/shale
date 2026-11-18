@@ -6,13 +6,14 @@
 -- inside out, so `List.len(List.keep_if(xs, p))` becomes
 -- `xs.keep_if(p).len()`.
 --
--- A method call names a subject, so a call whose first two arguments are
--- peers, of one type once aliases are read through (`U64.max(a, b)`,
--- `Str.concat(a, b)`, an app's `Color.relative(a, b)`), stays a module call,
--- and with the types every run lists each peer method call, `a.max(b)`, as
--- a `path:line: peer_receiver: why` finding, counted in the summary;
--- `peers=undo` turns them back. A builtin's declaration has the last word
--- (`List.fold`'s two lists are no peers): cookbook/roc/peer_calls.shale.
+-- A method call names a subject, so a call of a symmetric function
+-- (cookbook/roc/symmetric_functions.txt: `max`, `concat`, `map2`, ...)
+-- whose first two arguments' types have one head, aliases read through
+-- (`U64.max(a, b)`, `Str.concat(a, b)`), stays a module call, and with the
+-- types every run lists each such method call, `a.max(b)`, as a
+-- `path:line: peer_receiver: why` finding, counted in the summary;
+-- `peers=undo` turns them back (cookbook/roc/peer_calls.shale). Any other
+-- function, `starts_with` or a unit's `plus`, keeps its method call.
 --
 --   cd <repo> && shale --undo-on-stop <shale>/cookbook/roc/rewrite_method_calls.shale glob=app/*.roc root=app/main.roc
 --   cd <repo> && shale --undo-on-stop <shale>/cookbook/roc/rewrite_method_calls.shale glob=app/*.roc root=app/main.roc apply=1
@@ -43,8 +44,8 @@
 --          and the rest are `left` as ever. It is the count a report needs
 --          without the trial compiles that make a dry run slow, and it
 --          differs from a dry run's `rewritten` in two ways: a proven call
---          that `roc check` would refuse (a bare tag the call makes a
---          `Try`, the ProvenFails plant) is counted, and an unsettled call that would
+--          that `roc check` would refuse (a literal whose type defaults, the
+--          ProvenFails plant) is counted, and an unsettled call that would
 --          compile is not. It needs the types, so not with `types=0`, and
 --          never with `apply=1`.
 --   peers  with `peers=undo`, the run's candidates are the peer method
@@ -105,7 +106,8 @@
 --     (`m : U64`) and a parameter. A name bound to anything else whose type
 --     only literals give (`start = if c 1 else 0`) is a candidate too, and
 --     its type defaults the same way; the compiler catches that only where
---     the default clashes, and otherwise only an `expect` would.
+--     the default clashes (the ProvenFails plant), and otherwise only an
+--     `expect` would.
 -- Without the types, a call whose first argument has another type
 -- (`Str.from_utf8(bytes)`, a list) is tried, and stays because the
 -- compiler reports a `missing method`.
@@ -185,6 +187,7 @@ if TYPES_ARG ~= "0" and TYPES_ARG ~= "1" then fail("rewrite_method_calls: types=
 const USE_TYPES = TYPES_ARG == "1"
 const PLANT = arg("plant", "")
 const PLANTS_DIR = "cookbook:roc/plants/rewrite_method_calls"
+const SYMMETRIC_FUNCTIONS = "cookbook:roc/symmetric_functions.txt"
 const THIS_SCRIPT = "cookbook:roc/rewrite_method_calls.shale"
 const GLOB = arg("glob", "**/*.roc")
 const ROOT = arg("root", "")
@@ -544,11 +547,7 @@ function types_by_region(ctx, root)
     end
   end
   for l in got.warnings do print("rewrite_method_calls: roc-types " .. root .. ": " .. l) end
-  -- The builtins' declarations, for the peer calls (peer_calls.shale),
-  -- read once the types' pin is known to be the tree's.
-  local table = "cookbook:roc/builtin_signatures/" .. got.pin .. ".txt"
-  if not exists(table) then fail("rewrite_method_calls: no " .. table .. ", the builtins' declarations at the tree's pin, which tell a peer call: `shale cookbook:roc/write_builtin_signatures.shale pin=" .. got.pin .. "` writes it from that pin's Builtin.roc") end
-  return {by_region = by_region, modules = set_of(got.paths), builtins = peer_builtin_table(read(table))}
+  return {by_region = by_region, modules = set_of(got.paths)}
 end
 
 -- A type's head, as `{head}`, or `{var = true}` for a type variable (`a`,
@@ -602,23 +601,22 @@ function proves_module_call(head, module)
 end
 
 -- Judges each open candidate of the file at `p` by its first argument's
--- type in `types` (from the root that reaches the file). A call whose first
--- two arguments are peers (`peer_verdict`, with the trees' `aliases`) stays
--- a module call; a concrete other type leaves the call, with that reason; a
+-- type in `types` (from the root that reaches the file). A call of a
+-- function in `symmetric` whose first two arguments are peers
+-- (`peer_verdict`, with the trees' `aliases`) stays a module call; a concrete other type leaves the call, with that reason; a
 -- type that proves the call (`proves_module_call`) marks it `proven`; the
 -- rest stay open for the trial. Each kind is counted in `kind_counts`.
-function judge_by_types(kind_counts, t, cands, p, types, aliases)
+function judge_by_types(kind_counts, t, cands, p, types, aliases, symmetric)
   local real_path = real(p)
   for c in cands do
     if c.why_left == "" then
       local call = t.nodes[c.node]
       local key = real_path .. "|" .. t.nodes[call.kids[2]].region
       local v = {peers = false}
-      if #call.kids >= 3 then v = peer_verdict(get(types.by_region, key, ""), get(types.by_region, real_path .. "|" .. t.nodes[call.kids[3]].region, ""), aliases) end
-      if v.peers and peer_is_apart(types.builtins, c.module, c.fn) then v.peers = false end
+      if #call.kids >= 3 and has_key(symmetric, c.fn) then v = peer_verdict(get(types.by_region, key, ""), get(types.by_region, real_path .. "|" .. t.nodes[call.kids[3]].region, ""), aliases) end
       if v.peers then
         incr(kind_counts, "peers")
-        c.why_left = "peers: both arguments are " .. peer_short_type(v.type) .. ", so neither is the subject"
+        c.why_left = "peers: `" .. c.fn .. "` is symmetric and both arguments are " .. v.module .. "s, so neither is the subject"
       elseif not has_key(types.by_region, key) then
         incr(kind_counts, "no type")
         c.kind = "no type"
@@ -643,7 +641,7 @@ function judge_by_types(kind_counts, t, cands, p, types, aliases)
 end
 
 -- The peer method calls of the file at `p` (`j.method_calls`, judged by
--- `types`): each method call whose receiver and first argument are peers,
+-- `types`): each symmetric method call whose receiver and first argument are peers,
 -- with a module to call through, goes in `j.peers` as a candidate that
 -- turns it back (`undo`), `a.max(b)` to `U64.max(a, b)`. The types prove
 -- the module's function, as the receiver's type is where the method was
@@ -653,7 +651,7 @@ function judge_method_peers(j, t, p, types, aliases)
   local real_path = real(p)
   for m in j.method_calls do
     local v = peer_verdict(get(types.by_region, real_path .. "|" .. t.nodes[m.recv].region, ""), get(types.by_region, real_path .. "|" .. t.nodes[m.first].region, ""), aliases)
-    if v.peers and v.module ~= "" and not peer_is_apart(types.builtins, v.module, m.fn) then
+    if v.peers then
       local why = m.spanned and "" or "an argument with no span in the tree, whose text cannot be moved"
       push(j.peers, {node = m.node, module = v.module, fn = m.fn, line = line_at(t, t.nodes[m.node].span.from), why_left = why, proven = true, kind = "", from_line = 0, to_line = 0, undo = true, type = v.type})
     end
@@ -824,7 +822,7 @@ function roots_of_files(ctx, paths, from, roots, read_types, open, trees, judged
       if has_key(open, p) and not has_key(found, p) and has_key(types.modules, real(p)) then
         found[p] = true
         out[p] = r
-        judge_by_types(judged[p].kind_counts, trees[p], judged[p].cands, p, types, ctx.aliases)
+        judge_by_types(judged[p].kind_counts, trees[p], judged[p].cands, p, types, ctx.aliases, ctx.symmetric)
         judge_method_peers(judged[p], trees[p], p, types, ctx.aliases)
       end
     end
@@ -845,7 +843,7 @@ end
 function peer_findings(total, p, j)
   for c in j.peers do
     total.peers = total.peers + 1
-    push(total.lines, p .. ":" .. c.line .. ": peer_receiver: `." .. c.fn .. "`'s receiver and first argument are both " .. peer_short_type(c.type) .. ", so neither is the subject: " .. c.module .. "." .. c.fn .. "(...)")
+    push(total.lines, p .. ":" .. c.line .. ": peer_receiver: `." .. c.fn .. "` is symmetric and its receiver and first argument are both " .. c.module .. "s, so neither is the subject: " .. c.module .. "." .. c.fn .. "(...)")
   end
   return nil
 end
@@ -908,11 +906,12 @@ function run_all(paths, root, from, trees, use_types, roc, opts?)
     ctx.programs_used = 1
   end
   ctx.aliases = use_types and peer_aliases(trees) or {}
+  ctx.symmetric = peer_symmetric_table(read(SYMMETRIC_FUNCTIONS))
   local total = {candidates = 0, rewritten = 0, left = 0, unsettled = 0, peers = 0, lines = {}, files = 0, next = 0, ctx = ctx, unreached = {}}
   -- Each file's candidates, `{cands, kind_counts, open_count, all_proven,
   -- method_calls, peers}`. A file the types must judge is in `open`: one
-  -- with a module call to try, or, with the types, a method call that
-  -- passes an argument, which may be a peer call.
+  -- with a module call to try, or, with the types, a symmetric method
+  -- call that passes an argument, which may be a peer call.
   local judged = {}
   local any_open = false
   local open = {}
@@ -926,7 +925,7 @@ function run_all(paths, root, from, trees, use_types, roc, opts?)
         open[p] = true
       end
     end
-    local method_calls = use_types and peer_method_calls(trees[p]) or {}
+    local method_calls = use_types and peer_method_calls(trees[p], ctx.symmetric) or {}
     if #method_calls > 0 then
       any_open = true
       open[p] = true
@@ -1051,7 +1050,7 @@ const EXPECT = {
   Typed = {left = 1, why = "the first argument is a List, not a Str", root = "TypedApp", types = true, confirms = 1, rounds = 0},
   Proven = {left = 0, root = "TypedApp", types = true, confirms = 1, rounds = 0},
   NoCalls = {left = 0, root = "TypedApp", types = true, confirms = 0, rounds = 0, no_types_run = true},
-  ProvenFails = {left = 2, why = "roc check: missing method", root = "TypedApp", types = true, confirms = 1, rounds = 2},
+  ProvenFails = {left = 2, why = "roc check: type mismatch", root = "TypedApp", types = true, confirms = 1, rounds = 2},
   Unrooted = {stop = "the types need root=", types = true},
   NotApp = {stop = "is not an app", root = "Proven", types = true},
   Pin = {stop = "roc-types reads Roc nightly-2026-11-03-34bd006", root = "TypedApp", types = true, tree_pin = "nightly-2026-10-29-a0a9fc2"},
@@ -1066,20 +1065,21 @@ const EXPECT = {
   -- A package's type module, imported as `pk.Meter`, proves its calls.
   Packaged = {left = 0, root = "PkgApp", types = true, confirms = 1, rounds = 0},
   -- `trials=0`: the types alone count, and the plant comes out as it was.
-  -- ProvenFails' three open calls are all proven, where the trial leaves
-  -- one: the count's cost, held here.
+  -- ProvenFails' three calls are all proven, where the trial leaves two:
+  -- the count's cost, held here.
   TypedCount = {file = "Typed", count = true, proven = 1, unsettled = 0, left = 1, why = "the first argument is a List, not a Str", root = "TypedApp", types = true},
-  ProvenFailsCount = {file = "ProvenFails", count = true, proven = 3, unsettled = 0, left = 1, why = "peers: both arguments are U8", root = "TypedApp", types = true},
+  ProvenFailsCount = {file = "ProvenFails", count = true, proven = 3, unsettled = 0, left = 0, root = "TypedApp", types = true},
   ProvenFrom = {file = "Proven", count = true, types_from = true, proven = 2, unsettled = 0, left = 0, root = "TypedApp", types = true},
   LastSegmentCount = {file = "LastSegment", count = true, proven = 0, unsettled = 0, left = 2, why = "the first argument is a Shelf.Shelf, not a Shelf", root = "TypedApp", types = true},
   PackagedCount = {file = "Packaged", count = true, proven = 1, unsettled = 0, left = 0, root = "PkgApp", types = true},
-  -- Peer calls stay module calls; `peers=undo` turns peer method calls
-  -- back. Each `count` plant's `left` counts its listed lines, the
-  -- peer_receiver findings among them. Line 22 of Peers is the alias's.
-  Peers = {left = 4, why = "Peers.roc:22: U64.max: peers: both arguments are U64, so neither is the subject", root = "TypedApp", types = true, confirms = 1, rounds = 0, peers = 0},
-  PeersCount = {file = "Peers", count = true, proven = 2, unsettled = 0, left = 4, peers = 0, why = "Peers.roc:22: U64.max: peers: both arguments are U64", root = "TypedApp", types = true},
+  -- A symmetric function's peer calls stay module calls; `peers=undo`
+  -- turns its peer method calls back; every other function's calls turn
+  -- or stay as ever. Each `count` plant's `left` counts its listed lines,
+  -- the peer_receiver findings among them. Line 24 of each is the alias's.
+  Peers = {left = 6, why = "Peers.roc:24: U64.max: peers: `max` is symmetric and both arguments are U64s, so neither is the subject", root = "TypedApp", types = true, confirms = 1, rounds = 0, peers = 0},
+  PeersCount = {file = "Peers", count = true, proven = 5, unsettled = 0, left = 6, peers = 0, why = "Peers.roc:24: U64.max: peers: `max` is symmetric", root = "TypedApp", types = true},
   PeerMethods = {undo = true, left = 0, peers = 0, root = "TypedApp", types = true, confirms = 1, rounds = 0},
-  PeerMethodsCount = {file = "PeerMethods", count = true, proven = 0, unsettled = 0, left = 4, peers = 4, why = "peer_receiver: `.max`'s receiver and first argument are both U64, so neither is the subject: U64.max(...)", root = "TypedApp", types = true},
+  PeerMethodsCount = {file = "PeerMethods", count = true, proven = 0, unsettled = 0, left = 6, peers = 6, why = "PeerMethods.roc:24: peer_receiver: `.max` is symmetric and its receiver and first argument are both U64s, so neither is the subject: U64.max(...)", root = "TypedApp", types = true},
 }
 
 -- The plants that hold no call and serve only as roots for other plants:
