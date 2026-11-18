@@ -357,6 +357,9 @@ const BOOL_ALIASES = {}
 -- Each type a file declares, by path, as whether it is `[].{ ... }`: an empty
 -- union with members.
 const TYPES_DECLARED_IN_FILE = {}
+-- Each type name a file declares, at the top or inside a module's own type
+-- (`MdText := [].{ Budget : ... }`), as a set of `path|Name`.
+const TYPE_NAMES_IN_FILE = {}
 
 -- Every type name and record field name that `container` checks, each
 -- `{path, line, name, words, is_field, doc}`, where `doc` is the comment
@@ -427,6 +430,7 @@ function note_type_declaration(path, src, tree, i)
   local is_union = #kids > 1 and tree[kids[2]].kind == "ty-tag-union"
   if is_union then TAG_UNION_TYPES[declared] = union_shape(tree, kids[2]) end
   push_at(TYPES_DECLARED_IN_FILE, path, is_union and #TAG_UNION_TYPES[declared].names == 0 and tree[kids[#kids]].kind == "associated")
+  TYPE_NAMES_IN_FILE[path .. "|" .. declared] = true
   push(TYPE_AND_FIELD_NAMES, {path = path, line = line, name = declared, words = name_words(declared), is_field = false, doc = doc_above(src, tree[i].line)})
   if #kids > 1 and tree[kids[2]].kind == "ty" and attribute(tree, kids[2], "name") == "Bool" then
     BOOL_ALIASES[declared] = true
@@ -612,12 +616,15 @@ end
 
 -- Whether `type_text` names the module `def` is in, a type declared in it, or
 -- the type `def` is a member of. Type arguments don't count:
--- `Bike.Motion(others)` is `Bike.Motion`.
+-- `Bike.Motion(others)` is `Bike.Motion`. A type declared in the file is its
+-- own written bare too, as a member of the module's type names one declared
+-- beside it (`Budget` in `MdText := [].{ Budget : ... }`).
 function is_own_type(def, type_text)
   local head = re_find(type_text, "^[A-Za-z0-9_.]+")
   if head == nil then return false end
   local parts = split(head.text, ".")
   local module = module_name(def.path)
+  if #parts == 1 and has_key(TYPE_NAMES_IN_FILE, def.path .. "|" .. parts[1]) then return true end
   return parts[1] == module or parts[1] == def.owner or parts[#parts] == def.owner
 end
 
