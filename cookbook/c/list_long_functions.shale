@@ -29,7 +29,7 @@
 --
 -- budget: steps=200000000 arena_bytes=1000000000 kept_bytes=268435456
 
-use("cookbook:c/items.shale")
+use("./items.shale")
 
 const PLANTS = "cookbook/c/plants/list_long_functions"
 

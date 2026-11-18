@@ -47,7 +47,7 @@
 --
 -- budget: steps=400000000 arena_bytes=1000000000 kept_bytes=268435456
 
-use("cookbook:c/items.shale")
+use("./items.shale")
 
 const PLANTS = "cookbook/c/plants/find_dead_code"
 

@@ -44,7 +44,7 @@
 --
 -- budget: steps=400000000 arena_bytes=1000000000 kept_bytes=268435456
 
-use("cookbook:c/items.shale")
+use("./items.shale")
 
 const PLANTS = "cookbook/c/plants/hunt_names"
 const CHECKS = {"type_case", "function_case", "constant_case", "zig_bound", "bound_order", "vague", "do_word", "vague_local", "container_type", "abbreviation"}
