@@ -160,7 +160,8 @@ static inline uint8_t str_byte(Str s, size_t i) {
 // and delete a later check of it. An empty Str or slice may hold NULL, so
 // no code outside c/foundation calls memcpy, memmove, memcmp, memchr or memmem
 // (c/check_discipline.shale's `raw mem` rule): it calls these, which make no
-// call for 0 bytes, and each raw call left in c/foundation has a DRAGON.
+// call for 0 bytes. Inside c/foundation too, these five are the only raw
+// calls, each under its DRAGON.
 
 // Copies `n` bytes from `src` to `dst`, which do not overlap; nothing for 0.
 static inline void mem_copy(void *dst, const void *src, size_t n) {
@@ -218,27 +219,17 @@ static inline size_t mem_find(const void *hay, size_t hay_len, const void *needl
 #endif
 
 static inline bool str_eq(Str a, Str b) {
-    // DRAGON: NULL pointers. An empty Str may hold NULL, which memcmp may
-    // not be handed even for 0 bytes.
-    // REMEDY: the `len == 0` test makes no call for an empty Str, and a Str
-    // of a length past 0 points at its bytes.
-    return a.len == b.len && (a.len == 0 || memcmp(a.ptr, b.ptr, a.len) == 0);
+    return a.len == b.len && mem_compare(a.ptr, b.ptr, a.len) == 0;
 }
 
 static inline bool str_starts_with(Str s, Str prefix) {
-    // DRAGON: NULL pointers. As str_eq's.
-    // REMEDY: an empty prefix makes no call, and `s` is at least as long as
-    // a prefix past 0, so neither is NULL.
-    return s.len >= prefix.len && (prefix.len == 0 || memcmp(s.ptr, prefix.ptr, prefix.len) == 0);
+    return s.len >= prefix.len && mem_compare(s.ptr, prefix.ptr, prefix.len) == 0;
 }
 
 // The first `c` in `s`, or NULL when there is none. Every search of a Str's
 // bytes for one byte comes here.
 static inline const char *str_find_byte(Str s, char c) {
-    // DRAGON: NULL pointers. memchr is undefined on a NULL pointer, and an
-    // empty Str may hold NULL.
-    // REMEDY: an empty Str makes no call; test_slice catches its plant.
-    return s.len == 0 ? NULL : memchr(s.ptr, c, s.len);
+    return mem_find_byte(s.ptr, c, s.len);
 }
 
 #endif

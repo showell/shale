@@ -18,7 +18,9 @@
 --               no call for 0 bytes, so
 --               no NULL an empty Str holds reaches one (undefined in C17, and
 --               glibc's nonnull lets GCC delete a later NULL check); inside
---               it, each raw call has a `DRAGON:` in the comment block above;
+--               it, a raw call is in one of those five wrappers alone
+--               (RAW_MEM_WRAPPERS), under a `DRAGON:` in the comment block
+--               above it, so no other foundation code grows one back;
 --   slice args: no `++`, `--`, `=` or call in a SLICE_SUB's arguments, which
 --               it evaluates more than once;
 --   must use:   a function returning `Status` is `STATUS_MUST_USE`, so GCC
@@ -121,6 +123,9 @@ const PTR_SUM = [=[\*\s*\(\s*[A-Za-z_][A-Za-z0-9_.>-]*ptr\s*\+]=]
 const ARRAY_DECL = [=[\b(int|char|bool|size_t|uintptr_t|u?int\d+_t|[A-Z]\w*)(\s+\**\s*(?:const\s+)?\w+)\s*\[[^\]]*\]]=]
 const MEM_CALL = [=[\bmem(cpy|move|set|cmp|mem|_copy|_move|_compare|_find)\s*\(]=]
 const RAW_MEM = [=[\bmem(cpy|move|cmp|chr|mem)\s*\(]=]
+-- The foundation's functions that may make a raw mem* call: slice.h's guarded
+-- wrappers, which make none for 0 bytes. Every other caller goes through them.
+const RAW_MEM_WRAPPERS = {"mem_copy", "mem_move", "mem_compare", "mem_find_byte", "mem_find"}
 const SLICE_CALL = [=[\bSLICE_SUB\s*\(]=]
 const STATUS_FN = [=[\bstatic\s+(inline\s+)?Status\s+[\w#]+\s*\(]=]
 const CHAR_PARAM = [=[[(,]\s*(const\s+)?char\s*\*\s*\w+\s*[,)]]=]
@@ -358,6 +363,10 @@ function check_file(p, in_foundation)
   local all = lines(read(p))
   local found = {}
   local kept = kept_statics()
+  local wrappers = set_of(RAW_MEM_WRAPPERS)
+  -- The function the line is in, "" for none: a column-0 line opens one or
+  -- ends it.
+  local in_fn = ""
   if header then
     local guard = "#ifndef SHALE_" .. upper(sub(name, 1, #name - 2)) .. "_H"
     if #all == 0 or not starts_with(all[1], "// " .. name .. ": ") then
@@ -381,6 +390,12 @@ function check_file(p, in_foundation)
     n = n + 1
     local code = c_mask(raw)
     local trimmed = trim(code)
+    if raw ~= "" and not starts_with(raw, " ") then
+      local head = nil
+      if starts_with(raw, "static ") then head = c_function_head(code) end
+      in_fn = ""
+      if head ~= nil then in_fn = head.name end
+    end
     -- Each rule's patterns run only on a line holding a literal every match
     -- of them holds (a `[` for an index, `mem` for a mem* call): the regexes
     -- are most of the check's time, and the literal is a necessary condition,
@@ -399,7 +414,7 @@ function check_file(p, in_foundation)
         end
       end
     end
-    if find(code, "mem") ~= nil and re_find(code, RAW_MEM) ~= nil and not (in_foundation and dragon_above(all, n)) then
+    if find(code, "mem") ~= nil and re_find(code, RAW_MEM) ~= nil and not (in_foundation and has_key(wrappers, in_fn) and dragon_above(all, n)) then
       push(found, {path = p, line = n, rule = "raw mem", text = raw})
     end
     if find(code, "SLICE_SUB") ~= nil then
@@ -1094,7 +1109,7 @@ static inline Str said_mem(void) { return S("memmove(a, b, n)"); }
 ]=])
   caught = caught + plants_hold(outside, false, {"4 raw index", "5 raw index", "6 mem arithmetic", "6 raw mem", "7 slice args", "8 slice args", "9 slice args", "10 must use", "11 fail brace", "22 raw mem", "23 raw mem", "24 raw mem", "25 raw mem", "26 mem arithmetic"})
   local inside = dir .. "/inside.h"
-  create(inside, [=[// inside.h: the foundation's mem plants: lines 4, 8 and 9 break, 7 passes.
+  create(inside, [=[// inside.h: the foundation's mem plants: 4, 7, 8, 9 and 16 break, 13 passes.
 #ifndef SHALE_INSIDE_H
 #define SHALE_INSIDE_H
 static inline void shift(uint64_t *xs, size_t n) { memmove(xs, xs + 1, n); }
@@ -1103,9 +1118,17 @@ static inline void shift(uint64_t *xs, size_t n) { memmove(xs, xs + 1, n); }
 static inline void marked(uint64_t *xs, size_t n) { memmove(xs, xs + 1, n); }
 static inline void unmarked(uint64_t *xs, size_t n) { memcpy(xs, xs, n); }
 static inline bool unmarked_search(Str a, Str b) { return memmem(a.ptr, a.len, b.ptr, b.len) != NULL; }
+static inline void mem_move(void *dst, const void *src, size_t n) {
+    // DRAGON: NULL pointers. A plant: a wrapper's raw call, under its DRAGON.
+    // REMEDY: the self-test writes it, and nothing calls it.
+    memmove(dst, src, n);
+}
+static inline void mem_copy(void *dst, const void *src, size_t n) {
+    memcpy(dst, src, n);
+}
 #endif
 ]=])
-  caught = caught + plants_hold(inside, true, {"4 mem arithmetic", "4 raw mem", "8 raw mem", "9 raw mem"})
+  caught = caught + plants_hold(inside, true, {"4 mem arithmetic", "4 raw mem", "7 raw mem", "8 raw mem", "9 raw mem", "16 raw mem"})
   local statics = dir .. "/statics.c"
   create(statics, [=[// statics.c: the static-state rule's plants: lines 2, 3, 4, 6 and 9 break it.
 static int count;

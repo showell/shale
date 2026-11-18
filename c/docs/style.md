@@ -154,7 +154,9 @@ and its self-test plants a break of each one.
   before its first include, since memmem is a GNU extension. A mem* call
   on NULL is undefined in C17 even for 0 bytes, an empty Str may hold NULL,
   and glibc marks the arguments nonnull, so GCC may delete a later NULL
-  check. Inside the foundation each raw call has a `DRAGON:` above it.
+  check. Inside the foundation a raw call is in `mem_copy`, `mem_move`,
+  `mem_compare`, `mem_find_byte` or `mem_find` alone, under a `DRAGON:`:
+  every other function calls one of them.
 - **Held:** a `SLICE_SUB`'s arguments have no `++`, `--`, `=` or call: it
   evaluates them more than once. `str_sub` is a function and takes any.
 - A loop that has proved its own bounds may use `at_unchecked(s, i, "why")`.
