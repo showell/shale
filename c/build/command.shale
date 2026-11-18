@@ -10,8 +10,9 @@ use("build:lib.shale")
 -- file. Here: c/gen_preludes.shale writes the preludes the C `shale`
 -- embeds, then c/shale.c is built under each of `t.builds` (tcc in the fast
 -- tier, release and asan added in the full), and each binary's `--check` is
--- held to a script that parses and one that stops, its `--help` and `-h` to
--- the golden tests' expected usage (tests/golden/cli-help) and the docs and
+-- held to a script that parses, one that stops and one too big, its
+-- `--help` and `-h` to the golden tests' expected usage
+-- (tests/golden/cli-help) and the docs and
 -- mounts each case's folder and mounts file make, its `--version` to its
 -- build's mode, and its `--secrets`, run off a terminal, to its refusal. In
 -- the full tier: the faults below planted in a copy of c/script, each caught
@@ -42,8 +43,8 @@ function build_commands(t)
   return nil
 end
 
--- The C `shale` under `build`: its `--check` of one script that parses and
--- one that stops, each held to its exact report.
+-- The C `shale` under `build`: its `--check` of one script that parses, one
+-- that stops and one past the source budget, each held to its exact report.
 function check_command(t, build)
   local bin = OUT .. "/" .. build .. "/shale"
   local good = OUT .. "/command/good.shale"
@@ -59,6 +60,20 @@ function check_command(t, build)
   local b = run_in(t, "command " .. build, {bin, "--check", bad}, {timeout_ms = 20000, tail = 10, env = env, want = WANT})
   local said = "── stopped at " .. bad .. ":2:13: syntax: a character no token starts with, `@` (0 steps)\n── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes"
   if b.code ~= 1 or trim(b.out) ~= said then fail("`" .. build .. "`'s shale --check of a script that stops said:\n" .. b.out) end
+  -- A script well past the source budget stops on it, not on the read's
+  -- StreamTooLong.
+  local big = OUT .. "/command/big.shale"
+  local line = "-- xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n"
+  local parts = {}
+  local n = 0
+  while n < 1000 do
+    push(parts, line)
+    n = n + 1
+  end
+  create(big, join(parts, ""))
+  local o = run_in(t, "command " .. build, {bin, "--check", big}, {timeout_ms = 20000, tail = 10, env = env, want = WANT})
+  local over = "── stopped at " .. big .. ":1:1: budget source: the source is larger than the source budget (0 steps)\n── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes"
+  if o.code ~= 1 or trim(o.out) ~= over then fail("`" .. build .. "`'s shale --check of a script past the source budget said:\n" .. o.out) end
   return nil
 end
 
@@ -188,7 +203,7 @@ function command_block(t)
     check_command(t, b)
     local helps = check_help(t, b)
     local failed = check_stdout_failed(t, b)
-    print("command " .. b .. ": c/out/" .. b .. "/shale built; its --check holds a script that parses and one that stops; " .. helps .. " --help runs held to their expected text, --version to its mode and --secrets off a terminal to its refusal; " .. failed .. " runs whose stdout refuses its writes exit 1 and say so")
+    print("command " .. b .. ": c/out/" .. b .. "/shale built; its --check holds a script that parses, one that stops and one past the source budget; " .. helps .. " --help runs held to their expected text, --version to its mode and --secrets off a terminal to its refusal; " .. failed .. " runs whose stdout refuses its writes exit 1 and say so")
   end
   if not t.full then return nil end
   run_plants(t, "parse plants", PARSE_PLANTS)

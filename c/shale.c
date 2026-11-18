@@ -616,23 +616,28 @@ typedef struct {
     Str cwd_abs;
 } Where;
 
+// The stop of a script past the source budget, at its first byte: a read
+// that found more than the budget's worth of it ends here too.
+static int source_budget_stop(Out *o, Command *c) {
+    Used none = {0, 0, 0};
+    Stop s = {0};
+    memset(&s, 0, sizeof s);
+    s.line = 1;
+    s.column = 1;
+    s.cls = CLASS_BUDGET;
+    s.budget = BUDGET_SOURCE;
+    s.message = S("the source is larger than the source budget");
+    s.function = S("");
+    if (cli_write_stop(&o->err, cli_script_name(c), &s, none, &c->budgets) != OK) return not_ported(o, S("a report past the arena"));
+    return flush_and_exit(o, EXIT_STOPPED);
+}
+
 static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, Where where, Str source, Preludes preludes, const Arg *args, size_t args_len, int64_t now) {
     Arena *a = o->arena;
     Budgets b = c->budgets;
     Str name = cli_script_name(c);
+    if (source.len > b.source_bytes) return source_budget_stop(o, c);
     Used none = {0, 0, 0};
-    if (source.len > b.source_bytes) {
-        Stop s = {0};
-        memset(&s, 0, sizeof s);
-        s.line = 1;
-        s.column = 1;
-        s.cls = CLASS_BUDGET;
-        s.budget = BUDGET_SOURCE;
-        s.message = S("the source is larger than the source budget");
-        s.function = S("");
-        if (cli_write_stop(&o->err, name, &s, none, &b) != OK) return not_ported(o, S("a report past the arena"));
-        return flush_and_exit(o, EXIT_STOPPED);
-    }
     Arena tree;
     arena_init(&tree, b.machine_bytes + PARSE_ROOM, o->refused);
     Parser p;
@@ -1057,6 +1062,7 @@ static int run_main(Out *o, int argc, char **argv) {
             return flush_and_exit(o, EXIT_REFUSED);
         }
         if (read_path(a, file, c.budgets.source_bytes + 1, &source, &err) != OK) {
+            if (str_eq(err, S("StreamTooLong"))) return source_budget_stop(o, &c);
             say(o, S("shale: cannot read "));
             say(o, c.file);
             say(o, S(": "));
@@ -1068,6 +1074,7 @@ static int run_main(Out *o, int argc, char **argv) {
         // A terminal on stdin with no script is a mistake, not a script.
         if (isatty(0)) return refuse_command(o, S("no script: a file, -e SOURCE, or the script on stdin"), true);
         if (read_all(a, 0, c.budgets.source_bytes + 1, &source, &err) != OK) {
+            if (str_eq(err, S("StreamTooLong"))) return source_budget_stop(o, &c);
             say(o, S("shale: cannot read the script on stdin: "));
             say(o, err);
             say(o, S("\n"));
