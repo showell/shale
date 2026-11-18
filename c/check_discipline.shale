@@ -134,10 +134,15 @@ const STATUS_FN = [=[\bstatic\s+(inline\s+)?Status\s+[\w#]+\s*\(]=]
 const CHAR_PARAM = [=[[(,]\s*(const\s+)?char\s*\*\s*\w+\s*[,)]]=]
 const CHAR_FIELD = [=[^\s*(const\s+)?char\s*\*\s*\w+\s*;]=]
 const LEN_FIELD = [=[^\s*size_t\s+len\s*;]=]
--- A declaration whose first declarator is followed by a comma, read after
--- every parenthesized and braced group is emptied.
-const TWO_DECLS = [=[^\s*(static\s+)?(const\s+)?(int|char|bool|size_t|uintptr_t|u?int\d+_t|[A-Z]\w*)\s+\**\s*\w+\s*(\[\w*\])?\s*(=[^,;]*)?,]=]
-const DECL_INIT = [=[^\s*(static\s+)?(const\s+)?(int|char|bool|size_t|uintptr_t|u?int\d+_t|[A-Z]\w*)\s+\**\s*\w+\s*(\[\w*\])?\s*=]=]
+-- A declaration is read in two parts (`decl_rest`): its type, the first
+-- word past an optional `static` and `const`, held to DECL_TYPE; then what
+-- follows the type, held to DECL_INIT (a first declarator given a value) or
+-- TWO_DECLS (one followed by a comma, read after every parenthesized and
+-- braced group is emptied). Split so, the patterns run on short texts: run
+-- whole on every line with a `,` or a `=`, they were most of the check.
+const DECL_TYPE = [=[^(int|char|bool|size_t|uintptr_t|u?int\d+_t|[A-Z]\w*)$]=]
+const TWO_DECLS = [=[^\s+\**\s*\w+\s*(\[\w*\])?\s*(=[^,;]*)?,]=]
+const DECL_INIT = [=[^\s+\**\s*\w+\s*(\[\w*\])?\s*=]=]
 -- A UTF-8 continuation byte, which starts no column.
 const UTF8_CONT = "[\x80-\xbf]"
 -- A Zig file's line cited: `vm.zig:123`, `src/script/vm.zig:1`.
@@ -171,6 +176,18 @@ function flattened(code)
     s = re_replace(s, [=[\{[^(){}]*\}]=], "0")
   end
   return s
+end
+
+-- What follows a declaration's type on `trimmed`, a line's code with its
+-- indent off, from the space after it; nil when the line starts with no
+-- type (DECL_TYPE) past an optional `static` and `const`.
+function decl_rest(trimmed)
+  local s = trimmed
+  if starts_with(s, "static ") then s = trim_start(sub(s, 8)) end
+  if starts_with(s, "const ") then s = trim_start(sub(s, 7)) end
+  local sp = find(s, " ")
+  if sp == nil or not re_match(sub(s, 1, sp - 1), DECL_TYPE) then return nil end
+  return sub(s, sp)
 end
 
 function opens_top(raw)
@@ -440,10 +457,11 @@ function check_file(p, in_foundation)
         push(found, {path = p, line = n, rule = "cstr", text = raw})
       end
     end
-    if find(code, ",") ~= nil and re_find(flattened(code), TWO_DECLS) ~= nil then
+    local rest = decl_rest(trimmed)
+    if rest ~= nil and find(rest, ",") ~= nil and re_find(flattened(rest), TWO_DECLS) ~= nil then
       push(found, {path = p, line = n, rule = "one per line", text = raw})
     end
-    if find(code, "=") ~= nil and re_find(code, DECL_INIT) ~= nil then
+    if rest ~= nil and find(rest, "=") ~= nil and re_find(rest, DECL_INIT) ~= nil then
       local tail = trim(re_replace(code, "\\\\\\s*$", ""))
       if not ends_with(tail, ";") and not ends_with(tail, "{") then
         push(found, {path = p, line = n, rule = "wrapped", text = raw})
