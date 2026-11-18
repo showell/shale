@@ -309,15 +309,16 @@ static Value vm_int(int64_t i) {
     return v;
 }
 
-// Each stop whose Zig format escapes a brace (`{{`), every one in src/, with
-// the values' arena refusing everything when the stop's message is made: the
-// message is Zig's format text, raw, as `Run.fail`'s `allocPrint(...) catch
-// fmt` gives it. The C's cooked text has one brace there, so a stop that
-// gave its finished literal would differ from Zig here alone. The builtins
-// are called directly, their arguments made first, since a script under a
-// tiny arena stops on its arguments before it reaches the stop. The host's
-// path_fail sites (`run`, `job_start`, `job_wait`) take Zig's format itself
-// and fall back to it, so they cannot drift and are not repeated here.
+// Each stop whose Zig format escapes a brace (`{{`), every one in Zig
+// Shale's source (legacy_zig/src), with the values' arena refusing
+// everything when the stop's message is made: the message is Zig's format
+// text, raw, as `Run.fail`'s `allocPrint(...) catch fmt` gives it. The C's
+// cooked text has one brace there, so a stop that gave its finished literal
+// would differ from Zig here alone. The builtins are called directly, their
+// arguments made first, since a script under a tiny arena stops on its
+// arguments before it reaches the stop. The host's path_fail sites (`run`,
+// `job_start`, `job_wait`) take Zig's format itself and fall back to it, so
+// they cannot drift and are not repeated here.
 TEST(a_stop_whose_format_escapes_a_brace_falls_back_to_that_format_raw) {
     static Ran x;
     ran_source(&x, S(""), ran_budgets());
