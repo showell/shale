@@ -213,12 +213,13 @@ end
 -- (c/build/binary.shale). `to` is a Shale path, through this run's mounts
 -- (the block's own are only `build`, `cookbook` and `tools`), or an absolute
 -- OS path, as bench/baseline.shale's `{prefix}` is; the block is handed the
--- OS path.
+-- OS path. Without `to`, the binary stays where it is built,
+-- c/out/<binary>/shale.
 local binary = arg("binary", "")
 local to = arg("to", "")
 if binary ~= "" then
   if binary == "tcc" and tcc == nil then fail("binary=tcc: tcc is not installed (`sudo apt install tcc`)") end
-  if to == "" then fail("binary=" .. binary .. ": `to=` names where the binary goes, a Shale path (`scratch:x/shale`) or an absolute OS path") end
+  if to == "" then to = "c/out/" .. binary .. "/shale" end
   if not starts_with(to, "/") then to = real(to) end
   run_block("binary", {"build=" .. binary, "to=" .. to}, mounts, false)
   return nil
