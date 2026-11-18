@@ -12,8 +12,8 @@ use("build:lib.shale")
 -- tier, release and asan added in the full), and each binary's `--check` is
 -- held to a script that parses and one that stops, its `--help` and `-h` to
 -- the golden tests' expected usage (tests/golden/cli-help) and the docs and
--- mounts each case's folder and mounts file make, and its `--version` to its
--- build's mode. In
+-- mounts each case's folder and mounts file make, its `--version` to its
+-- build's mode, and its `--secrets`, run off a terminal, to its refusal. In
 -- the full tier: the faults below planted in a copy of c/script, each caught
 -- by its test file.
 
@@ -171,6 +171,12 @@ function check_help(t, build)
   local mode = "Debug"
   if build == "release" then mode = "ReleaseSafe" end
   if v.code ~= 0 or v.out ~= "shale " .. mode .. "\n" then fail("`" .. build .. "`'s shale --version said " .. v.out .. ", not shale " .. mode) end
+  -- `--secrets` off a terminal (run's stdin and stdout are pipes) is
+  -- refused before the mounts are read, and makes nothing.
+  local s = run_in(t, "command help", {c_bin, "--secrets"}, {timeout_ms = 10000, whole = 2000, env = {SHALE_MOUNTS = d .. "/all.mounts", HOME = d}, want = WANT})
+  local refused = "shale --secrets: run it in your own terminal: it reads a secret from the keyboard, so its stdin and its stdout must both be a terminal\n"
+  if get(s, "code", -1) ~= 2 or s.out ~= refused then fail("`" .. build .. "`'s shale --secrets off a terminal exited " .. get(s, "code", -1) .. " and said:\n" .. s.out .. "\nnot exit 2 and:\n" .. refused) end
+  if #ls(dir .. "/fake-keys-7q2x") ~= 0 or exists(dir .. "/.claude") then fail("`" .. build .. "`'s shale --secrets off a terminal wrote a file") end
   return #cases
 end
 
@@ -182,7 +188,7 @@ function command_block(t)
     check_command(t, b)
     local helps = check_help(t, b)
     local failed = check_stdout_failed(t, b)
-    print("command " .. b .. ": c/out/" .. b .. "/shale built; its --check holds a script that parses and one that stops; " .. helps .. " --help runs held to their expected text and --version to its mode; " .. failed .. " runs whose stdout refuses its writes exit 1 and say so")
+    print("command " .. b .. ": c/out/" .. b .. "/shale built; its --check holds a script that parses and one that stops; " .. helps .. " --help runs held to their expected text, --version to its mode and --secrets off a terminal to its refusal; " .. failed .. " runs whose stdout refuses its writes exit 1 and say so")
   end
   if not t.full then return nil end
   run_plants(t, "parse plants", PARSE_PLANTS)

@@ -13,6 +13,8 @@ usage: shale [--root DIR] [--verbose] [--undo-on-stop] [--check] [--budget NAME=
   NAME=VALUE        a value the script reads with arg("NAME", default)
   --help            this, where the docs are, and the mounts in force (alone)
   --version         the mode this `shale` was built in (alone)
+  --secrets         a person's commands for the secrets mounts, at a terminal: where
+                    they are, storing a secret, Claude Code's deny rules (alone)
 
 The docs (start with the first):
   docs/SHALE-AGENTS.md and docs/SHALE.md at github.com/showell/shale

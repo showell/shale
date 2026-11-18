@@ -547,7 +547,7 @@ static STATUS_MUST_USE Status paths_os_path(Paths *h, PathRun *r, Pos pos, Str w
 // A secret's file, for `run`'s `secrets`: its OS path, through any mount, a
 // secrets one included (which every other path refuses). Zig's
 // `secretPath`, its string already checked.
-static STATUS_MUST_USE Status paths_secret_path(Paths *h, PathRun *r, Pos pos, Str who, Str path, Str *out) {
+static inline STATUS_MUST_USE Status paths_secret_path(Paths *h, PathRun *r, Pos pos, Str who, Str path, Str *out) {
     size_t colon = 0;
     if (!paths_colon(path, &colon)) return paths_os_path(h, r, pos, who, path, false, out);
     const Mount *m = NULL;
@@ -648,7 +648,7 @@ SLICE_TYPE(PathsStrs, const Str);
 // REMEDY: it refuses what a script spells: the folder by its text, by `.` and
 // `..` against the program's folder, after an option's `=`, through a link,
 // and a folder above it; test_paths plants each.
-static STATUS_MUST_USE Status paths_refuse_secret_args(Paths *h, PathRun *r, Pos pos, Str who, PathsStrs argv, Str cwd, PathsStrs env_keys, PathsStrs env_values) {
+static inline STATUS_MUST_USE Status paths_refuse_secret_args(Paths *h, PathRun *r, Pos pos, Str who, PathsStrs argv, Str cwd, PathsStrs env_keys, PathsStrs env_values) {
     for (size_t k = 0; k < h->mounts.len; k++) {
         const Mount *m = &at(h->mounts, k);
         if (!m->secrets) continue;

@@ -106,7 +106,7 @@
 -- the arena's 16 MiB unset and names no arena budget.
 --
 -- Run from the repository's root: shale c/check_discipline.shale
--- budget: steps=100000000
+-- budget: steps=100000000 kept_bytes=4194304
 
 const ALLOC = [=[\b(malloc|free|calloc|realloc|aligned_alloc|strdup|strndup)\s*\(]=]
 -- An index: a `[` after a name, a `)` or a `]`, read after each array
@@ -619,7 +619,7 @@ const PROBE_MODULES = {
   "c/script/builtins_change.c", "c/script/vm.c", "c/host/mounts.c", "c/host/paths.c", "c/host/undo.c",
   "c/host/spawn_argv.c", "c/host/spawn.c", "c/host/keep.c", "c/host/job_record.c", "c/host/jobs.c", "c/host/swap_file.c", "c/host/host_run.c",
   "c/host/host_jobs.c", "c/host/host_procs.c", "c/host/host_json.c", "c/host/host_text.c", "c/host/flat_tree.c", "c/host/zig_wire.c", "c/host/zig_ast.c",
-  "c/host/host_zig.c", "c/host/host_call.c", "c/gate/gate.c",
+  "c/host/host_zig.c", "c/host/host_call.c", "c/host/settings_json.c", "c/host/secrets_mode.c", "c/gate/gate.c",
 }
 const PROBE_DIR = "c/out/returns"
 -- The compiler's canaries: each holds a shape a rule forbids, to see the

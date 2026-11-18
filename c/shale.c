@@ -3,7 +3,8 @@
 // and either stops there (`--check`) or runs it on the VM (script/vm.c),
 // printing what it printed on stdout and its report on stderr, with its exit
 // code. A host call the C does not run yet is refused as not ported.
-// `--help` and `--version` print the usage and the build's mode, and
+// `--help` and `--version` print the usage and the build's mode, `--secrets`
+// is a person's commands for the secrets mounts (host/secrets_mode.c), and
 // `--reap` is a job's reaper (host/jobs.c). This file holds the system
 // calls; what it decides is in script/.
 
@@ -47,6 +48,8 @@
 #include "host/zig_ast.c"
 #include "host/host_zig.c"
 #include "host/host_call.c"
+#include "host/settings_json.c"
+#include "host/secrets_mode.c"
 #include "preludes.h"
 
 enum {
@@ -712,6 +715,10 @@ static bool help_checkout(Arena *a, Str *out) {
     return arena_dup(a, up, out);
 }
 
+// `--secrets`'s line in `--help`, below the usage: the usage itself is Zig
+// Shale's, which has no such mode.
+#define HELP_SECRETS "  --secrets         a person's commands for the secrets mounts, at a terminal: where\n                    they are, storing a secret, Claude Code's deny rules (alone)\n"
+
 // `shale --help`: the usage, where the docs are and the mounts
 // in force, on stdout, each mount with its folder but a `secrets` mount's. A
 // mounts file that does not read is said on stderr after the rest, exit 2.
@@ -720,7 +727,7 @@ static int help_main(Out *o) {
     Buf w = buf_make(a);
     Str checkout = {0};
     bool in_checkout = help_checkout(a, &checkout);
-    bool built = buf_str(&w, cli_usage()) == OK && buf_lit(&w, "\nThe docs (start with the first):\n") == OK;
+    bool built = buf_str(&w, cli_usage()) == OK && buf_lit(&w, HELP_SECRETS "\nThe docs (start with the first):\n") == OK;
     if (built && in_checkout) {
         built = buf_lit(&w, "  ") == OK && buf_str(&w, checkout) == OK && buf_lit(&w, "/docs/SHALE-AGENTS.md\n  ") == OK &&
                 buf_str(&w, checkout) == OK && buf_lit(&w, "/docs/SHALE.md\n") == OK;
@@ -763,6 +770,32 @@ static int help_main(Out *o) {
     if (!built) return not_ported(o, S("a help past the arena"));
     Str failed = write_stdout(buf_view(&w));
     return flush_and_exit(o, failed.len > 0 ? stdout_failed(o, failed) : EXIT_FINISHED);
+}
+
+// `shale --secrets`: refused off a terminal before the mounts are read, and
+// otherwise the menu over this box's mounts (host/secrets_mode.c).
+static int secrets_cli(Out *o) {
+    SecretsIo io = {0, 1, 2};
+    if (!secrets_on_terminal(io)) return secrets_refuse_terminal(io);
+    Arena *a = o->arena;
+    const char *home_c = getenv("HOME"); // cstr: the environment's
+    const char *pinned = getenv("SHALE_MOUNTS"); // cstr: the environment's
+    Str home = from_c(home_c != NULL ? home_c : "/");
+    MountsLoaded loaded;
+    Str why = S("");
+    MountsResult mr = mounts_load(a, pinned != NULL, pinned != NULL ? from_c(pinned) : S(""), home, &loaded, &why);
+    if (mr == MOUNTS_OUT_OF_MEMORY) return not_ported(o, S("the mounts past the arena"));
+    if (mr == MOUNTS_MALFORMED) {
+        say(o, S("shale: the mounts: "));
+        say(o, why);
+        say(o, S("\n"));
+        return flush_and_exit(o, EXIT_REFUSED);
+    }
+    char cwd[PATH_MAX];
+    Str cwd_abs = S("");
+    if (getcwd(cwd, sizeof cwd) == NULL || !arena_dup(a, from_c(cwd), &cwd_abs)) return not_ported(o, S("a run with no working folder"));
+    Secrets m = {a, io, home, cwd_abs, Mounts_items(&loaded.mounts), loaded.from};
+    return secrets_main(&m);
 }
 
 // `shale --version`: the mode this `shale` was built in.
@@ -848,6 +881,7 @@ static int run_main(Out *o, int argc, char **argv) {
     }
     if (all.len == 2 && (str_eq(at(all, 1), S("--help")) || str_eq(at(all, 1), S("-h")))) return help_main(o);
     if (all.len == 2 && str_eq(at(all, 1), S("--version"))) return version_main(o);
+    if (all.len == 2 && str_eq(at(all, 1), S("--secrets"))) return secrets_cli(o);
     const char *env_root = getenv("SHALE_ROOT"); // cstr: the environment's
     Command c;
     Buf why = buf_make(a);

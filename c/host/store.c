@@ -948,7 +948,7 @@ typedef struct {
     StoreErr (*remove_tree)(void *ctx, Arena *a, Str path);
 } Store;
 
-static void store_linux(LinuxStore *s, Store *out) {
+static inline void store_linux(LinuxStore *s, Store *out) {
     Store v = {
         s, store_linux_stat, store_linux_stat_or_null, store_linux_has, store_linux_list, store_linux_read_at,
         store_linux_replace, store_linux_append, store_linux_make_dir, store_linux_remove, store_linux_remove_tree,

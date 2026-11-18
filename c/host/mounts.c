@@ -203,7 +203,7 @@ typedef struct {
 // pinned one, or any mistake in a file, is MOUNTS_MALFORMED with `*why`
 // naming the file. A link in a mount's own path is the user's choice, so it
 // is resolved once here; below it, the store follows none.
-static MountsResult mounts_load(Arena *a, bool has_pinned, Str pinned, Str home, MountsLoaded *out, Str *why) {
+static inline MountsResult mounts_load(Arena *a, bool has_pinned, Str pinned, Str home, MountsLoaded *out, Str *why) {
     out->mounts = Mounts_make(a);
     out->from = pinned;
     if (!has_pinned) {
