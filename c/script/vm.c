@@ -105,7 +105,7 @@ static BuiltinSpecs builtin_specs(void) {
 }
 
 // Whether builtin `b` changes the store: what a background run refuses.
-static bool builtin_changes_store(Builtin b) {
+static bool builtin_changes_files(Builtin b) {
     return b == BUILTIN_REPLACE || b == BUILTIN_APPEND || b == BUILTIN_MKDIR || b == BUILTIN_REMOVE || b == BUILTIN_REMOVE_TREE || b == BUILTIN_EDIT;
 }
 
@@ -116,7 +116,7 @@ static STATUS_MUST_USE Status builtins_too_many(Run *r, Pos pos, Builtin b) {
 // Calls builtin `b` after counting its arguments against its spec.
 static STATUS_MUST_USE Status builtins_call(Run *r, Pos pos, Builtin b, ConstValues args, Value *out) {
     const BuiltinSpec *s = &at(builtin_specs(), (size_t)b);
-    if (builtin_changes_store(b)) r->tried_change = true;
+    if (builtin_changes_files(b)) r->tried_change = true;
     if (args.len < s->at_least || args.len > s->at_most) {
         Str name = builtin_name(b);
         Str plural = s->at_least == 1 ? S("") : S("s");
@@ -282,11 +282,11 @@ static STATUS_MUST_USE Status collect_run(Run *r, Pos pos, Values stack, Values 
     // The effects go first, since the run reports them however it ends;
     // should even they not fit, the old arena is put back and the run stops
     // with what it had.
-    if (r->store != NULL) {
+    if (r->files != NULL) {
         Effects kept = Effects_make(values);
-        bool fits = Effects_reserve(&kept, r->store->effects.len) == OK;
-        for (size_t i = 0; fits && i < r->store->effects.len; i++) {
-            Effect e = at(r->store->effects, i);
+        bool fits = Effects_reserve(&kept, r->files->effects.len) == OK;
+        for (size_t i = 0; fits && i < r->files->effects.len; i++) {
+            Effect e = at(r->files->effects, i);
             c.bytes += e.path.len;
             fits = arena_dup(values, e.path, &e.path) && Effects_push(&kept, e) == OK;
         }
@@ -296,9 +296,9 @@ static STATUS_MUST_USE Status collect_run(Run *r, Pos pos, Values stack, Values 
             *values = old;
             return run_budget_stop(&r->ctx, pos, BUDGET_KEPT);
         }
-        r->store->effects = kept;
-        r->store->scan_buf.ptr = NULL;
-        r->store->scan_buf.len = 0;
+        r->files->effects = kept;
+        r->files->scan_buf.ptr = NULL;
+        r->files->scan_buf.len = 0;
     }
     Status s = OK;
     for (size_t i = 0; s == OK && i < stack.len; i++) s = copier_copy(&c, &at(stack, i));

@@ -1,4 +1,4 @@
-// fixture.c: what the path hook's tests share: store_fixture.c's root and
+// fixture.c: what the path hook's tests share: file_system_fixture.c's root and
 // store, a run's context with its step charge, the Linux hook over the
 // mounts a test parses, and the builtins' path checks in the order the
 // builtins make them (`fx_look`, `fx_change`), since the builtins themselves
@@ -6,7 +6,7 @@
 //
 // A test file defines _GNU_SOURCE, includes test.h, then this.
 
-#include "store_fixture.c"
+#include "file_system_fixture.c"
 #include "../../host/path_run.c"
 #include "../../host/mounts.c"
 #include "../../host/paths.c"
@@ -106,12 +106,12 @@ static void fx_again(Fx *f) {
 // `ls` and the reads make these calls in this order.
 static STATUS_MUST_USE Status fx_look(Fx *f, const char *who, Str path) { // cstr: a builtin's name
     fx_again(f);
-    StorePath p;
+    CheckedPath p;
     TRY(path_arg(&f->run, fx_pos(), sx_cs(who), path, true, &p));
     bool found = false;
     FileSystemStat st;
     FileSystemErr e = file_system_stat_or_null(&f->base.file_system, &f->base.values, p.full, &found, &st);
-    if (e != FILE_SYSTEM_OK) return path_store_failed(&f->run, fx_pos(), sx_cs(who), p.rel, e);
+    if (e != FILE_SYSTEM_OK) return path_file_system_failed(&f->run, fx_pos(), sx_cs(who), p.rel, e);
     return OK;
 }
 
@@ -119,11 +119,11 @@ static STATUS_MUST_USE Status fx_look(Fx *f, const char *who, Str path) { // cst
 // the hook asked, then the store's replace, as a change builtin does.
 static STATUS_MUST_USE Status fx_change(Fx *f, const char *who, Str path, Str data) { // cstr: a builtin's name
     fx_again(f);
-    StorePath p;
+    CheckedPath p;
     TRY(path_arg(&f->run, fx_pos(), sx_cs(who), path, false, &p));
     TRY(f->hook.may_change(f->hook.ctx, &f->run, fx_pos(), p.rel, p.full));
     FileSystemErr e = file_system_replace(&f->base.file_system, &f->base.values, p.full, data);
-    if (e != FILE_SYSTEM_OK) return path_store_failed(&f->run, fx_pos(), sx_cs(who), p.rel, e);
+    if (e != FILE_SYSTEM_OK) return path_file_system_failed(&f->run, fx_pos(), sx_cs(who), p.rel, e);
     return OK;
 }
 

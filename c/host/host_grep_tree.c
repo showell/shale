@@ -20,7 +20,7 @@
 // searched, so a tree is held one file at a time: only what a hit keeps is
 // copied into the run's values arena.
 //
-// Include run.h, builtins.c, builtins_text.c, builtins_store.c and
+// Include run.h, builtins.c, builtins_text.c, builtins_files.c and
 // builtins_walk.c first.
 
 // A file or link the walk met, or the lone file the prelude stat'ed.
@@ -144,7 +144,7 @@ static STATUS_MUST_USE Status grep_tree_find_lines(Run *r, Pos pos, Str text, St
 // line it stops in. `*part` is the bytes, `*next` where the next part starts
 // and `*done` whether this one reached the file's end. The reads, read bytes
 // and stops are `read_lines`' own.
-static STATUS_MUST_USE Status grep_tree_read_part(Run *r, Pos pos, const StorePath *p, uint64_t offset, Arena *into, Str *part, uint64_t *next, bool *done) {
+static STATUS_MUST_USE Status grep_tree_read_part(Run *r, Pos pos, const CheckedPath *p, uint64_t offset, Arena *into, Str *part, uint64_t *next, bool *done) {
     Builtin b = BUILTIN_READ_LINES;
     uint64_t cap = r->ctx.budgets.call_bytes;
     uint64_t n = builtin_min_u64(BUILTIN_READ_LINES_PART, cap);
@@ -201,7 +201,7 @@ static STATUS_MUST_USE Status grep_tree_regex_part(Run *r, Pos pos, const GrepTr
 // however many there are. A literal is found by memmem in the part (in lower
 // case for `nocase`, the part lowered once); a needle that holds a newline
 // is in no line.
-static STATUS_MUST_USE Status grep_tree_by_parts(Run *r, Pos pos, const GrepTreeAsk *ask, const StorePath *p, Arena *into, GrepTreeLines *found) {
+static STATUS_MUST_USE Status grep_tree_by_parts(Run *r, Pos pos, const GrepTreeAsk *ask, const CheckedPath *p, Arena *into, GrepTreeLines *found) {
     int64_t base = 0;
     uint64_t offset = 0;
     for (;;) {
@@ -306,7 +306,7 @@ static STATUS_MUST_USE Status grep_tree_search_held(Run *r, Pos pos, const GrepT
 
 // `read(p[, offset, n])` as the prelude called it, into `into`: `n` bytes from
 // `offset`, or the whole file for BUILTIN_TO_END.
-static STATUS_MUST_USE Status grep_tree_read(Run *r, Pos pos, const StorePath *p, uint64_t offset, uint64_t n, Arena *into, Str *out) {
+static STATUS_MUST_USE Status grep_tree_read(Run *r, Pos pos, const CheckedPath *p, uint64_t offset, uint64_t n, Arena *into, Str *out) {
     TRY(builtin_count_read(r, pos));
     uint64_t size = 0;
     TRY(builtin_file_size(r, pos, BUILTIN_READ, p, &size));
@@ -436,7 +436,7 @@ static STATUS_MUST_USE Status grep_tree_wanted(Run *r, Pos pos, const GrepTreeAs
 // its `before` and `after` lines when `context` asks: from the file held
 // whole (`held`), or, for one too big to hold, the file read whole again
 // as `read` would, which stops past the call-bytes cap.
-static STATUS_MUST_USE Status grep_tree_hits(Run *r, Pos pos, const GrepTreeAsk *ask, Str path, const StorePath *p, const Str *held, Arena *into, GrepTreeLines found, GrepTreeAnswer *ans) {
+static STATUS_MUST_USE Status grep_tree_hits(Run *r, Pos pos, const GrepTreeAsk *ask, Str path, const CheckedPath *p, const Str *held, Arena *into, GrepTreeLines found, GrepTreeAnswer *ans) {
     GrepTreeLines all = GrepTreeLines_make(into);
     bool context = false;
     TRY(grep_tree_positive(r, pos, &ask->context, &context));
@@ -528,7 +528,7 @@ enum { GREP_TREE_HEAD = 4096 };
 static STATUS_MUST_USE Status grep_tree_file(Run *r, Pos pos, const GrepTreeAsk *ask, Str path, Arena *into, GrepTreeAnswer *ans) {
     Value pv;
     value_string(&pv, path);
-    StorePath p;
+    CheckedPath p;
     TRY(builtin_path(r, pos, BUILTIN_READ, &pv, false, &p));
     TRY(builtin_count_read(r, pos));
     uint64_t size = 0;
@@ -625,14 +625,14 @@ VEC_DEFINE(GrepTreeLevels, GrepTreeLevel)
 static STATUS_MUST_USE Status grep_tree_walk(Run *r, Pos pos, const GrepTreeAsk *ask, GrepTreeAnswer *ans) {
     Value pv;
     value_string(&pv, ask->place);
-    StorePath p;
+    CheckedPath p;
     TRY(builtin_path(r, pos, BUILTIN_WALK, &pv, true, &p));
     TRY(builtin_count_read(r, pos));
     bool found = false;
     FileSystemStat st;
     TRY(builtin_stat_or_null(r, pos, BUILTIN_WALK, &p, &found, &st));
-    if (!found) return builtin_store_failed(r, pos, BUILTIN_WALK, p.rel, FILE_SYSTEM_FILE_NOT_FOUND);
-    if (st.kind != FILE_SYSTEM_KIND_DIRECTORY) return builtin_store_failed(r, pos, BUILTIN_WALK, p.rel, FILE_SYSTEM_NOT_DIR);
+    if (!found) return builtin_file_system_failed(r, pos, BUILTIN_WALK, p.rel, FILE_SYSTEM_FILE_NOT_FOUND);
+    if (st.kind != FILE_SYSTEM_KIND_DIRECTORY) return builtin_file_system_failed(r, pos, BUILTIN_WALK, p.rel, FILE_SYSTEM_NOT_DIR);
     GrepTreeLevels levels = GrepTreeLevels_make(r->ctx.values);
     GrepTreeLevel first;
     memset(&first, 0, sizeof first);
@@ -840,7 +840,7 @@ static STATUS_MUST_USE Status grep_tree_skips(Run *r, Pos pos, GrepTreeAsk *ask,
         }
         Value uv;
         value_string(&uv, under);
-        StorePath sp;
+        CheckedPath sp;
         TRY(builtin_path(r, pos, BUILTIN_HOST, &uv, false, &sp));
         TRY(builtin_count_read(r, pos));
         bool found = false;

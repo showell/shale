@@ -22,7 +22,7 @@ static STATUS_MUST_USE Status host_call(void *ctx, Run *r, Pos pos, Str name, Co
         Str given = {0};
         TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &at(args, 0), S("its path"), &given));
         Str os = {0};
-        TRY(paths_os_path(h, &builtin_store_of(r)->path, pos, builtin_who(r, BUILTIN_HOST), given, true, &os));
+        TRY(paths_os_path(h, &builtin_files_of(r)->path, pos, builtin_who(r, BUILTIN_HOST), given, true, &os));
         value_string(out, os);
         return OK;
     }
@@ -39,7 +39,7 @@ static STATUS_MUST_USE Status host_call(void *ctx, Run *r, Pos pos, Str name, Co
     }
     if (str_eq(name, S("may_change"))) {
         if (args.len != 1) return run_failf(r, pos, CLASS_ARGUMENT, "`may_change` takes one path, given {d}", S("`may_change` takes one path, given "), run_unum(r, args.len));
-        StorePath p;
+        CheckedPath p;
         TRY(builtin_path(r, pos, BUILTIN_HOST, &at(args, 0), false, &p));
         TRY(change_may(r, pos, &p));
         value_bool(out, true);

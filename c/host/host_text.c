@@ -3,7 +3,7 @@
 // regex builtins' own engine, cache and charges; and `host("shale_tokens",
 // path, opts?)`, a Shale file's tokens by the lexer the language runs on.
 //
-// Include run.h, builtins.c, builtins_text.c and builtins_store.c first.
+// Include run.h, builtins.c, builtins_text.c and builtins_files.c first.
 
 static STATUS_MUST_USE Status re_lines_text(Run *r, Pos pos, const Value *v, Str what, Str *out) {
     if (v->tag == VALUE_STRING) {
@@ -142,7 +142,7 @@ static STATUS_MUST_USE Status host_shale_tokens(Run *r, Pos pos, ConstValues arg
     Tag only = TAG_EOF;
     if (args.len == 2) TRY(shale_tokens_tag(r, pos, &at(args, 1), &has_only, &only));
     if (has_only && only == TAG_EOF) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`shale_tokens`: no token tag `eof`: the end of a file is no token here"));
-    StorePath p;
+    CheckedPath p;
     TRY(builtin_path(r, pos, BUILTIN_HOST, &at(args, 0), false, &p));
     TRY(builtin_count_read(r, pos));
     uint64_t size = 0;

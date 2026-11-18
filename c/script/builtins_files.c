@@ -1,9 +1,9 @@
-// builtins_store.c: the store's builtins that look and read: `ls`, `stat`,
-// `exists`, `is_dir` and what every store builtin shares (a path confined, a
-// store failure's stop, a read counted), and the reads (a file whole or in
-// parts, its lines, the lines holding a literal, and scans that count or find
-// without holding the file). Every path goes through path_run.c's `path_arg`,
-// and every read is counted against the read budgets. The walk is
+// builtins_files.c: the file builtins that look and read: `ls`, `stat`,
+// `exists`, `is_dir` and what every file builtin shares (a path confined, a
+// file system failure's stop, a read counted), and the reads (a file whole or
+// in parts, its lines, the lines holding a literal, and scans that count or
+// find without holding the file). Every path goes through path_run.c's
+// `path_arg`, and every read is counted against the read budgets. The walk is
 // builtins_walk.c, the changes builtins_change.c.
 //
 // A program includes path.c, file_system.c and path_run.c, then this after
@@ -22,7 +22,7 @@ VEC_DEFINE(Effects, Effect)
 // What a run's store builtins need beyond the run itself: the file system,
 // the path checks' context (the root, the run's charge, the host's hook),
 // the effects log, the scans' buffer and how a change's diff is printed.
-typedef struct RunStore {
+typedef struct RunFiles {
     // The run's owner holds it.
     const FileSystem *file_system;
     PathRun path;
@@ -32,7 +32,7 @@ typedef struct RunStore {
     Bytes scan_buf;
     // A change's diff as one line, the CLI's way unless `--verbose`.
     bool diffs_summary;
-} RunStore;
+} RunFiles;
 
 // Each of the effects as the report prints it, `op path: outcome`, into
 // `*out`.
@@ -41,7 +41,7 @@ typedef struct RunStore {
 // REMEDY: a change's path was confined, and refused under a secrets folder,
 // before the change was made; each line is put to the hook's one check here
 // all the same, and one that names such a folder ends the process.
-static STATUS_MUST_USE Status store_effect_lines(RunStore *rs, Arena *a, Names *out) {
+static STATUS_MUST_USE Status builtin_effect_lines(RunFiles *rs, Arena *a, Names *out) {
     Effects e = rs->effects;
     Str *lines = ARENA_ARRAY(a, Str, e.len);
     if (e.len > 0 && lines == NULL) return STOP;
@@ -60,7 +60,7 @@ static STATUS_MUST_USE Status store_effect_lines(RunStore *rs, Arena *a, Names *
         bool names = false;
         Pos none = {0, 0};
         if (hook->names_secret(hook->ctx, &rs->path, none, buf_view(&b), &names) != OK) return STOP;
-        if (names) c_bug("builtins_store: a report line names a secrets mount's folder");
+        if (names) c_bug("builtins_files: a report line names a secrets mount's folder");
         at(all, k) = buf_view(&b);
     }
     out->ptr = lines;
@@ -68,10 +68,10 @@ static STATUS_MUST_USE Status store_effect_lines(RunStore *rs, Arena *a, Names *
     return OK;
 }
 
-// The run's store; a store builtin on a run made with none is a bug in the C.
-static RunStore *builtin_store_of(Run *r) {
-    if (r->store == NULL) c_bug("builtins_store: a store builtin ran on a run with no store");
-    return r->store;
+// The run's files; a file builtin on a run made with none is a bug in the C.
+static RunFiles *builtin_files_of(Run *r) {
+    if (r->files == NULL) c_bug("builtins_files: a file builtin ran on a run with no file system");
+    return r->files;
 }
 
 // The run's step charge as path_run.c takes it.
@@ -81,15 +81,15 @@ static STATUS_MUST_USE Status builtin_path_charge(void *vm, RunCtx *ctx, Pos pos
 }
 
 // `v`, the path builtin `b` was given, confined, its string checked first.
-static STATUS_MUST_USE Status builtin_path(Run *r, Pos pos, Builtin b, const Value *v, bool allow_root, StorePath *out) {
+static STATUS_MUST_USE Status builtin_path(Run *r, Pos pos, Builtin b, const Value *v, bool allow_root, CheckedPath *out) {
     Str given = {0};
     TRY(builtin_string_arg(r, pos, b, v, S("its path"), &given));
-    return path_arg(&builtin_store_of(r)->path, pos, builtin_who(r, b), given, allow_root, out);
+    return path_arg(&builtin_files_of(r)->path, pos, builtin_who(r, b), given, allow_root, out);
 }
 
 // The stop for builtin `b`'s store call on `rel`.
-static STATUS_MUST_USE Status builtin_store_failed(Run *r, Pos pos, Builtin b, Str rel, FileSystemErr e) {
-    return path_store_failed(&builtin_store_of(r)->path, pos, builtin_who(r, b), rel, e);
+static STATUS_MUST_USE Status builtin_file_system_failed(Run *r, Pos pos, Builtin b, Str rel, FileSystemErr e) {
+    return path_file_system_failed(&builtin_files_of(r)->path, pos, builtin_who(r, b), rel, e);
 }
 
 // One store read, against the reads budget.
@@ -106,10 +106,10 @@ static Str builtin_kind_name(FileSystemKind k) {
 }
 
 // `p`'s stat, `*found` false when nothing is there; a failure is `b`'s stop.
-static STATUS_MUST_USE Status builtin_stat_or_null(Run *r, Pos pos, Builtin b, const StorePath *p, bool *found, FileSystemStat *st) {
-    RunStore *rs = builtin_store_of(r);
+static STATUS_MUST_USE Status builtin_stat_or_null(Run *r, Pos pos, Builtin b, const CheckedPath *p, bool *found, FileSystemStat *st) {
+    RunFiles *rs = builtin_files_of(r);
     FileSystemErr e = file_system_stat_or_null(rs->file_system, r->ctx.values, p->full, found, st);
-    if (e != FILE_SYSTEM_OK) return builtin_store_failed(r, pos, b, p->rel, e);
+    if (e != FILE_SYSTEM_OK) return builtin_file_system_failed(r, pos, b, p->rel, e);
     return OK;
 }
 
@@ -131,9 +131,9 @@ static int builtin_entry_order(const void *x, const void *y) {
 // the sort's bound. The caller counts the read. A folder's names are distinct,
 // so qsort, which is not stable, gives the one order there is.
 static STATUS_MUST_USE Status builtin_sorted_entries(Run *r, Pos pos, Builtin b, Str full, Str rel, FileSystemEntries *out) {
-    RunStore *rs = builtin_store_of(r);
+    RunFiles *rs = builtin_files_of(r);
     FileSystemErr e = file_system_list(rs->file_system, r->ctx.values, full, out);
-    if (e != FILE_SYSTEM_OK) return builtin_store_failed(r, pos, b, rel, e);
+    if (e != FILE_SYSTEM_OK) return builtin_file_system_failed(r, pos, b, rel, e);
     uint64_t name_bytes = 0;
     for (size_t i = 0; i < out->len; i++) name_bytes += at(*out, i).name.len;
     TRY(run_charge(r, pos, out->len + builtin_sort_bound(out->len, name_bytes)));
@@ -146,14 +146,14 @@ static STATUS_MUST_USE Status builtin_sorted_entries(Run *r, Pos pos, Builtin b,
 // `ls(p)`: the names in a folder, sorted. The store lists a missing folder as
 // empty; a script's `ls` of one is a stop.
 static STATUS_MUST_USE Status bi_ls(Run *r, Pos pos, ConstValues args, Value *out) {
-    StorePath p;
+    CheckedPath p;
     TRY(builtin_path(r, pos, BUILTIN_LS, &at(args, 0), true, &p));
     TRY(builtin_count_read(r, pos));
     bool found = false;
     FileSystemStat st;
     TRY(builtin_stat_or_null(r, pos, BUILTIN_LS, &p, &found, &st));
-    if (!found) return builtin_store_failed(r, pos, BUILTIN_LS, p.rel, FILE_SYSTEM_FILE_NOT_FOUND);
-    if (st.kind != FILE_SYSTEM_KIND_DIRECTORY) return builtin_store_failed(r, pos, BUILTIN_LS, p.rel, FILE_SYSTEM_NOT_DIR);
+    if (!found) return builtin_file_system_failed(r, pos, BUILTIN_LS, p.rel, FILE_SYSTEM_FILE_NOT_FOUND);
+    if (st.kind != FILE_SYSTEM_KIND_DIRECTORY) return builtin_file_system_failed(r, pos, BUILTIN_LS, p.rel, FILE_SYSTEM_NOT_DIR);
     FileSystemEntries entries;
     TRY(builtin_sorted_entries(r, pos, BUILTIN_LS, p.full, p.rel, &entries));
     Table *t = NULL;
@@ -166,13 +166,13 @@ static STATUS_MUST_USE Status bi_ls(Run *r, Pos pos, ConstValues args, Value *ou
 
 // `stat(p)`: `{size, kind, modified}`, `modified` in whole seconds.
 static STATUS_MUST_USE Status bi_stat(Run *r, Pos pos, ConstValues args, Value *out) {
-    StorePath p;
+    CheckedPath p;
     TRY(builtin_path(r, pos, BUILTIN_STAT, &at(args, 0), true, &p));
     TRY(builtin_count_read(r, pos));
-    RunStore *rs = builtin_store_of(r);
+    RunFiles *rs = builtin_files_of(r);
     FileSystemStat st;
     FileSystemErr e = file_system_stat(rs->file_system, r->ctx.values, p.full, &st);
-    if (e != FILE_SYSTEM_OK) return builtin_store_failed(r, pos, BUILTIN_STAT, p.rel, e);
+    if (e != FILE_SYSTEM_OK) return builtin_file_system_failed(r, pos, BUILTIN_STAT, p.rel, e);
     Table *t = NULL;
     TRY(run_new_table(r, pos, &t));
     TRY(run_map_put_int(r, pos, t, S("size"), (int64_t)st.size));
@@ -184,19 +184,19 @@ static STATUS_MUST_USE Status bi_stat(Run *r, Pos pos, ConstValues args, Value *
 }
 
 static STATUS_MUST_USE Status bi_exists(Run *r, Pos pos, ConstValues args, Value *out) {
-    StorePath p;
+    CheckedPath p;
     TRY(builtin_path(r, pos, BUILTIN_EXISTS, &at(args, 0), true, &p));
     TRY(builtin_count_read(r, pos));
-    RunStore *rs = builtin_store_of(r);
+    RunFiles *rs = builtin_files_of(r);
     bool has = false;
     FileSystemErr e = file_system_has(rs->file_system, r->ctx.values, p.full, &has);
-    if (e != FILE_SYSTEM_OK) return builtin_store_failed(r, pos, BUILTIN_EXISTS, p.rel, e);
+    if (e != FILE_SYSTEM_OK) return builtin_file_system_failed(r, pos, BUILTIN_EXISTS, p.rel, e);
     value_bool(out, has);
     return OK;
 }
 
 static STATUS_MUST_USE Status bi_is_dir(Run *r, Pos pos, ConstValues args, Value *out) {
-    StorePath p;
+    CheckedPath p;
     TRY(builtin_path(r, pos, BUILTIN_IS_DIR, &at(args, 0), true, &p));
     TRY(builtin_count_read(r, pos));
     bool found = false;
@@ -210,12 +210,12 @@ static STATUS_MUST_USE Status bi_is_dir(Run *r, Pos pos, ConstValues args, Value
 
 // The size of the file at `p`: a stop when it is missing or not a file. One
 // store call, counted as part of the read.
-static STATUS_MUST_USE Status builtin_file_size(Run *r, Pos pos, Builtin b, const StorePath *p, uint64_t *size) {
+static STATUS_MUST_USE Status builtin_file_size(Run *r, Pos pos, Builtin b, const CheckedPath *p, uint64_t *size) {
     bool found = false;
     FileSystemStat st;
     TRY(builtin_stat_or_null(r, pos, b, p, &found, &st));
-    if (!found) return builtin_store_failed(r, pos, b, p->rel, FILE_SYSTEM_FILE_NOT_FOUND);
-    if (st.kind != FILE_SYSTEM_KIND_FILE) return builtin_store_failed(r, pos, b, p->rel, FILE_SYSTEM_IS_DIR);
+    if (!found) return builtin_file_system_failed(r, pos, b, p->rel, FILE_SYSTEM_FILE_NOT_FOUND);
+    if (st.kind != FILE_SYSTEM_KIND_FILE) return builtin_file_system_failed(r, pos, b, p->rel, FILE_SYSTEM_IS_DIR);
     *size = st.size;
     return OK;
 }
@@ -229,7 +229,7 @@ static STATUS_MUST_USE Status builtin_file_size(Run *r, Pos pos, Builtin b, cons
 // the read-bytes budget has left; the bytes read charged a step per 16. The
 // bytes are `into`'s: the run's values arena, or a scratch arena of the
 // caller's that holds a file only while it is searched (host_grep_tree.c).
-static STATUS_MUST_USE Status builtin_read_sized_in(Run *r, Pos pos, Builtin b, const StorePath *p, uint64_t size, uint64_t offset, uint64_t n, Arena *into, Str *out) {
+static STATUS_MUST_USE Status builtin_read_sized_in(Run *r, Pos pos, Builtin b, const CheckedPath *p, uint64_t size, uint64_t offset, uint64_t n, Arena *into, Str *out) {
     *out = S("");
     if (offset >= size) return OK;
     uint64_t left = size - offset;
@@ -242,11 +242,11 @@ static STATUS_MUST_USE Status builtin_read_sized_in(Run *r, Pos pos, Builtin b, 
     if (want > run_sat_sub(r->ctx.budgets.read_bytes, r->read_bytes)) return run_budget_stop(&r->ctx, pos, BUDGET_READ_BYTES);
     char *buf = arena_alloc(into, (size_t)want, 1);
     if (buf == NULL) return run_values_oom(r, pos);
-    RunStore *rs = builtin_store_of(r);
+    RunFiles *rs = builtin_files_of(r);
     Bytes room = {buf, (size_t)want};
     size_t got = 0;
     FileSystemErr e = file_system_read_at(rs->file_system, r->ctx.values, p->full, offset, room, &got);
-    if (e != FILE_SYSTEM_OK) return builtin_store_failed(r, pos, b, p->rel, e);
+    if (e != FILE_SYSTEM_OK) return builtin_file_system_failed(r, pos, b, p->rel, e);
     r->read_bytes += got;
     TRY(builtin_charge_bytes(r, pos, got));
     out->ptr = buf;
@@ -255,7 +255,7 @@ static STATUS_MUST_USE Status builtin_read_sized_in(Run *r, Pos pos, Builtin b, 
 }
 
 // builtin_read_sized_in's bytes in the run's values arena.
-static STATUS_MUST_USE Status builtin_read_sized(Run *r, Pos pos, Builtin b, const StorePath *p, uint64_t size, uint64_t offset, uint64_t n, Str *out) {
+static STATUS_MUST_USE Status builtin_read_sized(Run *r, Pos pos, Builtin b, const CheckedPath *p, uint64_t size, uint64_t offset, uint64_t n, Str *out) {
     return builtin_read_sized_in(r, pos, b, p, size, offset, n, r->ctx.values, out);
 }
 
@@ -283,7 +283,7 @@ static STATUS_MUST_USE Status builtin_count_arg(Run *r, Pos pos, Builtin b, cons
 // `read(p)` gives the whole file; `read(p, offset[, n])` `n` bytes from the
 // 0-based byte `offset`, or to the end, "" at or past the end.
 static STATUS_MUST_USE Status bi_read(Run *r, Pos pos, ConstValues args, Value *out) {
-    StorePath p;
+    CheckedPath p;
     TRY(builtin_path(r, pos, BUILTIN_READ, &at(args, 0), false, &p));
     uint64_t offset = 0;
     uint64_t n = BUILTIN_TO_END;
@@ -303,7 +303,7 @@ static STATUS_MUST_USE Status bi_read(Run *r, Pos pos, ConstValues args, Value *
 // `read_or(p, default)`: the whole file, or `default` when nothing is there,
 // in one store read; a folder or a failure is the store's stop, as `read`'s.
 static STATUS_MUST_USE Status bi_read_or(Run *r, Pos pos, ConstValues args, Value *out) {
-    StorePath p;
+    CheckedPath p;
     TRY(builtin_path(r, pos, BUILTIN_READ_OR, &at(args, 0), false, &p));
     TRY(builtin_count_read(r, pos));
     bool found = false;
@@ -313,7 +313,7 @@ static STATUS_MUST_USE Status bi_read_or(Run *r, Pos pos, ConstValues args, Valu
         *out = at(args, 1);
         return OK;
     }
-    if (st.kind != FILE_SYSTEM_KIND_FILE) return builtin_store_failed(r, pos, BUILTIN_READ_OR, p.rel, FILE_SYSTEM_IS_DIR);
+    if (st.kind != FILE_SYSTEM_KIND_FILE) return builtin_file_system_failed(r, pos, BUILTIN_READ_OR, p.rel, FILE_SYSTEM_IS_DIR);
     Str got = {0};
     TRY(builtin_read_sized(r, pos, BUILTIN_READ_OR, &p, st.size, 0, BUILTIN_TO_END, &got));
     value_string(out, got);
@@ -342,7 +342,7 @@ static uint64_t builtin_min_u64(uint64_t a, uint64_t b) {
 // call-bytes cap first ends at its last newline instead, so a part of the cap
 // itself (a cap of 64 KiB or less) is whole lines; only a line that starts
 // at `start` and runs past the cap stops. `*end` is the byte after the part.
-static STATUS_MUST_USE Status builtin_read_part_in(Run *r, Pos pos, Builtin b, const StorePath *p, uint64_t size, uint64_t start, uint64_t n, Arena *into, Buf *got, uint64_t *end) {
+static STATUS_MUST_USE Status builtin_read_part_in(Run *r, Pos pos, Builtin b, const CheckedPath *p, uint64_t size, uint64_t start, uint64_t n, Arena *into, Buf *got, uint64_t *end) {
     uint64_t cap = r->ctx.budgets.call_bytes;
     Str first = {0};
     TRY(builtin_read_sized_in(r, pos, b, p, size, start, n, into, &first));
@@ -381,7 +381,7 @@ static STATUS_MUST_USE Status builtin_read_part_in(Run *r, Pos pos, Builtin b, c
 // whole line.
 static STATUS_MUST_USE Status bi_read_lines(Run *r, Pos pos, ConstValues args, Value *out) {
     Builtin b = BUILTIN_READ_LINES;
-    StorePath p;
+    CheckedPath p;
     TRY(builtin_path(r, pos, b, &at(args, 0), false, &p));
     uint64_t offset = 0;
     if (args.len > 1) TRY(builtin_offset_arg(r, pos, b, &at(args, 1), &offset));
@@ -453,7 +453,7 @@ static uint64_t builtin_newlines(Str s) {
 // call-bytes cap.
 static STATUS_MUST_USE Status bi_grep(Run *r, Pos pos, ConstValues args, Value *out) {
     Builtin b = BUILTIN_GREP;
-    StorePath p;
+    CheckedPath p;
     TRY(builtin_path(r, pos, b, &at(args, 0), false, &p));
     Str needle = {0};
     TRY(builtin_string_arg(r, pos, b, &at(args, 1), S("what it looks for"), &needle));
@@ -505,7 +505,7 @@ static STATUS_MUST_USE Status bi_grep(Run *r, Pos pos, ConstValues args, Value *
 // time, the line at most the call-bytes cap.
 static STATUS_MUST_USE Status bi_line_at(Run *r, Pos pos, ConstValues args, Value *out) {
     Builtin b = BUILTIN_LINE_AT;
-    StorePath p;
+    CheckedPath p;
     TRY(builtin_path(r, pos, b, &at(args, 0), false, &p));
     uint64_t offset = 0;
     TRY(builtin_offset_arg(r, pos, b, &at(args, 1), &offset));
@@ -599,7 +599,7 @@ static const ScanAsk SCAN_COUNT_LINES = {BUILTIN_COUNT_LINES, false, S_ITEM("")}
 // counting `needle`'s non-overlapping matches that start in `range`, or
 // stopping at the first (`ask->first_only`), across the chunks' edges: one
 // store read a call, every byte counted against the read budget and charged.
-static STATUS_MUST_USE Status builtin_scan(Run *r, Pos pos, const ScanAsk *ask, const StorePath *p, Str needle, ScanRange range, Scanned *res) {
+static STATUS_MUST_USE Status builtin_scan(Run *r, Pos pos, const ScanAsk *ask, const CheckedPath *p, Str needle, ScanRange range, Scanned *res) {
     Builtin b = ask->b;
     TRY(builtin_count_read(r, pos));
     uint64_t file_size = 0;
@@ -622,7 +622,7 @@ static STATUS_MUST_USE Status builtin_scan(Run *r, Pos pos, const ScanAsk *ask, 
     if (end == start) return OK;
     Finder f;
     finder_init(&f, r, pos, needle);
-    RunStore *rs = builtin_store_of(r);
+    RunFiles *rs = builtin_files_of(r);
     // One buffer serves every scan of the run, sized once for the longest
     // needle and a full chunk: a fresh one a call would cost 64 KiB of arena
     // a file.
@@ -645,7 +645,7 @@ static STATUS_MUST_USE Status builtin_scan(Run *r, Pos pos, const ScanAsk *ask, 
         size_t got = 0;
         Bytes into = SLICE_SUB(Bytes, buf, kept, kept + want);
         FileSystemErr e = file_system_read_at(rs->file_system, r->ctx.values, p->full, at_, into, &got);
-        if (e != FILE_SYSTEM_OK) return builtin_store_failed(r, pos, b, p->rel, e);
+        if (e != FILE_SYSTEM_OK) return builtin_file_system_failed(r, pos, b, p->rel, e);
         r->read_bytes += got;
         TRY(builtin_charge_bytes(r, pos, got));
         // The file shrank under the scan.
@@ -679,7 +679,7 @@ static STATUS_MUST_USE Status builtin_scan(Run *r, Pos pos, const ScanAsk *ask, 
 // or the first one's offset (nil for none), without holding the file.
 static STATUS_MUST_USE Status builtin_scanner(Run *r, Pos pos, const ScanAsk *ask, ConstValues args, Value *out) {
     Builtin b = ask->b;
-    StorePath p;
+    CheckedPath p;
     TRY(builtin_path(r, pos, b, &at(args, 0), false, &p));
     Str needle = {0};
     TRY(builtin_string_arg(r, pos, b, &at(args, 1), S("what it looks for"), &needle));
@@ -715,7 +715,7 @@ static STATUS_MUST_USE Status bi_find_in(Run *r, Pos pos, ConstValues args, Valu
 // last line when the range reaches the end, so the parts' counts add up to
 // the whole's.
 static STATUS_MUST_USE Status bi_count_lines(Run *r, Pos pos, ConstValues args, Value *out) {
-    StorePath p;
+    CheckedPath p;
     TRY(builtin_path(r, pos, BUILTIN_COUNT_LINES, &at(args, 0), false, &p));
     ScanRange range;
     TRY(builtin_range_args(r, pos, BUILTIN_COUNT_LINES, args, 1, &range));

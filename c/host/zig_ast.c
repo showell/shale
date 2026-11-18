@@ -557,14 +557,14 @@ static STATUS_MUST_USE Status host_zig_edit_of(HostZigAnswer *an, HostZigEdit *o
 
 // A file a host rewrote, Zig's `rewrite`: the diff, then the change, logged
 // as `edit`'s.
-static STATUS_MUST_USE Status host_zig_rewrite(Run *r, Pos pos, const StorePath *p, Str was, Str now, SpansItems spans) {
+static STATUS_MUST_USE Status host_zig_rewrite(Run *r, Pos pos, const CheckedPath *p, Str was, Str now, SpansItems spans) {
     TRY(change_write_diff(r, pos, p->rel, was, now, spans));
     return change_at(r, pos, BUILTIN_EDIT, CHANGE_REPLACE, p, now);
 }
 
 // `p` read whole into the run's values, the read counted, the bytes and
 // their copy charged, as Zig's `readSource` and `readKept` do.
-static STATUS_MUST_USE Status host_zig_read(Run *r, Pos pos, const StorePath *p, Str *out) {
+static STATUS_MUST_USE Status host_zig_read(Run *r, Pos pos, const CheckedPath *p, Str *out) {
     TRY(builtin_count_read(r, pos));
     uint64_t size = 0;
     TRY(builtin_file_size(r, pos, BUILTIN_HOST, p, &size));

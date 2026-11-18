@@ -42,9 +42,9 @@ typedef struct {
 
 SLICE_TYPE(StepsSpents, StepsSpent);
 
-// The store a run's paths reach, its hook and its effects log, as
-// builtins_store.c defines it; NULL for a run with no store.
-typedef struct RunStore RunStore;
+// The file system a run's paths reach, its hook and its effects log, as
+// builtins_files.c defines it; NULL for a run with no file system.
+typedef struct RunFiles RunFiles;
 
 // The core's one way out to its host: `host(name, ...)` calls `call` with the
 // name and the rest of its arguments. NULL `call` is no host.
@@ -90,7 +90,7 @@ typedef struct Run {
     size_t tail_cap;
     // The patterns `re_find` and its kin compiled.
     RegexCache patterns;
-    RunStore *store;
+    RunFiles *files;
     RunHost host;
     // The host call running (`host("real", ...)`'s `real`), "" outside one:
     // a stop the host's code meets in a builtin's checks names it.

@@ -81,11 +81,11 @@
 -- budget: programs=200 arena_bytes=268435456
 
 const OUT = "c/out"
-const BLOCKS = {"foundation", "discipline", "surface", "regex", "command", "ran", "vm", "host", "store", "builtins", "host_builtins", "host_procs", "host_text", "host_zig", "gate"}
+const BLOCKS = {"foundation", "discipline", "surface", "regex", "command", "ran", "vm", "host", "file_system", "builtins", "host_builtins", "host_procs", "host_text", "host_zig", "gate"}
 -- The blocks whose GCC compiles the full tier's pool builds (c/build/pool.shale
 -- and lib.shale's "The pool"): each runs first with `stage=plan`, then with
 -- `stage=prebuilt`. A block left out compiles its own.
-const POOLED = {"foundation", "command", "ran", "host", "store", "builtins", "host_zig", "gate"}
+const POOLED = {"foundation", "command", "ran", "host", "file_system", "builtins", "host_zig", "gate"}
 
 -- The first line a compiler says of its version, or nil when it is missing.
 function version_of(argv)

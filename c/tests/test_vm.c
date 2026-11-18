@@ -399,11 +399,11 @@ TEST(the_compilers_own_checks_end_the_process) {
     arena_deinit(&a);
 }
 
-TEST(a_store_builtin_on_a_run_with_no_store_ends_the_process) {
+TEST(a_file_builtin_on_a_run_with_no_file_system_ends_the_process) {
     static Run r;
     memset(&r, 0, sizeof r);
-    EXPECT(r.store == NULL);
-    EXPECT_DIES((void)builtin_store_of(&r));
+    EXPECT(r.files == NULL);
+    EXPECT_DIES((void)builtin_files_of(&r));
 }
 
 TEST(a_value_of_the_cs_own_enums_past_their_cases_ends_the_process) {
@@ -470,7 +470,7 @@ TEST(the_steps_go_to_the_builtin_script_code_called) {
     ran_free(&x);
 }
 
-TEST_PART(vm, TEST_CASE(the_steps_go_to_the_builtin_script_code_called), TEST_CASE(a_value_of_the_cs_own_enums_past_their_cases_ends_the_process), TEST_CASE(the_compilers_own_checks_end_the_process), TEST_CASE(a_store_builtin_on_a_run_with_no_store_ends_the_process), TEST_CASE(arithmetic_and_print_take_their_counted_steps), TEST_CASE(a_long_stop_is_whole_in_attempts_error_and_in_the_report), TEST_CASE(the_step_budget_stops_one_past_it),
+TEST_PART(vm, TEST_CASE(the_steps_go_to_the_builtin_script_code_called), TEST_CASE(a_value_of_the_cs_own_enums_past_their_cases_ends_the_process), TEST_CASE(the_compilers_own_checks_end_the_process), TEST_CASE(a_file_builtin_on_a_run_with_no_file_system_ends_the_process), TEST_CASE(arithmetic_and_print_take_their_counted_steps), TEST_CASE(a_long_stop_is_whole_in_attempts_error_and_in_the_report), TEST_CASE(the_step_budget_stops_one_past_it),
           TEST_CASE(the_call_depth_budget_names_every_call), TEST_CASE(attempt_makes_a_stop_a_value_and_the_run_goes_on),
           TEST_CASE(a_budget_is_never_caught), TEST_CASE(a_chain_grows_its_string_in_place),
           TEST_CASE(yield_keeps_what_is_reached_and_charges_the_copy), TEST_CASE(the_output_budget_writes_what_fits),

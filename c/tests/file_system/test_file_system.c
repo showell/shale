@@ -5,7 +5,7 @@
 #define _GNU_SOURCE
 #include "test.h"
 
-#include "store_fixture.c"
+#include "file_system_fixture.c"
 
 static Str rep(char c, size_t n, char *room) { // cstr: a buffer of at least n bytes
     memset(room, c, n);

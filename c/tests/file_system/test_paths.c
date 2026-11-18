@@ -17,7 +17,7 @@
 
 // ── the root's own rules ────────────────────────────────────────────────
 
-TEST(every_way_out_of_the_root_is_refused_before_the_store_is_asked) {
+TEST(every_way_out_of_the_root_is_refused_before_the_file_system_is_asked) {
     Fx f;
     fx_init(&f);
     sx_put(&f.base, "top.txt", "t");
@@ -38,13 +38,13 @@ TEST(every_way_out_of_the_root_is_refused_before_the_store_is_asked) {
     Escapes all = {escapes, sizeof escapes / sizeof *escapes};
     for (size_t i = 0; i < all.len; i++) {
         fx_again(&f);
-        StorePath p;
+        CheckedPath p;
         Status s = path_arg(&f.run, fx_pos(), sx_cs(at(all, i).who), sx_cs(at(all, i).path), at(all, i).allow_root, &p);
         EXPECT(fx_stopped(&f, s, CLASS_ARGUMENT, S("")));
     }
     // The texts of three of them, exactly.
     fx_again(&f);
-    StorePath p;
+    CheckedPath p;
     EXPECT(fx_said(&f, path_arg(&f.run, fx_pos(), S("read"), S("../auth/secret"), false, &p), CLASS_ARGUMENT,
                    S("`read`: \"../auth/secret\" climbs out of the root with `..`: a folder beside it is reached through a mount, such as `repos:<name>/...` (`shale --help` lists this box's mounts)")));
     fx_again(&f);
@@ -96,7 +96,7 @@ TEST(mounts_a_mounts_paths_real_an_unknown_mount_or_a_missing_folder_named_the_f
     Str text = S("");
     EXPECT(sx_file(&f.base, "elsewhere/logs/a.txt", &text));
     EXPECT_STR(text, S("via the mount"));
-    StorePath p;
+    CheckedPath p;
     fx_again(&f);
     uint64_t before = f.steps;
     EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("read"), S("runs:logs/a.txt"), false, &p));
@@ -422,7 +422,7 @@ TEST(a_walk_through_a_mount_its_paths_are_the_mounts_and_each_lands_where_the_mo
     sx_put(&f.base, "elsewhere/a.zig", "x");
     sx_put(&f.base, "elsewhere/sub/b.zig", "yy");
     fx_mounts(&f, "m = R/elsewhere\n");
-    StorePath p;
+    CheckedPath p;
     EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("walk"), S("m:"), true, &p));
     EXPECT_STR(p.full, fx_r(&f, "R/elsewhere"));
     EXPECT_STR(p.rel, S("m:"));
@@ -441,7 +441,7 @@ TEST(a_walk_through_a_mount_its_paths_are_the_mounts_and_each_lands_where_the_mo
     fx_deinit(&f);
 }
 
-TEST(the_store_follows_no_link_to_a_file_to_a_folder_in_the_middle_in_a_mount_out_of_the_root) {
+TEST(the_file_system_follows_no_link_to_a_file_to_a_folder_in_the_middle_in_a_mount_out_of_the_root) {
     Fx f;
     fx_init(&f);
     sx_mkdir(&f.base, "dir");
@@ -729,11 +729,11 @@ TEST(a_folder_that_only_begins_with_another_s_name_is_not_in_it) {
 // A change the way `mkdir` and `remove_tree` make theirs: the hook first.
 static STATUS_MUST_USE Status fx_tree(Fx *f, bool make, Str path) {
     fx_again(f);
-    StorePath p;
+    CheckedPath p;
     TRY(path_arg(&f->run, fx_pos(), make ? S("mkdir") : S("remove_tree"), path, false, &p));
     TRY(f->hook.may_change(f->hook.ctx, &f->run, fx_pos(), p.rel, p.full));
     FileSystemErr e = make ? file_system_make_dir(&f->base.file_system, &f->base.values, p.full) : file_system_remove_tree(&f->base.file_system, &f->base.values, p.full);
-    return e == FILE_SYSTEM_OK ? OK : path_store_failed(&f->run, fx_pos(), make ? S("mkdir") : S("remove_tree"), p.rel, e);
+    return e == FILE_SYSTEM_OK ? OK : path_file_system_failed(&f->run, fx_pos(), make ? S("mkdir") : S("remove_tree"), p.rel, e);
 }
 
 static void fx_journal_kinds(Fx *f, size_t *file, size_t *absent, size_t *dir) {
@@ -885,7 +885,7 @@ TEST(undo_on_stop_puts_back_an_edit_a_file_made_a_folder_made_a_file_removed_an_
     EXPECT_OK_IN(&f.ctx, fx_change(&f, "replace", S("x.sh"), S("#!/bin/sh\necho new\n")));
     // `remove`: the hook, then the store's remove.
     fx_again(&f);
-    StorePath p;
+    CheckedPath p;
     EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("remove"), S("gone.txt"), false, &p));
     EXPECT_OK_IN(&f.ctx, f.hook.may_change(f.hook.ctx, &f.run, fx_pos(), p.rel, p.full));
     EXPECT_EQ(file_system_remove(&f.base.file_system, &f.base.values, p.full), FILE_SYSTEM_OK);
@@ -941,7 +941,7 @@ TEST(a_step_budget_met_in_the_walk_of_a_path_stops_one_past_it) {
     sx_mkdir(&f.base, "a/b");
     // `a/b/c` charges 5 for its bytes, then 1 for each of its 3 parts.
     f.steps_budget = 7;
-    StorePath p;
+    CheckedPath p;
     fx_again(&f);
     EXPECT(fx_stopped(&f, path_arg(&f.run, fx_pos(), S("read"), S("a/b/c"), false, &p), CLASS_BUDGET, S("the step budget (")));
     EXPECT_EQ(f.ctx.stop.budget, BUDGET_STEPS);
@@ -1113,7 +1113,7 @@ TEST(a_path_run_has_a_hook_always_metal_s_answers_nothing_resolved_no_hint_and_n
     fx_init(&f);
     EXPECT_DIES((void)path_run_make(&f.ctx, f.base.root, fx_charge, &f, NULL));
     PathRun bare = path_run_make(&f.ctx, f.base.root, fx_charge, &f, &PATH_HOOK_NONE);
-    StorePath p;
+    CheckedPath p;
     // A mount's spelling is a root path's part FAT refuses.
     fx_again(&f);
     EXPECT(fx_said(&f, path_arg(&bare, fx_pos(), S("read"), S("k:tok"), false, &p), CLASS_ARGUMENT, S("`read`: \"k:tok\" has a part (\"k:tok\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses")));
@@ -1135,7 +1135,7 @@ TEST(a_root_path_s_names_are_the_core_s_to_check_before_the_hook_walks_its_links
     fx_init(&f);
     sx_mkdir(&f.base, "elsewhere");
     fx_link(&f, "elsewhere", "lnk");
-    StorePath p;
+    CheckedPath p;
     // A bad part after a link: the core's message, never the link's.
     fx_again(&f);
     EXPECT(fx_said(&f, path_arg(&f.run, fx_pos(), S("read"), S("lnk//x"), false, &p), CLASS_ARGUMENT, S("`read`: \"lnk//x\" has a part (\"\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses")));
@@ -1148,7 +1148,7 @@ TEST(a_root_path_s_names_are_the_core_s_to_check_before_the_hook_walks_its_links
 }
 
 TEST_MAIN(
-    TEST_CASE(every_way_out_of_the_root_is_refused_before_the_store_is_asked),
+    TEST_CASE(every_way_out_of_the_root_is_refused_before_the_file_system_is_asked),
     TEST_CASE(mounts_a_mounts_paths_real_an_unknown_mount_or_a_missing_folder_named_the_files_mistakes_by_line),
     TEST_CASE(the_mounts_file_shale_mounts_pins_it_the_default_s_absence_is_no_mounts_a_pinned_one_s_a_mistake),
     TEST_CASE(ro_mounts_the_mounts_file_s_ro_and_tools_in_either_order_any_other_trailing_word_or_one_twice_refused_by_line),
@@ -1159,7 +1159,7 @@ TEST_MAIN(
     TEST_CASE(ro_mounts_every_change_through_one_is_refused_before_anything_is_written_a_read_works),
     TEST_CASE(ro_mounts_a_writable_mount_inside_a_read_only_one_decides_for_its_own_folder),
     TEST_CASE(a_walk_through_a_mount_its_paths_are_the_mounts_and_each_lands_where_the_mount_points),
-    TEST_CASE(the_store_follows_no_link_to_a_file_to_a_folder_in_the_middle_in_a_mount_out_of_the_root),
+    TEST_CASE(the_file_system_follows_no_link_to_a_file_to_a_folder_in_the_middle_in_a_mount_out_of_the_root),
     TEST_CASE(secrets_mounts_no_read_listing_change_path_or_argument_reaches_a_token_by_the_mount_or_another_way),
     TEST_CASE(stdout_secret_only_directly_in_a_secrets_mount_never_in_a_folder_of_it_never_through_a_link),
     TEST_CASE(the_secrets_rule_s_one_check_a_host_text_naming_a_secrets_folder_ends_the_process),

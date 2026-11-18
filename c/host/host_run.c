@@ -9,7 +9,7 @@
 // capped at what is left of the run's arena budget, so a tail of 3 over a
 // 10 GB log holds three lines; only the answer goes to the values' arena.
 //
-// Include spawn.c, keep.c, paths.c, swap_file.c and builtins_store.c first.
+// Include spawn.c, keep.c, paths.c, swap_file.c and builtins_files.c first.
 
 #include <sys/stat.h>
 
@@ -191,7 +191,7 @@ static void host_record(Host *h, Str line) {
 
 // A stop of the host's, its message the format `fmt` of `args`.
 static STATUS_MUST_USE Status host_fail(Run *r, Pos pos, StopClass cls, Str fmt, MsgArgs args) {
-    return path_fail(&builtin_store_of(r)->path, pos, cls, fmt, args);
+    return path_fail(&builtin_files_of(r)->path, pos, cls, fmt, args);
 }
 
 // A budget's stop with the message `m` holds, for `host_over_budget` and
@@ -206,7 +206,7 @@ static STATUS_MUST_USE Status host_budget_fail(Run *r, Pos pos, BudgetKind b, Bu
 // A stop of the host's whose message takes no argument.
 static STATUS_MUST_USE Status host_fail_plain(Run *r, Pos pos, StopClass cls, Str fmt) {
     MsgArgs none = {NULL, 0};
-    return path_fail(&builtin_store_of(r)->path, pos, cls, fmt, none);
+    return path_fail(&builtin_files_of(r)->path, pos, cls, fmt, none);
 }
 
 // ── the options ──
@@ -724,7 +724,7 @@ static STATUS_MUST_USE Status host_secret_open(Host *h, Run *r, Pos pos, const V
     }
     Str shown = v->as.string;
     Str path = S("");
-    TRY(paths_secret_target(&h->paths, &builtin_store_of(r)->path, pos, shown, &path));
+    TRY(paths_secret_target(&h->paths, &builtin_files_of(r)->path, pos, shown, &path));
     FileSystemErr ce = swap_file_target(&out->file, path);
     if (ce != FILE_SYSTEM_OK) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s} cannot be looked at: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(file_system_err_name(ce))));
     // DRAGON: the secrets rule. The path is a secrets mount's file, which
@@ -892,7 +892,7 @@ static STATUS_MUST_USE Status host_run_env(Host *h, Run *r, Pos pos, const RunOp
         Str given = S("");
         TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &x, S("its path"), &given));
         Str path = S("");
-        TRY(paths_secret_path(&h->paths, &builtin_store_of(r)->path, pos, builtin_who(r, BUILTIN_HOST), given, &path));
+        TRY(paths_secret_path(&h->paths, &builtin_files_of(r)->path, pos, builtin_who(r, BUILTIN_HOST), given, &path));
         Str shown_path = given;
         // DRAGON: the secrets rule. `path` is a secret's file and `bytes`
         // a secret; neither may reach a message or the record.
@@ -1064,14 +1064,14 @@ static STATUS_MUST_USE Status host_refuse_nul(Run *r, Pos pos, Str who, SpawnStr
 // REMEDY: every such open takes its path from here; test_run_guards plants a
 // log into a read-only mount and one put back by an undo.
 static STATUS_MUST_USE Status host_change_os_path(Host *h, Run *r, Pos pos, Str given, Str suffix, Str *out) {
-    RunStore *rs = builtin_store_of(r);
+    RunFiles *rs = builtin_files_of(r);
     Str full = given;
     if (suffix.len > 0) {
         Buf b = buf_make(r->ctx.values);
         if (buf_str(&b, given) != OK || buf_str(&b, suffix) != OK) return run_values_oom(r, pos);
         full = buf_view(&b);
     }
-    StorePath p;
+    CheckedPath p;
     TRY(path_arg(&rs->path, pos, builtin_who(r, BUILTIN_HOST), full, false, &p));
     TRY(change_may(r, pos, &p));
     return paths_absolute(&h->paths, &rs->path, pos, mounts_trim_slash(p.full), out);
@@ -1082,7 +1082,7 @@ static STATUS_MUST_USE Status host_change_os_path(Host *h, Run *r, Pos pos, Str 
 // options.
 static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnStrs argv, const RunOpts *o, HostRunHeld *held, Value *out) {
     Arena *a = r->ctx.values;
-    RunStore *rs = builtin_store_of(r);
+    RunFiles *rs = builtin_files_of(r);
     TRY(host_refuse_nul(r, pos, S("run"), argv, o->env, o->secrets));
     Str cwd = S("");
     if (host_given(&o->cwd)) {

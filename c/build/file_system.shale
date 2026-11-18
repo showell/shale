@@ -1,126 +1,128 @@
--- c/build/store.shale: the store's block, c/host's store, paths and undo journal.
+-- c/build/file_system.shale: the file system's block, c/host's path.c,
+-- file_system.c, paths and undo journal.
 -- c/build.shale runs it, with the `build` mount that `use` below reads; see
 -- that file for the tiers and the blocks.
 -- budget: steps=100000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
 
 use("build:lib.shale")
 
--- ── c/host's store, paths and undo journal: their own block ──────────────
--- c/tests/store/test_store.c (the store) and test_paths.c (the mounts, the
--- path hook, the secrets rule, the journal), each under every build of
--- `t.builds`, held to its `TEST(` count and to STORE_TESTS. The Zig test
--- files they port are held to STORE_ZIG_TESTS, so a Zig test added there is
--- one the C has yet to port. In the full tier: the faults below planted in
--- a copy of c/, c/tests/store copied whole beside it (its fixture.c reaches
--- the copy's c/host), each caught by its `aim` tests (`run_plants`).
+-- ── c/host's file system, paths and undo journal: their own block ────────
+-- c/tests/file_system/test_file_system.c (path.c and file_system.c) and
+-- test_paths.c (the mounts, the path hook, the secrets rule, the journal),
+-- each under every build of `t.builds`, held to its `TEST(` count and to
+-- FILE_SYSTEM_TESTS. The Zig test files they port are held to
+-- FILE_SYSTEM_ZIG_TESTS, so a Zig test added there is one the C has yet to
+-- port. In the full tier: the faults below planted in a copy of c/,
+-- c/tests/file_system copied whole beside it (its fixture.c reaches the
+-- copy's c/host), each caught by its `aim` tests (`run_plants`).
 
-const STORE_TESTS = {["c/tests/store/test_store.c"] = 14, ["c/tests/store/test_paths.c"] = 31}
-const STORE_ZIG_TESTS = {["src/shale_abs_path_test.zig"] = 3, ["src/shale_undo_test.zig"] = 4, ["src/shale_ro_links_test.zig"] = 9}
-const STORE_PLANTS = {
-  {name = "a folder that begins with a mount's name is in it", file = "mounts.c", dir = "host", caught_by = "store/test_paths",
+const FILE_SYSTEM_TESTS = {["c/tests/file_system/test_file_system.c"] = 14, ["c/tests/file_system/test_paths.c"] = 31}
+const FILE_SYSTEM_ZIG_TESTS = {["src/shale_abs_path_test.zig"] = 3, ["src/shale_undo_test.zig"] = 4, ["src/shale_ro_links_test.zig"] = 9}
+const FILE_SYSTEM_PLANTS = {
+  {name = "a folder that begins with a mount's name is in it", file = "mounts.c", dir = "host", caught_by = "file_system/test_paths",
    aim = "a_folder_that_only_begins_with_another_s_name_is_not_in_it",
    old = "return str_starts_with(abs, dir) && (abs.len == dir.len || str_byte(abs, dir.len) == '/');", new = "return str_starts_with(abs, dir);"},
-  {name = "a link in a path is followed", file = "paths.c", dir = "host", caught_by = "store/test_paths",
-   aim = "the_store_follows_no_link_to_a_file_to_a_folder_in_the_middle_in_a_mount_out_of_the_root",
+  {name = "a link in a path is followed", file = "paths.c", dir = "host", caught_by = "file_system/test_paths",
+   aim = "the_file_system_follows_no_link_to_a_file_to_a_folder_in_the_middle_in_a_mount_out_of_the_root",
    old = "if (S_ISLNK(st.st_mode)) {", new = "if (0 && S_ISLNK(st.st_mode)) {"},
-  {name = "a secrets mount's own name is let through", file = "paths.c", dir = "host", caught_by = "store/test_paths",
+  {name = "a secrets mount's own name is let through", file = "paths.c", dir = "host", caught_by = "file_system/test_paths",
    aim = "secrets_mounts_no_read_listing_change_path_or_argument_reaches_a_token_by_the_mount_or_another_way",
    old = "    if (m->secrets) {\n        return path_fail(", new = "    if (0 && m->secrets) {\n        return path_fail("},
-  {name = "the root's way into a secrets folder is let through", file = "paths.c", dir = "host", caught_by = "store/test_paths",
+  {name = "the root's way into a secrets folder is let through", file = "paths.c", dir = "host", caught_by = "file_system/test_paths",
    aim = "secrets_mounts_no_read_listing_change_path_or_argument_reaches_a_token_by_the_mount_or_another_way",
    old = "        if (mounts_in_folder(abs, at(sd, k).run_dir)) {\n            return path_fail(r, pos, CLASS_REFUSED, S(\"\\\"{s}\\\" is in the mount", new = "        if (0 && mounts_in_folder(abs, at(sd, k).run_dir)) {\n            return path_fail(r, pos, CLASS_REFUSED, S(\"\\\"{s}\\\" is in the mount"},
-  {name = "a `..` in a root path is let through to the name check", file = "path_run.c", dir = "host", caught_by = "store/test_paths",
-   aim = "every_way_out_of_the_root_is_refused_before_the_store_is_asked",
+  {name = "a `..` in a root path is let through to the name check", file = "path_run.c", dir = "host", caught_by = "file_system/test_paths",
+   aim = "every_way_out_of_the_root_is_refused_before_the_file_system_is_asked",
    old = "        if (str_eq(part, S(\"..\"))) {\n            return path_fail(r, pos, CLASS_ARGUMENT, S(\"`{s}`: ", new = "        if (0) {\n            return path_fail(r, pos, CLASS_ARGUMENT, S(\"`{s}`: "},
-  {name = "an absolute path gets the empty part's stop", file = "path_run.c", dir = "host", caught_by = "store/test_paths",
-   aim = "every_way_out_of_the_root_is_refused_before_the_store_is_asked",
+  {name = "an absolute path gets the empty part's stop", file = "path_run.c", dir = "host", caught_by = "file_system/test_paths",
+   aim = "every_way_out_of_the_root_is_refused_before_the_file_system_is_asked",
    old = "if (str_byte(rel, 0) == '/') return path_absolute_stop(r, pos, who, rel);", new = "(void)path_absolute_stop;"},
-  {name = "a `..` in a mount's path is let through to the name check", file = "paths.c", dir = "host", caught_by = "store/test_paths",
+  {name = "a `..` in a mount's path is let through to the name check", file = "paths.c", dir = "host", caught_by = "file_system/test_paths",
    aim = "mounts_a_mounts_paths_real_an_unknown_mount_or_a_missing_folder_named_the_files_mistakes_by_line",
    old = "        if (str_eq(part, S(\"..\"))) {\n            return path_fail(r, pos, CLASS_ARGUMENT, S(\"\\\"{s}\\\" climbs out of its mount", new = "        if (0) {\n            return path_fail(r, pos, CLASS_ARGUMENT, S(\"\\\"{s}\\\" climbs out of its mount"},
-  {name = "a read-only mount is read-only only by its name", file = "paths.c", dir = "host", caught_by = "store/test_paths",
+  {name = "a read-only mount is read-only only by its name", file = "paths.c", dir = "host", caught_by = "file_system/test_paths",
    aim = "ro_mounts_every_change_through_one_is_refused_before_anything_is_written_a_read_works",
    old = "if (named || (under && !paths_under_writable_within(h, r, abs, dir))) {", new = "if (named || (0 && under && !paths_under_writable_within(h, r, abs, dir))) {"},
-  {name = "a path is journaled at each change", file = "paths.c", dir = "host", caught_by = "store/test_paths",
+  {name = "a path is journaled at each change", file = "paths.c", dir = "host", caught_by = "file_system/test_paths",
    aim = "undo_each_path_is_journaled_once_before_its_first_change_as_a_file_s_bytes_a_folder_or_nothing_there",
    old = "if (str_eq(at(h->journal, k).abs, abs)) return OK;", new = "(void)k;"},
-  {name = "the journal takes a file past its room", file = "paths.c", dir = "host", caught_by = "store/test_paths",
+  {name = "the journal takes a file past its room", file = "paths.c", dir = "host", caught_by = "file_system/test_paths",
    aim = "undo_a_change_past_the_journal_s_room_a_file_it_cannot_read_a_path_neither_file_nor_folder_and_one_it_cannot_look_at_are_refused",
    old = "if ((uint64_t)st.st_size > room) {", new = "if (0 && (uint64_t)st.st_size > room) {"},
-  {name = "the one check lets a host text name a secrets folder", file = "path_run.c", dir = "host", caught_by = "store/test_paths",
+  {name = "the one check lets a host text name a secrets folder", file = "path_run.c", dir = "host", caught_by = "file_system/test_paths",
    aim = "the_secrets_rule_s_one_check_a_host_text_naming_a_secrets_folder_ends_the_process",
    old = "        if (names) c_bug(\"path_run", new = "        if (0 && names) c_bug(\"path_run"},
-  {name = "an argument's link to a secrets folder is not followed", file = "paths.c", dir = "host", caught_by = "store/test_paths",
+  {name = "an argument's link to a secrets folder is not followed", file = "paths.c", dir = "host", caught_by = "file_system/test_paths",
    aim = "secrets_mounts_no_read_listing_change_path_or_argument_reaches_a_token_by_the_mount_or_another_way",
    old = "            if (mounts_in_folder(rp, dir)) {", new = "            if (0 && mounts_in_folder(rp, dir)) {"},
-  {name = "an absolute path in a secrets folder names the mount above it", file = "paths.c", dir = "host", caught_by = "store/test_paths",
+  {name = "an absolute path in a secrets folder names the mount above it", file = "paths.c", dir = "host", caught_by = "file_system/test_paths",
    aim = "an_absolute_path_s_stop_a_path_in_a_secrets_mount_s_folder_names_neither_the_mount_nor_its_folder",
    old = "if (mounts_in_folder(abs, mounts_trim_slash(at(sd, k).cli_dir))) return OK;", new = "(void)sd;"},
-  {name = "a walk's every entry works out the secrets folders again", file = "paths.c", dir = "host", caught_by = "store/test_paths",
+  {name = "a walk's every entry works out the secrets folders again", file = "paths.c", dir = "host", caught_by = "file_system/test_paths",
    aim = "secrets_folders_are_worked_out_once_a_run_so_a_walk_s_check_of_each_entry_allocates_nothing",
    old = "        if (mounts_in_folder(abs, at(sd, k).run_dir)) {\n            *in = true;", new = "        Str again = S(\"\");\n        TRY(paths_cat(r, pos, at(sd, k).run_dir, S(\"\"), S(\"\"), &again));\n        if (mounts_in_folder(abs, again)) {\n            *in = true;"},
-  {name = "a run's folders made for other mounts or another root are read", file = "paths.c", dir = "host", caught_by = "store/test_paths",
+  {name = "a run's folders made for other mounts or another root are read", file = "paths.c", dir = "host", caught_by = "file_system/test_paths",
    aim = "secrets_folders_worked_out_for_other_mounts_or_another_root_end_the_process",
    old = "if (!f->made || !same_mounts || !str_eq(f->root, r->root)) c_bug(", new = "if (0 && same_mounts) c_bug("},
-  {name = "a PathRun is made with no hook", file = "path_run.c", dir = "host", caught_by = "store/test_paths",
+  {name = "a PathRun is made with no hook", file = "path_run.c", dir = "host", caught_by = "file_system/test_paths",
    aim = "a_path_run_has_a_hook_always_metal_s_answers_nothing_resolved_no_hint_and_no_secret",
    old = "    if (hook == NULL) c_bug(\"path_run: a PathRun", new = "    if (0) c_bug(\"path_run: a PathRun"},
-  {name = "a root path's links are walked before its names are checked", file = "path_run.c", dir = "host", caught_by = "store/test_paths",
+  {name = "a root path's links are walked before its names are checked", file = "path_run.c", dir = "host", caught_by = "file_system/test_paths",
    aim = "a_root_path_s_names_are_the_core_s_to_check_before_the_hook_walks_its_links",
    old = "    TRY(path_charge(r, pos, given.len));\n", new = "    TRY(path_charge(r, pos, given.len));\n    if (rel.len > 0 && str_byte(rel, 0) != '/' && str_find_byte(rel, ':') == NULL) TRY(r->hook->check_root(r->hook->ctx, r, pos, rel));\n"},
-  {name = "a read-only mount's folder is worked out again per change", file = "paths.c", dir = "host", caught_by = "store/test_paths",
+  {name = "a read-only mount's folder is worked out again per change", file = "paths.c", dir = "host", caught_by = "file_system/test_paths",
    aim = "read_only_mounts_folders_are_worked_out_once_a_run_so_a_change_s_check_allocates_nothing",
    old = "        Str dir = paths_run_dir_of(h, r, m);\n        bool under", new = "        Str dir = S(\"\");\n        TRY(paths_cat(r, pos, paths_run_dir_of(h, r, m), S(\"\"), S(\"\"), &dir));\n        bool under"},
-  {name = "the mounts file's line without `=` is quoted", file = "mounts.c", dir = "host", caught_by = "store/test_paths",
+  {name = "the mounts file's line without `=` is quoted", file = "mounts.c", dir = "host", caught_by = "file_system/test_paths",
    aim = "secrets_mounts_the_mounts_file_s_mistakes_name_the_line_and_the_mount_never_the_line_s_text_a_path_or_a_word_after_one",
    old = "S(\"the line is not `name = value`\"), none);", new = "S(\"`{s}` is not `name = value`\"), MSG_ARGS(MSG_FROM_HOST(line)));"},
-  {name = "the mounts file's name that is not one is quoted", file = "mounts.c", dir = "host", caught_by = "store/test_paths",
+  {name = "the mounts file's name that is not one is quoted", file = "mounts.c", dir = "host", caught_by = "file_system/test_paths",
    aim = "secrets_mounts_the_mounts_file_s_mistakes_name_the_line_and_the_mount_never_the_line_s_text_a_path_or_a_word_after_one",
    old = "S(\"the name before `=` is not a mount's name: letters, digits, `_` and `-`\"), none);", new = "S(\"`{s}` is not a mount's name: letters, digits, `_` and `-`\"), MSG_ARGS(MSG_FROM_HOST(name)));"},
-  {name = "the mounts file's word after a path is quoted", file = "mounts.c", dir = "host", caught_by = "store/test_paths",
+  {name = "the mounts file's word after a path is quoted", file = "mounts.c", dir = "host", caught_by = "file_system/test_paths",
    aim = "secrets_mounts_the_mounts_file_s_mistakes_name_the_line_and_the_mount_never_the_line_s_text_a_path_or_a_word_after_one",
    old = "S(\"only `ro`, `tools` and `secrets` may follow `{s}`'s path (and a path has no space)\"), MSG_ARGS(MSG_FROM_HOST(name)));", new = "S(\"`{s}` after `{s}`'s path: only `ro`, `tools` and `secrets` may follow it (and a path has no space)\"), MSG_ARGS(MSG_FROM_HOST(w), MSG_FROM_HOST(name)));"},
-  {name = "the mounts file's relative value is quoted", file = "mounts.c", dir = "host", caught_by = "store/test_paths",
+  {name = "the mounts file's relative value is quoted", file = "mounts.c", dir = "host", caught_by = "file_system/test_paths",
    aim = "secrets_mounts_the_mounts_file_s_mistakes_name_the_line_and_the_mount_never_the_line_s_text_a_path_or_a_word_after_one",
    old = "S(\"`{s}`'s value is relative: an absolute path, or one from `~/`\"), MSG_ARGS(MSG_FROM_HOST(name)));", new = "S(\"`{s}`'s value `{s}` is relative: an absolute path, or one from `~/`\"), MSG_ARGS(MSG_FROM_HOST(name), MSG_FROM_HOST(value)));"},
-  {name = "Wyhash's first secret is off by one", file = "wyhash.h", caught_by = "store/test_store",
+  {name = "Wyhash's first secret is off by one", file = "wyhash.h", caught_by = "file_system/test_file_system",
    aim = "wyhash_its_test_vectors",
    old = "0xa0761d6478bd642full", new = "0xa0761d6478bd642eull"},
-  {name = "case tells two names apart", file = "path.c", dir = "host", caught_by = "store/test_store",
+  {name = "case tells two names apart", file = "path.c", dir = "host", caught_by = "file_system/test_file_system",
    aim = "case_does_not_tell_two_names_apart_and_the_first_case_is_kept",
    old = "if (p >= 'A' && p <= 'Z') p = (uint8_t)(p + 32);", new = "(void)0;"},
-  {name = "a NUL inside a path reaches the kernel", file = "slice.h", caught_by = "store/test_store",
+  {name = "a NUL inside a path reaches the kernel", file = "slice.h", caught_by = "file_system/test_file_system",
    aim = "a_path_with_a_nul_inside_is_refused_before_any_call",
    old = "if (str_find_byte(s, 0) != NULL) return STR_CSTR_NUL;", new = "(void)0;"},
-  {name = "the metal host's depth is one deeper", file = "file_system.c", dir = "host", caught_by = "store/test_store",
+  {name = "the metal host's depth is one deeper", file = "file_system.c", dir = "host", caught_by = "file_system/test_file_system",
    aim = "a_path_the_bare_metal_host_could_not_hold_is_refused_measured_as_it_would_spell_it",
    old = "if (depth > FILE_SYSTEM_DEPTH_MAX) return FILE_SYSTEM_PATH_TOO_DEEP;", new = "if (depth > FILE_SYSTEM_DEPTH_MAX + 1) return FILE_SYSTEM_PATH_TOO_DEEP;"},
-  {name = "a refused rename leaves its sibling", file = "file_system.c", dir = "host", caught_by = "store/test_store",
+  {name = "a refused rename leaves its sibling", file = "file_system.c", dir = "host", caught_by = "file_system/test_file_system",
    aim = "a_replace_onto_a_folder_fails_and_leaves_no_temporary_file_beside_it",
    old = "if (e != FILE_SYSTEM_OK && from != NULL) unlink(from);", new = "(void)from;"},}
 
-function store_block(t)
+function file_system_block(t)
   local tests = {}
-  for src in keys(STORE_TESTS) do push(tests, src) end
+  for src in keys(FILE_SYSTEM_TESTS) do push(tests, src) end
   sort(tests)
   for src in tests do
-    if test_count(src) ~= STORE_TESTS[src] then fail(src .. " has " .. test_count(src) .. " TEST(s), and STORE_TESTS says " .. STORE_TESTS[src]) end
+    if test_count(src) ~= FILE_SYSTEM_TESTS[src] then fail(src .. " has " .. test_count(src) .. " TEST(s), and FILE_SYSTEM_TESTS says " .. FILE_SYSTEM_TESTS[src]) end
   end
-  for z in keys(STORE_ZIG_TESTS) do
+  for z in keys(FILE_SYSTEM_ZIG_TESTS) do
     local n = zig_test_count(z)
-    if n ~= STORE_ZIG_TESTS[z] then fail(z .. " has " .. n .. " tests, and STORE_ZIG_TESTS says " .. STORE_ZIG_TESTS[z] .. ": port the new one to c/tests/store") end
+    if n ~= FILE_SYSTEM_ZIG_TESTS[z] then fail(z .. " has " .. n .. " tests, and FILE_SYSTEM_ZIG_TESTS says " .. FILE_SYSTEM_ZIG_TESTS[z] .. ": port the new one to c/tests/file_system") end
   end
   for b in t.builds do
-    print("store " .. said_of_build(b, #tests, test_files(t, "store " .. b, b, tests)))
+    print("file_system " .. said_of_build(b, #tests, test_files(t, "file_system " .. b, b, tests)))
   end
   if not t.full then return nil end
-  run_plants(t, "store plants", STORE_PLANTS)
+  run_plants(t, "file_system plants", FILE_SYSTEM_PLANTS)
   return nil
 end
--- ── end of the store's block ─────────────────────────────────────────────
+-- ── end of the file system's block ───────────────────────────────────────
 
 -- ── The run ─────────────────────────────────────────────────────────────
 
 local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"), arg("stage", "all"))
-store_block(t)
-block_end(t, "store")
+file_system_block(t)
+block_end(t, "file_system")

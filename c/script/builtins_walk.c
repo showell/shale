@@ -4,7 +4,7 @@
 // its own stack of folders, so a tree's depth is the store's to choose, never
 // the C stack's.
 //
-// A program includes it after builtins_store.c.
+// A program includes it after builtins_files.c.
 
 // A folder the walk is in: its entries, and the index of the next to take.
 typedef struct {
@@ -69,7 +69,7 @@ static STATUS_MUST_USE Status walk_full(Run *r, Pos pos, Str folder, Str name, S
 // though it were not there. False on metal (PATH_HOOK_NONE).
 static STATUS_MUST_USE Status walk_in_secrets(Run *r, Pos pos, Str full, bool *in) {
     *in = false;
-    RunStore *rs = builtin_store_of(r);
+    RunFiles *rs = builtin_files_of(r);
     const PathHook *hook = rs->path.hook;
     return hook->in_secrets(hook->ctx, &rs->path, pos, full, in);
 }
@@ -168,7 +168,7 @@ static STATUS_MUST_USE Status walk_more(Run *r, Pos pos, Str path, Value *out) {
 // listed again and set at the first name past `after`'s part, so a walk in
 // parts takes each entry once whatever came or went in between. "" or the
 // walk's own path is the start.
-static STATUS_MUST_USE Status walk_resume(Run *r, Pos pos, const StorePath *p, const WalkOptions *o, WalkLevels *levels) {
+static STATUS_MUST_USE Status walk_resume(Run *r, Pos pos, const CheckedPath *p, const WalkOptions *o, WalkLevels *levels) {
     Str after = o->after;
     Str rel = p->rel;
     if (after.len == 0 || str_eq(after, rel)) return OK;
@@ -223,9 +223,9 @@ static STATUS_MUST_USE Status walk_entry(Run *r, Pos pos, FileSystemEntry en, St
     memset(&st, 0, sizeof st);
     if (has_stat) {
         TRY(builtin_count_read(r, pos));
-        RunStore *rs = builtin_store_of(r);
+        RunFiles *rs = builtin_files_of(r);
         FileSystemErr e = file_system_stat(rs->file_system, r->ctx.values, full, &st);
-        if (e != FILE_SYSTEM_OK) return builtin_store_failed(r, pos, BUILTIN_WALK, rel, e);
+        if (e != FILE_SYSTEM_OK) return builtin_file_system_failed(r, pos, BUILTIN_WALK, rel, e);
     }
     Table *m = NULL;
     TRY(run_new_table(r, pos, &m));
@@ -244,7 +244,7 @@ static STATUS_MUST_USE Status walk_entry(Run *r, Pos pos, FileSystemEntry en, St
 // a `more` entry last when there is more. Each folder listed costs a read and
 // each entry kept a stat; an entry filtered out is never stat'ed.
 static STATUS_MUST_USE Status bi_walk(Run *r, Pos pos, ConstValues args, Value *out) {
-    StorePath p;
+    CheckedPath p;
     TRY(builtin_path(r, pos, BUILTIN_WALK, &at(args, 0), true, &p));
     WalkOptions o;
     memset(&o, 0, sizeof o);
@@ -275,8 +275,8 @@ static STATUS_MUST_USE Status bi_walk(Run *r, Pos pos, ConstValues args, Value *
     bool found = false;
     FileSystemStat st;
     TRY(builtin_stat_or_null(r, pos, BUILTIN_WALK, &p, &found, &st));
-    if (!found) return builtin_store_failed(r, pos, BUILTIN_WALK, p.rel, FILE_SYSTEM_FILE_NOT_FOUND);
-    if (st.kind != FILE_SYSTEM_KIND_DIRECTORY) return builtin_store_failed(r, pos, BUILTIN_WALK, p.rel, FILE_SYSTEM_NOT_DIR);
+    if (!found) return builtin_file_system_failed(r, pos, BUILTIN_WALK, p.rel, FILE_SYSTEM_FILE_NOT_FOUND);
+    if (st.kind != FILE_SYSTEM_KIND_DIRECTORY) return builtin_file_system_failed(r, pos, BUILTIN_WALK, p.rel, FILE_SYSTEM_NOT_DIR);
     WalkLevels levels = WalkLevels_make(r->ctx.values);
     WalkLevel first;
     memset(&first, 0, sizeof first);

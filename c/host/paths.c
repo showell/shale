@@ -626,7 +626,7 @@ static void paths_hook(Paths *h, PathHook *out) {
 // `real`'s answer, and what a program's `cwd` is. Zig's `osPath`, its
 // string already checked.
 static STATUS_MUST_USE Status paths_os_path(Paths *h, PathRun *r, Pos pos, Str who, Str given, bool allow_root, Str *out) {
-    StorePath p;
+    CheckedPath p;
     TRY(path_arg(r, pos, who, given, allow_root, &p));
     return paths_absolute(h, r, pos, mounts_trim_slash(p.full), out);
 }

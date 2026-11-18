@@ -2,7 +2,7 @@
 // hangs on every path (`PathHook`). Also where the stops built from a path,
 // and the host's, are made (`path_fail`, which checks their host-made
 // arguments against the secrets rule), and the store's failure in words
-// (`path_store_failed`).
+// (`path_file_system_failed`).
 //
 // A path is the root's unless the hook resolves it (a mount's, on Linux):
 // every part a name FAT holds, so `.`, `..`, empty parts and a leading `/`
@@ -253,7 +253,7 @@ static STATUS_MUST_USE Status path_fail(PathRun *r, Pos pos, StopClass cls, Str 
 
 // A store error in plain words, Zig's `storeWords`; its name follows in
 // parentheses.
-static Str path_store_words(FileSystemErr e) {
+static Str path_file_system_words(FileSystemErr e) {
     switch (e) {
     case FILE_SYSTEM_FILE_NOT_FOUND: return S("not found");
     case FILE_SYSTEM_NOT_DIR: return S("a part of the path is a file, not a folder");
@@ -271,7 +271,7 @@ static Str path_store_words(FileSystemErr e) {
 }
 
 // What to do about it, when there is something.
-static Str path_store_hint(FileSystemErr e) {
+static Str path_file_system_hint(FileSystemErr e) {
     switch (e) {
     case FILE_SYSTEM_FILE_NOT_FOUND: return S(": `exists(p)` asks first");
     case FILE_SYSTEM_NOT_DIR: return S(": `is_dir(p)` asks first");
@@ -286,10 +286,10 @@ static Str path_store_hint(FileSystemErr e) {
 // The stop for a store call `who` made on the script's `rel` that failed
 // with `e`: `who("rel")`: words (Name)hint, as Zig's `storeFailed`; the
 // arena budget for OutOfMemory.
-static STATUS_MUST_USE Status path_store_failed(PathRun *r, Pos pos, Str who, Str rel, FileSystemErr e) {
+static STATUS_MUST_USE Status path_file_system_failed(PathRun *r, Pos pos, Str who, Str rel, FileSystemErr e) {
     if (e == FILE_SYSTEM_OUT_OF_MEMORY) return run_oom(r->ctx, pos);
     return path_fail(r, pos, CLASS_STORE, S("`{s}(\"{s}\")`: {s} ({s}){s}"),
-                     MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(rel), MSG_FROM_HOST(path_store_words(e)), MSG_FROM_HOST(file_system_err_name(e)), MSG_FROM_HOST(path_store_hint(e))));
+                     MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(rel), MSG_FROM_HOST(path_file_system_words(e)), MSG_FROM_HOST(file_system_err_name(e)), MSG_FROM_HOST(path_file_system_hint(e))));
 }
 
 // Where the part of `s` that starts at `from` ends: the next `sep` (`/` for
@@ -307,11 +307,11 @@ static size_t path_part_end(Str s, size_t from) {
 
 // A script's path, confined: `full` is the OS path (the root's, or the
 // hook's), `rel` the script's own. Only `path_arg` makes one, so a call
-// that takes a StorePath took a checked one (Zig's sealed `Path`).
+// that takes a CheckedPath took a checked one (Zig's sealed `Path`).
 typedef struct {
     Str full;
     Str rel;
-} StorePath;
+} CheckedPath;
 
 // The stop for an absolute path, the one home of its words: where the hook
 // knows the folder that holds it, the stop says how to write it there.
@@ -344,7 +344,7 @@ static STATUS_MUST_USE Status path_absolute_stop(PathRun *r, Pos pos, Str who, S
 // REMEDY: `..`, a leading `/`, an empty part and the whole root are refused
 // below, and paths.c checks a mount's every part itself; test_paths plants
 // each.
-static STATUS_MUST_USE Status path_arg(PathRun *r, Pos pos, Str who, Str given, bool allow_root, StorePath *out) {
+static STATUS_MUST_USE Status path_arg(PathRun *r, Pos pos, Str who, Str given, bool allow_root, CheckedPath *out) {
     Str rel = given;
     if (str_eq(given, S("."))) {
         rel = S("");

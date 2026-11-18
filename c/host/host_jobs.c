@@ -63,7 +63,7 @@ static STATUS_MUST_USE Status host_jobs_find(Host *h, Run *r, Pos pos, const Val
     }
     if (!host_ends_with(shown, S(".job"))) return host_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: {s} is not a job's record (`<log>.job`)"), MSG_ARGS(MSG_FROM_HOST(name), MSG_FROM_SCRIPT(shown)));
     Str os = S("");
-    TRY(paths_os_path(&h->paths, &builtin_store_of(r)->path, pos, builtin_who(r, BUILTIN_HOST), shown, false, &os));
+    TRY(paths_os_path(&h->paths, &builtin_files_of(r)->path, pos, builtin_who(r, BUILTIN_HOST), shown, false, &os));
     Bytes text = {NULL, 0};
     Str why = S("");
     TRY(host_jobs_read(r, pos, os, &text, &why));
@@ -97,7 +97,7 @@ static STATUS_MUST_USE Status host_jobs_result(Run *r, Pos pos, Str ended, bool 
 // against the run's cap on programs.
 static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValues args, Value *out) {
     Arena *a = r->ctx.values;
-    RunStore *rs = builtin_store_of(r);
+    RunFiles *rs = builtin_files_of(r);
     if (args.len != 2) {
         return host_fail(r, pos, CLASS_ARGUMENT, S("`job_start` takes argv and its options, `job_start({{\"zig\", \"build\"}}, {{log = \"runs:build.log\"}})`, given {d} arguments"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, args.len))));
     }
@@ -418,7 +418,7 @@ static STATUS_MUST_USE Status host_wait_seen_ended(Host *h, Run *r, Pos pos, Hos
         Str given = log;
         if (host_given(&o->file)) TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &o->file, S("its path"), &given));
         Str os = S("");
-        TRY(paths_os_path(&h->paths, &builtin_store_of(r)->path, pos, builtin_who(r, BUILTIN_HOST), given, false, &os));
+        TRY(paths_os_path(&h->paths, &builtin_files_of(r)->path, pos, builtin_who(r, BUILTIN_HOST), given, false, &os));
         bool found = false;
         TRY(host_scan_look(scan, sa, r, pos, os, given, o->contains.as.string, rec, &found));
         if (found) return host_jobs_result(r, pos, S("found"), false, 0, false, 0, out);
@@ -440,7 +440,7 @@ static STATUS_MUST_USE Status host_wait_loop(Host *h, Run *r, Pos pos, ConstValu
             Str given = j.log;
             if (host_given(&o->file)) TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &o->file, S("its path"), &given));
             Str os = S("");
-            TRY(paths_os_path(&h->paths, &builtin_store_of(r)->path, pos, builtin_who(r, BUILTIN_HOST), given, false, &os));
+            TRY(paths_os_path(&h->paths, &builtin_files_of(r)->path, pos, builtin_who(r, BUILTIN_HOST), given, false, &os));
             bool found = false;
             TRY(host_scan_look(&scan, sa, r, pos, os, given, o->contains.as.string, &j.record, &found));
             if (found) return host_jobs_result(r, pos, S("found"), false, 0, false, 0, out);

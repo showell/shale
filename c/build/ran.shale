@@ -10,7 +10,7 @@ use("build:lib.shale")
 -- ── The binaries of several parts ───────────────────────────────────────
 -- ran.c includes every module of c/script and c/host, so a test file that
 -- includes it is a compile of the whole interpreter. test_vm.c,
--- store/test_builtins.c, host_builtins/test_host_run.c and
+-- file_system/test_builtins.c, host_builtins/test_host_run.c and
 -- text/test_host_text.c are parts (`TEST_PART`, test.h) of ran_tests.c
 -- instead, which compiles them once a build rather than once a file. In
 -- both tiers: each binary of TEST_BINARIES under each of `t.builds`, each

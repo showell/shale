@@ -16,7 +16,7 @@
 #include "../script/regex.c"
 #include "../script/builtins.c"
 #include "../script/builtins_text.c"
-#include "../script/builtins_store.c"
+#include "../script/builtins_files.c"
 #include "../script/builtins_walk.c"
 #include "../script/builtins_change.c"
 #include "../script/vm.c"
@@ -67,7 +67,7 @@ typedef struct {
     // The run's zig-ast, which ran_free ends.
     HostZigProc zig;
     PathHook hook;
-    RunStore store;
+    RunFiles files;
     Program prog;
     Code code;
     Run r;
@@ -146,14 +146,14 @@ static void ran_init(Ran *x, RanOpts o) {
     }
     x->file_system.has_data_base = true;
     x->file_system.data_base = x->root;
-    x->store.file_system = &x->file_system;
+    x->files.file_system = &x->file_system;
     paths_make(&x->lh.paths, &x->host, x->root, x->dir, Mounts_items(&loaded.mounts), loaded.from);
     x->lh.paths.undo = o.undo;
     SpawnStrs env = {NULL, 0};
     host_zig_init(&x->zig);
     host_make(&x->lh, env, &x->zig);
     paths_hook(&x->lh.paths, &x->hook);
-    x->store.diffs_summary = !o.verbose;
+    x->files.diffs_summary = !o.verbose;
 }
 
 // Parses, compiles and runs `src` on the folder `ran_init` made.
@@ -185,10 +185,10 @@ static void ran_run(Ran *x, Str src, Budgets b) {
     r->stack = ValueVec_make(&x->machine);
     regex_cache_init(&r->patterns, &r->ctx.refused);
     PathRun path = path_run_make(&r->ctx, x->root, builtin_path_charge, r, &x->hook);
-    x->store.path = path;
-    if (!paths_run_folders_make(&x->lh.paths, &x->store.path)) abort();
-    x->store.effects = Effects_make(&x->values);
-    r->store = &x->store;
+    x->files.path = path;
+    if (!paths_run_folders_make(&x->lh.paths, &x->files.path)) abort();
+    x->files.effects = Effects_make(&x->values);
+    r->files = &x->files;
     RunHost host = {&x->lh, host_call};
     RunHost metal = {NULL, NULL};
     r->host = x->no_host ? metal : host;
@@ -279,7 +279,7 @@ static Str ran_report_of(Ran *x, Arena *a, bool verbose) {
     Preludes none = {NULL, 0};
     Names effects = {NULL, 0};
     Names records = {x->lh.records.ptr, x->lh.records.len};
-    if (verbose && store_effect_lines(&x->store, a, &effects) != OK) return S("(the report ran out of arena)");
+    if (verbose && builtin_effect_lines(&x->files, a, &effects) != OK) return S("(the report ran out of arena)");
     RunUsed u = {x->r.steps, x->r.reads, x->r.read_bytes, x->r.out.len};
     Budgets b = x->r.ctx.budgets;
     StepsTop steps;

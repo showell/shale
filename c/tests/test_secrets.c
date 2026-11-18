@@ -256,11 +256,12 @@ static const char *sf_path(Sf *f, const char *rel) { // cstr: a test's literal, 
 }
 
 static void sf_init(Sf *f, const char *mounts) { // cstr: a test's literal
-    // This unit makes no store call, so nothing calls path_store_failed,
-    // which cannot be `static inline` as other functions this unit leaves
-    // alone are: TCC 0.9.27 then refuses path_run.c ("index too large").
+    // This unit makes no file system call, so nothing calls
+    // path_file_system_failed, which cannot be `static inline` as other
+    // functions this unit leaves alone are: TCC 0.9.27 then refuses
+    // path_run.c ("index too large").
     // Naming it here is a use, for GCC's unused-function check.
-    (void)path_store_failed;
+    (void)path_file_system_failed;
     memset(f, 0, sizeof *f);
     arena_init(&f->a, (size_t)256 << 20, &f->refused);
     mkdir("c/out", 0777);

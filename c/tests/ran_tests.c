@@ -15,7 +15,7 @@
 #include "ran.c"
 
 #include "test_vm.c"
-#include "store/test_builtins.c"
+#include "file_system/test_builtins.c"
 #include "host_builtins/test_host_run.c"
 #include "host_builtins/test_host_procs.c"
 #include "host_builtins/test_run_guards.c"

@@ -5,7 +5,7 @@
 // counted against the change budgets, and is logged with its outcome, whatever
 // it is.
 //
-// A program includes it after builtins_store.c.
+// A program includes it after builtins_files.c.
 
 // One edit: `old` replaced by `new`, every one (`all`) or the one there, and
 // only as a whole word (`word`).
@@ -40,7 +40,7 @@ VEC_DEFINE(Places, size_t)
 
 // One file's edits worked out and not yet written.
 typedef struct {
-    StorePath p;
+    CheckedPath p;
     Str was;
     Str now;
     SpansItems spans;
@@ -260,7 +260,7 @@ static STATUS_MUST_USE Status change_miss_hint(Run *r, Pos pos, Str file, Str ol
 
 // Reads `p` and applies `edits` to it in sequence, as `edit` does, charging the
 // searches; writes nothing.
-static STATUS_MUST_USE Status change_plan(Run *r, Pos pos, const StorePath *p, EditList edits, Plan *out) {
+static STATUS_MUST_USE Status change_plan(Run *r, Pos pos, const CheckedPath *p, EditList edits, Plan *out) {
     Builtin b = BUILTIN_EDIT;
     TRY(builtin_count_read(r, pos));
     uint64_t size = 0;
@@ -362,7 +362,7 @@ static STATUS_MUST_USE Status change_write_lines(Run *r, Pos pos, Str mark, Str 
 // summary the walk and its charges are the same, and the output is one line:
 // `edit p: N hunks, -O +N lines`.
 static STATUS_MUST_USE Status change_write_diff(Run *r, Pos pos, Str rel, Str was, Str now, SpansItems spans) {
-    bool summary = builtin_store_of(r)->diffs_summary;
+    bool summary = builtin_files_of(r)->diffs_summary;
     uint64_t hunks = 0;
     int64_t lines_old = 0;
     int64_t lines_new = 0;
@@ -432,8 +432,8 @@ static STATUS_MUST_USE Status change_write_diff(Run *r, Pos pos, Str rel, Str wa
 // REMEDY: `change_admit` calls it for every change, `edit`'s and
 // `edits_write`'s among them, before its budgets are counted; test_builtins
 // plants a write through a read-only mount.
-static STATUS_MUST_USE Status change_may(Run *r, Pos pos, const StorePath *p) {
-    RunStore *rs = builtin_store_of(r);
+static STATUS_MUST_USE Status change_may(Run *r, Pos pos, const CheckedPath *p) {
+    RunFiles *rs = builtin_files_of(r);
     const PathHook *h = rs->path.hook;
     return h->may_change(h->ctx, &rs->path, pos, p->rel, p->full);
 }
@@ -442,7 +442,7 @@ static STATUS_MUST_USE Status change_may(Run *r, Pos pos, const StorePath *p) {
 // change budgets hold it; then it is counted, its bytes charged and its log
 // entry reserved, so a change made is never one the log could not hold. A stop
 // here changes nothing.
-static STATUS_MUST_USE Status change_admit(Run *r, Pos pos, const StorePath *p, Str data) {
+static STATUS_MUST_USE Status change_admit(Run *r, Pos pos, const CheckedPath *p, Str data) {
     r->tried_change = true;
     TRY(change_may(r, pos, p));
     if (r->changes >= r->ctx.budgets.changes) return run_budget_stop(&r->ctx, pos, BUDGET_CHANGES);
@@ -450,15 +450,15 @@ static STATUS_MUST_USE Status change_admit(Run *r, Pos pos, const StorePath *p, 
     r->changes++;
     r->change_bytes += data.len;
     TRY(run_charge(r, pos, data.len));
-    if (Effects_reserve(&builtin_store_of(r)->effects, 1) != OK) return run_values_oom(r, pos);
+    if (Effects_reserve(&builtin_files_of(r)->effects, 1) != OK) return run_values_oom(r, pos);
     return OK;
 }
 
 // Makes a change `change_admit` let through and logs it with its outcome; a
 // failed one also stops the run. The store takes removing a missing path as
 // done, and a script's removal of one is a stop, logged.
-static STATUS_MUST_USE Status change_make(Run *r, Pos pos, Builtin b, ChangeKind c, const StorePath *p, Str data) {
-    RunStore *rs = builtin_store_of(r);
+static STATUS_MUST_USE Status change_make(Run *r, Pos pos, Builtin b, ChangeKind c, const CheckedPath *p, Str data) {
+    RunFiles *rs = builtin_files_of(r);
     Arena *a = r->ctx.values;
     FileSystemErr e = FILE_SYSTEM_OK;
     if (c == CHANGE_REMOVE || c == CHANGE_REMOVE_TREE) {
@@ -481,18 +481,18 @@ static STATUS_MUST_USE Status change_make(Run *r, Pos pos, Builtin b, ChangeKind
     Effect logged = {builtin_name(b), p->rel, e == FILE_SYSTEM_OK ? S("ok") : file_system_err_name(e)};
     // The room was reserved by change_admit, so this push cannot be refused.
     if (Effects_push(&rs->effects, logged) != OK) return run_values_oom(r, pos);
-    if (e != FILE_SYSTEM_OK) return builtin_store_failed(r, pos, b, p->rel, e);
+    if (e != FILE_SYSTEM_OK) return builtin_file_system_failed(r, pos, b, p->rel, e);
     return OK;
 }
 
 // A change of kind `c` to `p` with `data`, logged under `b`'s name.
-static STATUS_MUST_USE Status change_at(Run *r, Pos pos, Builtin b, ChangeKind c, const StorePath *p, Str data) {
+static STATUS_MUST_USE Status change_at(Run *r, Pos pos, Builtin b, ChangeKind c, const CheckedPath *p, Str data) {
     TRY(change_admit(r, pos, p, data));
     return change_make(r, pos, b, c, p, data);
 }
 
-static STATUS_MUST_USE Status change_store(Run *r, Pos pos, Builtin b, ChangeKind c, ConstValues args, Value *out) {
-    StorePath p;
+static STATUS_MUST_USE Status change_builtin(Run *r, Pos pos, Builtin b, ChangeKind c, ConstValues args, Value *out) {
+    CheckedPath p;
     TRY(builtin_path(r, pos, b, &at(args, 0), false, &p));
     Str data = S("");
     if (c == CHANGE_REPLACE || c == CHANGE_APPEND) TRY(builtin_string_arg(r, pos, b, &at(args, 1), S("what it writes"), &data));
@@ -502,23 +502,23 @@ static STATUS_MUST_USE Status change_store(Run *r, Pos pos, Builtin b, ChangeKin
 }
 
 static STATUS_MUST_USE Status bi_replace(Run *r, Pos pos, ConstValues args, Value *out) {
-    return change_store(r, pos, BUILTIN_REPLACE, CHANGE_REPLACE, args, out);
+    return change_builtin(r, pos, BUILTIN_REPLACE, CHANGE_REPLACE, args, out);
 }
 
 static STATUS_MUST_USE Status bi_append(Run *r, Pos pos, ConstValues args, Value *out) {
-    return change_store(r, pos, BUILTIN_APPEND, CHANGE_APPEND, args, out);
+    return change_builtin(r, pos, BUILTIN_APPEND, CHANGE_APPEND, args, out);
 }
 
 static STATUS_MUST_USE Status bi_mkdir(Run *r, Pos pos, ConstValues args, Value *out) {
-    return change_store(r, pos, BUILTIN_MKDIR, CHANGE_MKDIR, args, out);
+    return change_builtin(r, pos, BUILTIN_MKDIR, CHANGE_MKDIR, args, out);
 }
 
 static STATUS_MUST_USE Status bi_remove(Run *r, Pos pos, ConstValues args, Value *out) {
-    return change_store(r, pos, BUILTIN_REMOVE, CHANGE_REMOVE, args, out);
+    return change_builtin(r, pos, BUILTIN_REMOVE, CHANGE_REMOVE, args, out);
 }
 
 static STATUS_MUST_USE Status bi_remove_tree(Run *r, Pos pos, ConstValues args, Value *out) {
-    return change_store(r, pos, BUILTIN_REMOVE_TREE, CHANGE_REMOVE_TREE, args, out);
+    return change_builtin(r, pos, BUILTIN_REMOVE_TREE, CHANGE_REMOVE_TREE, args, out);
 }
 
 // `edit(p, old, new[, {all, word}])` or `edit(p, {{old, new}, ...})`: the
@@ -526,7 +526,7 @@ static STATUS_MUST_USE Status bi_remove_tree(Run *r, Pos pos, ConstValues args, 
 // `edit`; the replacements made. An edit that fails stops the run before
 // anything is printed or written.
 static STATUS_MUST_USE Status bi_edit(Run *r, Pos pos, ConstValues args, Value *out) {
-    StorePath p;
+    CheckedPath p;
     TRY(builtin_path(r, pos, BUILTIN_EDIT, &at(args, 0), false, &p));
     EditList edits;
     TRY(change_edits_arg(r, pos, args, &edits));
@@ -560,7 +560,7 @@ static STATUS_MUST_USE Status change_edits_write(Run *r, Pos pos, const Value *l
             return run_failf(r, pos, CLASS_TYPE, "`edits_write`: item {d} must be `{{p, {{edits}}}}`, not {s}", S("`edits_write`: item "), run_unum(r, k + 1), S(" must be `{p, {edits}}`, not "), value_type_name(item));
         }
         ValueVecItems two = ValueVec_items(&item->as.table->list);
-        StorePath p;
+        CheckedPath p;
         TRY(builtin_path(r, pos, b, &at(two, 0), false, &p));
         for (size_t j = 0; j < k; j++) {
             if (str_eq(at(plans, j).p.full, p.full)) {
@@ -576,7 +576,7 @@ static STATUS_MUST_USE Status change_edits_write(Run *r, Pos pos, const Value *l
     }
     for (size_t k = 0; k < count; k++) TRY(change_write_diff(r, pos, at(plans, k).p.rel, at(plans, k).was, at(plans, k).now, at(plans, k).spans));
     // Every file's log entry at once, so no write waits on the arena.
-    if (Effects_reserve(&builtin_store_of(r)->effects, count) != OK) return run_values_oom(r, pos);
+    if (Effects_reserve(&builtin_files_of(r)->effects, count) != OK) return run_values_oom(r, pos);
     for (size_t k = 0; k < count; k++) TRY(change_admit(r, pos, &at(plans, k).p, at(plans, k).now));
     size_t n = 0;
     for (size_t k = 0; k < count; k++) {

@@ -26,7 +26,7 @@
 #include "script/regex.c"
 #include "script/builtins.c"
 #include "script/builtins_text.c"
-#include "script/builtins_store.c"
+#include "script/builtins_files.c"
 #include "script/builtins_walk.c"
 #include "script/builtins_change.c"
 #include "script/vm.c"
@@ -736,7 +736,7 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     }
     PathHook hook;
     paths_hook(&lh.paths, &hook);
-    RunStore rs;
+    RunFiles rs;
     memset(&rs, 0, sizeof rs);
     rs.file_system = &file_system;
     PathRun path = path_run_make(&r.ctx, where.root.len == 0 ? S("/") : where.root, builtin_path_charge, &r, &hook);
@@ -744,7 +744,7 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     if (!paths_run_folders_make(&lh.paths, &rs.path)) return not_ported(o, S("the run's folders past the arena"));
     rs.effects = Effects_make(&values);
     rs.diffs_summary = !c->verbose;
-    r.store = &rs;
+    r.files = &rs;
     RunHost host = {&lh, host_call};
     r.host = host;
     Status ran = run_ended(&r.ctx, vm_main(&r, &code));
@@ -756,7 +756,7 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     Str out_failed = write_stdout(buf_view(&r.out));
     RunUsed used = {r.steps, r.reads, r.read_bytes, r.out.len};
     Names effects = {NULL, 0};
-    if (c->verbose && store_effect_lines(&rs, a, &effects) != OK) return not_ported(o, S("a report past the arena"));
+    if (c->verbose && builtin_effect_lines(&rs, a, &effects) != OK) return not_ported(o, S("a report past the arena"));
     Names records = {lh.records.ptr, lh.records.len};
     StepsTop steps;
     vm_steps_top(&r, &code, &steps);

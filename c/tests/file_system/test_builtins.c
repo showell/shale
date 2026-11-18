@@ -1,4 +1,4 @@
-// test_builtins.c: the store's builtins (c/script/builtins_store.c,
+// test_builtins.c: the store's builtins (c/script/builtins_files.c,
 // builtins_walk.c, builtins_change.c) and the Linux host's `real`,
 // `may_change` and `edits_write` (c/host/host_call.c), each source run as
 // the C `shale --verbose` runs it (ran.c) over a fresh root. Every output,

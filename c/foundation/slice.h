@@ -251,7 +251,7 @@ typedef enum {
 // so the call would act on a shorter path or word than the one every check
 // judged (`a\0/../x` checked as one, opened as `a`).
 // REMEDY: refused here, before the copy, as Zig's posix layer refuses it;
-// test_arena holds both sides, and test_store catches its plant.
+// test_arena holds both sides, and test_file_system catches its plant.
 static inline StrCStr str_cstr_into(Bytes room, Str s) {
     if (s.len >= room.len) return STR_CSTR_TOO_LONG;
     if (str_find_byte(s, 0) != NULL) return STR_CSTR_NUL;

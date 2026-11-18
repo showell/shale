@@ -1,6 +1,7 @@
-// store_fixture.c: a fresh root folder under c/out/store-tmp, an arena, and
-// the Linux store, for the store's tests and (through fixture.c) the path
-// hook's. A test file defines _GNU_SOURCE, includes test.h, then this.
+// file_system_fixture.c: a fresh root folder under c/out/file-system-tmp, an
+// arena, and the file system with no bases, for the file system's tests and
+// (through fixture.c) the path hook's. A test file defines _GNU_SOURCE,
+// includes test.h, then this.
 
 #include <sys/stat.h>
 
@@ -26,8 +27,8 @@ static void sx_init(Sx *s, bool *refused) {
     char cwd[PATH_MAX];
     if (getcwd(cwd, sizeof cwd) == NULL) abort();
     mkdir("c/out", 0777);
-    mkdir("c/out/store-tmp", 0777);
-    char tmpl[] = "c/out/store-tmp/t.XXXXXX";
+    mkdir("c/out/file-system-tmp", 0777);
+    char tmpl[] = "c/out/file-system-tmp/t.XXXXXX";
     if (mkdtemp(tmpl) == NULL) abort();
     int n = snprintf(s->root_bytes, sizeof s->root_bytes, "%s/%s", cwd, tmpl);
     if (n <= 0) abort();

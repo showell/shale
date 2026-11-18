@@ -114,7 +114,7 @@ CPU time, and only programs that wait are held to their wall time.
 **The test files that run sources share one binary.** c/tests/ran.c
 includes every module of c/script and c/host, so a test file that includes
 it is a compile of the whole interpreter, about 23 s of CPU at -O2 and 11 s
-under ASan on this box. test_vm.c, store/test_builtins.c,
+under ASan on this box. test_vm.c, file_system/test_builtins.c,
 host_builtins/test_host_run.c and text/test_host_text.c are parts of one
 binary instead, c/tests/ran_tests.c (`TEST_PART` and `TEST_PARTS_MAIN`,
 test.h): each build compiles the interpreter once for all four, not once a
