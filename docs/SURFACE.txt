@@ -799,7 +799,7 @@
   argument   a `for` with a step of 0 never ends
   type       a list cannot hold nil
   type       a map cannot hold nil
-### the preludes' `fail`s (75)
+### the preludes' `fail`s (78)
   fail  `assert`: its first argument must be true or false, not {expr}    [the prelude's assert]
   fail  `copy`: {expr} is a symbolic link, which the store never follows; nothing was copied    [the Linux prelude's copy]
   fail  `copy`: {expr} is already there, and a copy never overwrites (`remove_tree` it first)    [the Linux prelude's copy]
@@ -818,8 +818,11 @@
   fail  `git_commit`'s `amend`: HEAD is on {expr} already; commit anew    [the git prelude's git_commit]
   fail  `git_log`'s fields are hash, subject, date and author, not `{expr}`    [the git prelude's git_log]
   fail  `git_push` takes a `branch` or a `tag`, not both    [the git prelude's git_push]
+  fail  `git_push`: HEAD is detached, on no branch; `git_push(repo, {branch = \"<name>\"})` names one    [the git prelude's git_push]
+  fail  `git_push`: the branch {expr} has no upstream; {expr}    [the git prelude's git_push]
+  fail  `git_push`: the branch {expr} tracks {expr}'s {expr}, another name, and a bare push goes only to its own; {expr}    [the git prelude's git_push]
   fail  `git_restore` of no paths: name them    [the git prelude's git_restore]
-  fail  `git_worktree_add` takes a `branch` or a `rev`, not both    [the git prelude's git_worktree_add]
+  fail  `git_worktree_add` takes a `branch` or a `rev`, not both, unless the branch is `new`: then `rev` is where it starts    [the git prelude's git_worktree_add]
   fail  `git_worktree_add`: `new` needs the `branch` to make    [the git prelude's git_worktree_add]
   fail  `glob` takes `hidden`, not `{expr}`    [the prelude's glob]
   fail  `glob`: \"{expr}\" has a part (\"{expr}\") that is not a name    [the prelude's glob]
@@ -1250,4 +1253,4 @@
 
 ## The counts
   builtins 77, host calls 22, prelude functions 93
-  stop texts 603, refusal texts 66, budgets 16 (15 a stop names), flags 11
+  stop texts 606, refusal texts 66, budgets 16 (15 a stop names), flags 11

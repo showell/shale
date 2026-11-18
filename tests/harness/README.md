@@ -51,6 +51,9 @@ frozen by the next freeze with no list to keep:
   symbolic links, the call-bytes cap, budget sweeps, mounts and a planted
   secrets mount. Each runs after `tests/inputs/store/fixture/setup.shale`,
   which builds the small tree the probes read.
+- **git:** `tests/inputs/git/`, the git prelude's calls against a repo and
+  a bare remote that each input makes in its own folder, under the run's
+  pinned identity and dates.
 
 **A hand-written input** (stops, cli, store) is one input for each of its
 `-- differ-argv:` lines, so a probe at several budgets is several inputs of

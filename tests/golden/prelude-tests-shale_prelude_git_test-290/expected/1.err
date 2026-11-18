@@ -1,5 +1,5 @@
 ── stopped at the Linux prelude:26:62 (in `the Linux prelude's not_option`): fail: `git_tag`'s `name` is "-d": a value that starts with `-` would be one of the program's options (259 steps)
    called from the git prelude:39:10 (in `the git prelude's git_value`)
-   called from the git prelude:279:14 (in `the git prelude's git_tag`)
+   called from the git prelude:299:14 (in `the git prelude's git_tag`)
    called from {base}/case/script.shale:1:1
 ── used: 259 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

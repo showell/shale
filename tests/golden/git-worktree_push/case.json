@@ -1,0 +1,1 @@
+{"id":"git-worktree_push","source":"git","origin":"tests/inputs/git/worktree_push.shale","files":["worktree_push.shale"],"steps":[{"argv":["{case}/worktree_push.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

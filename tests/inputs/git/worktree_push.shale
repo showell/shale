@@ -1,0 +1,50 @@
+-- The git prelude's lanes: a `new` branch made from a rev tracks nothing,
+-- and a bare `git_push` goes only to a remote branch of the branch's own
+-- name, refusing one with no upstream, one that tracks another name and a
+-- detached HEAD. The repo and its bare remote are made here.
+function g(args)
+  local argv = {"git", "-C", real("repo")}
+  for a in args do push(argv, a) end
+  return must(run(argv, {timeout_ms = 20000, tail = 20}))
+end
+function remote_refs()
+  return must(run({"git", "-C", real("remote.git"), "for-each-ref", "--format=%(refname) %(subject)"}, {timeout_ms = 20000, tail = 20})).out
+end
+function bare_push(repo)
+  return git_push(repo)
+end
+function lane(opts)
+  return git_worktree_add("repo", "lane2", opts)
+end
+mkdir("repo")
+must(run({"git", "init", "-q", "-b", "master", real("repo")}, {timeout_ms = 20000, tail = 20}))
+must(run({"git", "init", "-q", "--bare", "-b", "master", real("remote.git")}, {timeout_ms = 20000, tail = 20}))
+replace("repo/a.txt", "one\n")
+g({"add", "a.txt"})
+g({"commit", "-q", "-m", "first"})
+g({"remote", "add", "origin", real("remote.git")})
+git_push("repo", {branch = "master"})
+replace("repo/a.txt", "two\n")
+git_commit("repo", "second", {add = "tracked"})
+-- A lane from origin/master: the first commit, not the local second, and
+-- no upstream at all.
+git_worktree_add("repo", "lane", {branch = "lane", new = true, rev = "origin/master"})
+print(read("lane/a.txt"))
+print(git_upstream("lane") == nil)
+print(attempt(bare_push, "lane").error)
+git_push("lane", {branch = "lane"})
+print(git_upstream("lane").name)
+replace("lane/b.txt", "b\n")
+git_commit("lane", "on the lane", {add = "all"})
+git_push("lane")
+print(remote_refs())
+-- A branch made by hand from origin/master tracks master: refused, and the
+-- remote's master is still the first commit.
+g({"branch", "-q", "--track", "hand", "origin/master"})
+g({"checkout", "-q", "hand"})
+print(attempt(bare_push, "repo").error)
+g({"checkout", "-q", "--detach"})
+print(attempt(bare_push, "repo").error)
+print(remote_refs())
+-- A branch that is not new takes no rev.
+print(attempt(lane, {branch = "master", rev = "HEAD"}).error)

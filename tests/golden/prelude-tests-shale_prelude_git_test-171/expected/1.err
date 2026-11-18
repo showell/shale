@@ -1,4 +1,4 @@
 ── stopped at the git prelude:72:29 (in `the git prelude's git_call`): fail: `git restore --source=HEAD~1 --staged --worktree -- a.txt` exited 128: fatal: not a git repository (or any of the parent directories): .git (1078 steps)
-   called from the git prelude:295:3 (in `the git prelude's git_restore`)
+   called from the git prelude:315:3 (in `the git prelude's git_restore`)
    called from {base}/case/script.shale:1:1
 ── used: 1078 of 5000000 steps, 0 of 10000 reads, 69 of 67108864 read bytes, 69 of 65536 output bytes

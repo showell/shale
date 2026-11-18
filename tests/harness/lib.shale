@@ -372,6 +372,7 @@ function collect(base, opts?)
   collect_dir(c, "tests/inputs/stops", "stops")
   collect_dir(c, "tests/inputs/cli", "cli")
   collect_dir(c, "tests/inputs/store", "store")
+  collect_dir(c, "tests/inputs/git", "git")
   return {inputs = c.inputs, dups = c.dups}
 end
 
@@ -823,7 +824,7 @@ end
 -- `zig-tests-script-interp_test-192`).
 function case_id(inp)
   local o = inp.origin
-  for pre in {"^src/", "^tests/inputs/(?:stops|cli|store)/", "^cookbook/", "^docs/", "^web/lessons\\.js: lessons "} do o = re_replace(o, pre, "") end
+  for pre in {"^src/", "^tests/inputs/(?:stops|cli|store|git)/", "^cookbook/", "^docs/", "^web/lessons\\.js: lessons "} do o = re_replace(o, pre, "") end
   o = re_replace(o, "\\.(?:zig|shale|md)\\b", "")
   o = re_replace(o, "[^A-Za-z0-9_]+", "-")
   o = re_replace(re_replace(o, "^-+", ""), "-+$", "")

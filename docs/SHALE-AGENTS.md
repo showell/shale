@@ -442,17 +442,23 @@ or `"."` for the root and `repos:roc-chat` for a mount.
     without; `git_push(repo, {tag})` sends that tag alone.
   - `git_restore(repo, {paths}, {from})` puts paths back as HEAD (or
     `from`) has them, index and work tree; `git_mv(repo, from, to)`.
-  - `git_push(repo)` pushes to the branch's upstream (an error when it has
-    none); `git_push(repo, {branch, remote})` pushes to that branch of
-    `remote` (`origin` unless named) and makes it the upstream, as `push
-    -u` does.
+  - `git_push(repo)` pushes the branch HEAD is on to the branch of the
+    same name on its upstream's remote (or on `{remote}`'s). **It refuses
+    a branch with no upstream, or one whose upstream has another name**
+    (a branch made from origin/master by hand tracks master), naming the
+    call that pushes it: a bare push never lands on master unasked.
+    `git_push(repo, {branch, remote})` pushes to that branch of `remote`
+    (`origin` unless named) and makes it the upstream, as `push -u` does.
   - `git_fetch(repo, {all})`, `git_pull_ff(repo)` and `git_merge_ff(repo,
     ref)`.
   - `git_merge(repo, ref)` makes a merge commit when one is needed and
     gives the new head. On a conflict it undoes the merge (`merge
     --abort`) and stops, naming the conflicted paths, so the checkout is
     never left half merged.
-  - `git_worktree_add(repo, dir, {branch, new})` (or `{rev}`, detached),
+  - `git_worktree_add(repo, dir, {branch, new})` (or `{rev}`, detached;
+    or `{branch, new = true, rev = "origin/master"}`, a new branch from a
+    rev, as a lane starts). A `new` branch tracks nothing, so its first
+    push is `git_push(repo, {branch})`, to a branch of its own name;
     `git_worktree_remove(repo, dir, {force})` and `git_branch_delete(repo,
     name, {force})`.
 - **Errors:** a git error stops the run naming the git command and git's

@@ -1,0 +1,14 @@
+one
+
+true
+`git_push`: the branch lane has no upstream; `git_push(repo, {branch = "lane"})` pushes it to origin's lane and makes that its upstream
+origin/lane
+refs/heads/lane on the lane
+refs/heads/master first
+
+`git_push`: the branch hand tracks origin's master, another name, and a bare push goes only to its own; `git_push(repo, {branch = "hand"})` pushes it to origin's hand and makes that its upstream
+`git_push`: HEAD is detached, on no branch; `git_push(repo, {branch = "<name>"})` names one
+refs/heads/lane on the lane
+refs/heads/master first
+
+`git_worktree_add` takes a `branch` or a `rev`, not both, unless the branch is `new`: then `rev` is where it starts

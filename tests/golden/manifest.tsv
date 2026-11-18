@@ -935,13 +935,13 @@ docs-SHALE-932	docs	docs/SHALE.md:932	1
 docs-SHALE-953	docs	docs/SHALE.md:953	1	
 docs-SHALE-980	docs	docs/SHALE.md:980	1	
 docs-SHALE-1546	docs	docs/SHALE.md:1546	1	
-docs-SHALE-AGENTS-546	docs	docs/SHALE-AGENTS.md:546	1	
-docs-SHALE-AGENTS-584	docs	docs/SHALE-AGENTS.md:584	1	
-docs-SHALE-AGENTS-609	docs	docs/SHALE-AGENTS.md:609	1	
-docs-SHALE-AGENTS-639	docs	docs/SHALE-AGENTS.md:639	1	
-docs-SHALE-AGENTS-680	docs	docs/SHALE-AGENTS.md:680	1	
-docs-SHALE-AGENTS-696	docs	docs/SHALE-AGENTS.md:696	1	
-docs-SHALE-AGENTS-747	docs	docs/SHALE-AGENTS.md:747	1	
+docs-SHALE-AGENTS-553	docs	docs/SHALE-AGENTS.md:553	1	
+docs-SHALE-AGENTS-591	docs	docs/SHALE-AGENTS.md:591	1	
+docs-SHALE-AGENTS-616	docs	docs/SHALE-AGENTS.md:616	1	
+docs-SHALE-AGENTS-646	docs	docs/SHALE-AGENTS.md:646	1	
+docs-SHALE-AGENTS-687	docs	docs/SHALE-AGENTS.md:687	1	
+docs-SHALE-AGENTS-703	docs	docs/SHALE-AGENTS.md:703	1	
+docs-SHALE-AGENTS-754	docs	docs/SHALE-AGENTS.md:754	1	
 lessons-1-1	lessons	web/lessons.js: lessons 1-1	2	
 lessons-1-2	lessons	web/lessons.js: lessons 1-2	5	
 lessons-1-3	lessons	web/lessons.js: lessons 1-3	7	
@@ -1127,3 +1127,4 @@ store-store_budgets-budget-steps-598	store	tests/inputs/store/store_budgets.shal
 store-store_budgets-budget-steps-599	store	tests/inputs/store/store_budgets.shale [--budget steps=599]	2	
 store-walk_options	store	tests/inputs/store/walk_options.shale	2	
 store-walk_resume	store	tests/inputs/store/walk_resume.shale	2	
+git-worktree_push	git	tests/inputs/git/worktree_push.shale	1	

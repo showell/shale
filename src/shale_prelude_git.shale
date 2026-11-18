@@ -235,9 +235,13 @@ function git_commit(repo, msg, opts?)
   return git_head(repo)
 end
 
--- Push: to the branch's upstream, or `{remote, branch}` (the remote
--- `origin` unless named), which becomes its upstream (`push -u`); or
--- `{tag}`, that tag alone (to `origin` unless named).
+-- Push: `{remote, branch}` (the remote `origin` unless named), which
+-- becomes its upstream (`push -u`); or `{tag}`, that tag alone (to `origin`
+-- unless named). Bare, it pushes the branch HEAD is on to the remote
+-- branch of the same name: that of its upstream's remote, or of `remote`.
+-- **A bare push refuses a branch whose upstream has another name** (one
+-- made from origin/master tracks master) **or that has none**, naming the
+-- call that pushes it, so it never lands on master unasked.
 function git_push(repo, opts?)
   git_opts("git_push", opts, {"remote", "branch", "tag", "timeout_ms"})
   local args = {"push", "-q"}
@@ -245,10 +249,26 @@ function git_push(repo, opts?)
     if has_key(opts, "branch") then fail("`git_push` takes a `branch` or a `tag`, not both") end
     push(args, git_value("git_push", "remote", get(opts, "remote", "origin")))
     push(args, "refs/tags/" .. opts.tag)
-  elseif opts ~= nil then
-    if has_key(opts, "branch") then push(args, "-u") end
-    if has_key(opts, "remote") then push(args, git_value("git_push", "remote", opts.remote)) elseif has_key(opts, "branch") then push(args, "origin") end
-    if has_key(opts, "branch") then push(args, git_value("git_push", "branch", opts.branch)) end
+  elseif opts ~= nil and has_key(opts, "branch") then
+    push(args, "-u")
+    push(args, git_value("git_push", "remote", get(opts, "remote", "origin")))
+    push(args, git_value("git_push", "branch", opts.branch))
+  else
+    local name = trim(git_call(repo, {"rev-parse", "--abbrev-ref", "HEAD"}, opts, true, nil).out)
+    if name == "HEAD" then fail("`git_push`: HEAD is detached, on no branch; `git_push(repo, {branch = \"<name>\"})` names one") end
+    local ref = "refs/heads/" .. name
+    local remote = nil
+    if opts ~= nil and has_key(opts, "remote") then
+      remote = git_value("git_push", "remote", opts.remote)
+    else
+      local up = split(trim(git_call(repo, {"for-each-ref", "--format=%(upstream:remotename)%09%(upstream:remoteref)", ref}, opts, true, nil).out), "\t")
+      local again = "`git_push(repo, {branch = \"" .. name .. "\"})` pushes it to origin's " .. name .. " and makes that its upstream"
+      if #up < 2 or up[1] == "" then fail("`git_push`: the branch " .. name .. " has no upstream; " .. again) end
+      if up[2] ~= ref then fail("`git_push`: the branch " .. name .. " tracks " .. up[1] .. "'s " .. sub(up[2], #"refs/heads/" + 1) .. ", another name, and a bare push goes only to its own; " .. again) end
+      remote = up[1]
+    end
+    push(args, remote)
+    push(args, ref .. ":" .. ref)
   end
   git_call(repo, args, opts, false, nil)
   return nil
@@ -340,8 +360,10 @@ function git_merge(repo, ref, opts?)
   fail(shown .. " did not finish (" .. r.ended .. ")")
 end
 
--- A worktree at `dir` (a Shale path): of `branch`, or a `new` branch, or a
--- `rev` detached (an old commit built beside the new).
+-- A worktree at `dir` (a Shale path): of `branch`, or a `new` branch (from
+-- HEAD, or from `rev`), or a `rev` detached (an old commit built beside the
+-- new). A `new` branch tracks nothing (`--no-track`): made from
+-- origin/master, it would track master, and a bare `git_push` push there.
 function git_worktree_add(repo, dir, opts?)
   git_opts("git_worktree_add", opts, {"branch", "new", "rev", "timeout_ms"})
   local args = {"worktree", "add", "-q"}
@@ -350,8 +372,8 @@ function git_worktree_add(repo, dir, opts?)
   if opts ~= nil then
     branch = get(opts, "branch")
     new = get(opts, "new", false)
-    if has_key(opts, "rev") then
-      if branch ~= nil then fail("`git_worktree_add` takes a `branch` or a `rev`, not both") end
+    if has_key(opts, "rev") and not new then
+      if branch ~= nil then fail("`git_worktree_add` takes a `branch` or a `rev`, not both, unless the branch is `new`: then `rev` is where it starts") end
       push(args, "--detach")
       push(args, real(dir))
       push(args, git_value("git_worktree_add", "rev", opts.rev))
@@ -361,11 +383,13 @@ function git_worktree_add(repo, dir, opts?)
   end
   if new then
     if branch == nil then fail("`git_worktree_add`: `new` needs the `branch` to make") end
+    push(args, "--no-track")
     push(args, "-b")
     push(args, git_value("git_worktree_add", "branch", branch))
   end
   push(args, real(dir))
   if branch ~= nil and not new then push(args, git_value("git_worktree_add", "branch", branch)) end
+  if new and has_key(opts, "rev") then push(args, git_value("git_worktree_add", "rev", opts.rev)) end
   git_call(repo, args, opts, false, nil)
   return nil
 end
