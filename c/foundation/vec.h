@@ -46,10 +46,15 @@ static inline STATUS_MUST_USE Status vec_grow_raw(Arena *a, void **ptr, size_t *
     if (fresh == NULL) return STOP;
     // mem_move, not mem_copy: GCC at -O2 cannot prove the two buffers apart
     // and warns (-Wrestrict); they never overlap, and the cost is the same.
-    // A vec never grown holds NULL and no items, so mem_move makes no call.
-    mem_move(fresh, *ptr, len * elem);
-    // A pointer into the old buffer dangles now (arena_free's DRAGON).
-    if (*cap > 0) arena_free(a, *ptr, *cap * elem);
+    // A vec never grown holds NULL and no items: it has nothing to copy or
+    // free. The test is of `*cap`, not of `len`, since GCC at -O2 can see a
+    // vec made with NULL but not that its `len` is 0, and warns
+    // (-Warray-bounds) of a copy from NULL.
+    if (*cap > 0) {
+        mem_move(fresh, *ptr, len * elem);
+        // A pointer into the old buffer dangles now (arena_free's DRAGON).
+        arena_free(a, *ptr, *cap * elem);
+    }
     *ptr = fresh;
     *cap = new_cap;
     return OK;
