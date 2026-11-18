@@ -394,7 +394,7 @@ bin=<path>` holds a build of Shale to every golden case, from the outside
 - [docs/SURFACE.txt](docs/SURFACE.txt): the frozen surface, every builtin,
   stop text, budget, flag and report line, generated from the source by
   `tools/surface.shale` and held to it by `zig build surface-check` (in
-  `test`).
+  `test`) and by C's fast tier (`c/build/surface.shale`).
 - [docs/C-SEAMS.md](docs/C-SEAMS.md): the C port's shared design, its values,
   the arena's fidelity, the VM and the host's seams.
 - [c/docs/building.md](c/docs/building.md): how the C is compiled, with TCC,
