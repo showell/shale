@@ -11,7 +11,9 @@
 // only machine C Shale builds for.
 //
 // The including file defines _GNU_SOURCE before its first include, for
-// syscall and O_PATH.
+// syscall and O_PATH. Its functions are `static inline`: a unit of the
+// spawn alone (test_spawn, test_jobs) includes it for spawn_child.c's
+// restrict and calls none of them.
 
 #include <errno.h>
 #include <fcntl.h>
@@ -80,7 +82,7 @@ enum { LANDLOCK_DEVICE_RIGHTS = LANDLOCK_READ_FILE | LANDLOCK_WRITE_FILE | LANDL
 // The kernel's ABI version: 1 or more, or the errno that says there is none
 // as a negative number (-ENOSYS for a kernel built without it, -EOPNOTSUPP
 // for one booted with it off).
-static int landlock_abi(void) {
+static inline int landlock_abi(void) {
     long v = syscall(LANDLOCK_SYS_CREATE_RULESET, NULL, (size_t)0, (uint32_t)LANDLOCK_VERSION_FLAG);
     if (v < 0) return -errno;
     return (int)v;
@@ -88,7 +90,7 @@ static int landlock_abi(void) {
 
 // Every file right ABI `abi` knows: a ruleset handles them all, so a right
 // no rule names is refused.
-static uint64_t landlock_handled(int abi) {
+static inline uint64_t landlock_handled(int abi) {
     uint64_t all = (uint64_t)LANDLOCK_MAKE_SYM << 1;
     all -= 1;
     if (abi >= 2) all |= LANDLOCK_REFER;
@@ -101,7 +103,7 @@ static uint64_t landlock_handled(int abi) {
 // makes it); 0, or the errno. Only the struct's first field is passed, the
 // file rights, so the network and the scopes stay unhandled whatever the
 // ABI.
-static int landlock_ruleset(uint64_t handled, int *fd) {
+static inline int landlock_ruleset(uint64_t handled, int *fd) {
     uint64_t attr = handled;
     long got = syscall(LANDLOCK_SYS_CREATE_RULESET, &attr, sizeof attr, (uint32_t)0);
     if (got < 0) return errno;
@@ -120,7 +122,7 @@ typedef struct __attribute__((packed)) {
 // every link in the path followed, so a rule holds the folder it reaches.
 // A path that is a file keeps only the rights a file takes. 0, or the
 // errno: ENOENT and ENOTDIR for a path that is not there.
-static int landlock_allow(int fd, const char *path, uint64_t rights, uint64_t handled) { // cstr: NUL-ended for the kernel
+static inline int landlock_allow(int fd, const char *path, uint64_t rights, uint64_t handled) { // cstr: NUL-ended for the kernel
     int at_fd = open(path, O_PATH | O_CLOEXEC);
     if (at_fd < 0) return errno;
     struct stat st;
