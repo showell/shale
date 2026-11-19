@@ -11,7 +11,8 @@
 // ended. The record, `<log>.job`, is job_record.c's `key=value` lines, each
 // write a new file renamed over the old.
 //
-// Include spawn_argv.c, pgroup.c, spawn_child.c and job_record.c first. The
+// Include spawn_argv.c, pgroup.c, landlock.c, spawn_child.c and job_record.c
+// first. The
 // including file defines _GNU_SOURCE before its first include, for pipe2.
 
 #include <errno.h>
