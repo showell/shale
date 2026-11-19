@@ -6,4 +6,4 @@
 -- column a stop there names).
 
 const ROC_ARG_CALL = "Shale.arg!"
-const ROC_CALLS = {"Shale.arg!", "Shale.exists!", "Shale.fail!", "Shale.glob!", "Shale.grep_all!", "Shale.list!", "Shale.print!", "Shale.read!", "Shale.run!", "Shale.write!"}
+const ROC_CALLS = {"Shale.arg!", "Shale.exists!", "Shale.fail!", "Shale.glob!", "Shale.grep_all!", "Shale.list!", "Shale.print!", "Shale.re_find!", "Shale.re_find_all!", "Shale.re_lines!", "Shale.re_match!", "Shale.re_replace!", "Shale.read!", "Shale.roc_tree!", "Shale.run!", "Shale.write!"}

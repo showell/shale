@@ -34,8 +34,9 @@
 #   doc:     one line: what it gives.
 #   anchor:  where its docs are, `file#heading`; that section names it.
 #
-# An effect exported to Roc (only effects are: Roc does pure work itself)
-# says how, in five more keys:
+# An effect exported to Roc (only effects are: Roc does pure work itself;
+# the one exception is the regular expressions, which Roc has none of,
+# c/builtin_table.shale's BT_PURE_EXPORTS) says how, in five more keys:
 #   roc:        its declaration in Shale.roc, `name! : Arg, ... => Answer`;
 #   roc_params: each argument's name, the request's fields in the driver;
 #   roc_doc:    its doc comment in Shale.roc;
@@ -400,6 +401,13 @@ re_find(s: Str, pattern: Str, opts?: Opts) -> Match | Nil
   opts: nocase: Bool, from: Int
   doc: the leftmost match at or after `from`, `{at, text[, groups, group]}`, or nil
   anchor: docs/SHALE.md#text
+  roc: re_find! : Str, Str => [Found({ at : U64, text : Str, groups : List(Str) }), NoMatch]
+  roc_params: text, pattern
+  roc_doc: The leftmost match of the pattern in the text (Shale's `re_find`): where it starts (from 1), its text and each group's text, or `NoMatch`. A pattern Shale cannot read stops the run.
+  values: Found(match); NoMatch, when the text holds none
+  driver: local m = re_find(q.text, q.pattern)
+  driver: if m == nil then return {tag = "NoMatch"} end
+  driver: return {tag = "Found", value = {at = m.at, text = m.text, groups = get(m, "groups", {})}}
 
 re_match(s: Str, pattern: Str, opts?: Opts) -> Bool
   impl: c builtin_re_match
@@ -408,6 +416,11 @@ re_match(s: Str, pattern: Str, opts?: Opts) -> Bool
   opts: nocase: Bool
   doc: a boolean: whether `s` holds a match
   anchor: docs/SHALE.md#regular-expressions
+  roc: re_match! : Str, Str => Bool
+  roc_params: text, pattern
+  roc_doc: Whether the text holds a match of the pattern (Shale's `re_match`).
+  values: the answer
+  driver: return re_match(q.text, q.pattern)
 
 re_replace(s: Str, pattern: Str, replacement: Str, opts?: Opts) -> Str
   impl: c builtin_re_replace
@@ -416,6 +429,11 @@ re_replace(s: Str, pattern: Str, replacement: Str, opts?: Opts) -> Str
   opts: nocase: Bool
   doc: `s` with every match replaced
   anchor: docs/SHALE.md#regular-expressions
+  roc: re_replace! : Str, Str, Str => Str
+  roc_params: text, pattern, replacement
+  roc_doc: The text with every match of the pattern replaced (Shale's `re_replace`; `\1` to `\9` in the replacement are a group's text). A pattern Shale cannot read stops the run.
+  values: the text made
+  driver: return re_replace(q.text, q.pattern, q.replacement)
 
 re_find_all(s: Str, pattern: Str, opts?: Opts) -> List(Match)
   impl: c builtin_re_find_all
@@ -424,6 +442,13 @@ re_find_all(s: Str, pattern: Str, opts?: Opts) -> List(Match)
   opts: nocase: Bool
   doc: every match, as `re_find` gives each
   anchor: docs/SHALE.md#regular-expressions
+  roc: re_find_all! : Str, Str => List({ at : U64, text : Str, groups : List(Str) })
+  roc_params: text, pattern
+  roc_doc: Every match of the pattern in the text, left to right, as `re_find!` gives each (Shale's `re_find_all`).
+  values: the matches, none for no match
+  driver: local out = {}
+  driver: for m in re_find_all(q.text, q.pattern) do push(out, {at = m.at, text = m.text, groups = get(m, "groups", {})}) end
+  driver: return out
 
 min(a: Int, b: Int, c?: Int, d?: Int) -> Int
   impl: c builtin_min
@@ -881,6 +906,11 @@ re_lines(s: Str, pattern: Str, opts?: Opts) -> List({line: Int, text: Str})
   opts: invert: Bool, nocase: Bool
   doc: the lines of `s` holding a match, `{line, text}`
   anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+  roc: re_lines! : Str, Str => List({ line : U64, text : Str })
+  roc_params: text, pattern
+  roc_doc: The lines of the text holding a match of the pattern, numbered from 1 (Shale's `re_lines`).
+  values: the lines, none for no match
+  driver: return re_lines(q.text, q.pattern)
 
 head_lines(p: Path, n: Int) -> List(Str) | Nil
   impl: prelude linux
@@ -1017,6 +1047,23 @@ roc_tree(paths: List(Path)) -> List(Tree)
   stops: -
   doc: Roc's own parser's tree of each file, `{path, nodes, err}`
   anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+  roc: roc_tree! : List(Str) => List({ path : Str, err : Str, nodes : List({ kind : Str, depth : U64, parent : U64, kids : List(U64), line : U64, col : U64, end_line : U64, end_col : U64, attrs : List({ name : Str, value : Str }) }) })
+  roc_params: paths
+  roc_doc: Roc's own parser's tree of each file, in order (Shale's `roc_tree`, through roc-ast): its nodes, or `err`, why roc-ast refused it (`no such file` for a missing one), `""` for a file read. A node's `parent` and `kids` are places in `nodes` counted from 1, `parent` 0 for the root; `line` is 0 for a node with no span. `attrs` are the attributes Roc's tree gives it (`raw`, `name`, `method`, `op`, ...), each by its name.
+  values: each file's tree, or why roc-ast refused it
+  driver: local out = {}
+  driver: for f in roc_tree(q.paths) do
+  driver:   local nodes = {}
+  driver:   for n in f.nodes do
+  driver:     local attrs = {}
+  driver:     for k in keys(n) do
+  driver:       if not has_item({"kind", "depth", "parent", "kids", "line", "col", "end_line", "end_col"}, k) then push(attrs, {name = k, value = tostring(n[k])}) end
+  driver:     end
+  driver:     push(nodes, {kind = n.kind, depth = n.depth, parent = n.parent, kids = n.kids, line = n.line, col = n.col, end_line = n.end_line, end_col = n.end_col, attrs = attrs})
+  driver:   end
+  driver:   push(out, {path = f.path, err = f.err, nodes = nodes})
+  driver: end
+  driver: return out
 
 go_tree(paths: List(Path)) -> List(Tree)
   impl: prelude linux

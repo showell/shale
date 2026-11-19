@@ -27,7 +27,7 @@
 -- The script is one file whose header names the platform by any path
 -- (`pf: platform "../platform/main.roc"`): it is copied into the cache with
 -- that path made this checkout's, relative (Roc refuses an absolute one).
--- budget: programs=20 steps=50000000
+-- budget: programs=20 steps=50000000 arena_bytes=268435456 output_bytes=4000000
 
 use("./surface.gen.shale")
 

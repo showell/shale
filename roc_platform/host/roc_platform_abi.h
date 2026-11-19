@@ -168,7 +168,12 @@ static inline uint8_t* roc_erased_callable_capture_ptr(RocErasedCallable callabl
 
 typedef struct AnonStruct1d63bdf4a74e5a0f AnonStruct1d63bdf4a74e5a0f;
 typedef struct FoundOrMissingType7 FoundOrMissingType7;
-typedef struct FoundOrMissingType8 FoundOrMissingType8;
+typedef struct FoundOrNoMatch FoundOrNoMatch;
+typedef struct AnonStruct9ba65f4c7e87294d AnonStruct9ba65f4c7e87294d;
+typedef struct FoundOrMissingType11 FoundOrMissingType11;
+typedef struct AnonStruct8e43eed7b6bbf36f AnonStruct8e43eed7b6bbf36f;
+typedef struct AnonStructCab41e0e3e24b946 AnonStructCab41e0e3e24b946;
+typedef struct AnonStruct82a96c5d55d63488 AnonStruct82a96c5d55d63488;
 typedef struct AnonStruct1763995a077e9c1f AnonStruct1763995a077e9c1f;
 typedef struct AnonStruct389780dd35a9c209 AnonStruct389780dd35a9c209;
 typedef struct HeadOrTailOrWhole HeadOrTailOrWhole;
@@ -246,35 +251,59 @@ static inline RocList FoundOrMissingType7_payload_found(const FoundOrMissingType
 #endif
 }
 
-typedef uint8_t FoundOrMissingType8Tag;
+#if UINTPTR_MAX == UINT64_MAX
+struct AnonStruct9ba65f4c7e87294d {
+    uint64_t at;
+    RocList groups;
+    RocStr text;
+};
+ROC_STATIC_ASSERT(sizeof(AnonStruct9ba65f4c7e87294d) == 56, "AnonStruct9ba65f4c7e87294d size mismatch");
+ROC_STATIC_ASSERT(ROC_ALIGNOF(AnonStruct9ba65f4c7e87294d) == 8, "AnonStruct9ba65f4c7e87294d alignment mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct9ba65f4c7e87294d, at) == 0, "AnonStruct9ba65f4c7e87294d.at offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct9ba65f4c7e87294d, groups) == 8, "AnonStruct9ba65f4c7e87294d.groups offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct9ba65f4c7e87294d, text) == 32, "AnonStruct9ba65f4c7e87294d.text offset mismatch");
+#else
+struct AnonStruct9ba65f4c7e87294d {
+    uint64_t at;
+    RocList groups;
+    RocStr text;
+};
+ROC_STATIC_ASSERT(sizeof(AnonStruct9ba65f4c7e87294d) == 32, "AnonStruct9ba65f4c7e87294d size mismatch");
+ROC_STATIC_ASSERT(ROC_ALIGNOF(AnonStruct9ba65f4c7e87294d) == 8, "AnonStruct9ba65f4c7e87294d alignment mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct9ba65f4c7e87294d, at) == 0, "AnonStruct9ba65f4c7e87294d.at offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct9ba65f4c7e87294d, groups) == 8, "AnonStruct9ba65f4c7e87294d.groups offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct9ba65f4c7e87294d, text) == 20, "AnonStruct9ba65f4c7e87294d.text offset mismatch");
+#endif
+
+typedef uint8_t FoundOrNoMatchTag;
 enum {
-    FoundOrMissingType8Tag_Found = 0,
-    FoundOrMissingType8Tag_Missing = 1
+    FoundOrNoMatchTag_Found = 0,
+    FoundOrNoMatchTag_NoMatch = 1
 };
 typedef union {
-    RocStr found;
-    uint8_t missing;
-} FoundOrMissingType8TagPayloadStorage;
+    AnonStruct9ba65f4c7e87294d found;
+    uint8_t no_match;
+} FoundOrNoMatchTagPayloadStorage;
 #if UINTPTR_MAX == UINT64_MAX
-struct FoundOrMissingType8 {
-    FoundOrMissingType8TagPayloadStorage payload;
-    FoundOrMissingType8Tag tag;
+struct FoundOrNoMatch {
+    FoundOrNoMatchTagPayloadStorage payload;
+    FoundOrNoMatchTag tag;
 };
-ROC_STATIC_ASSERT(sizeof(FoundOrMissingType8) == 32, "FoundOrMissingType8 size mismatch");
-ROC_STATIC_ASSERT(ROC_ALIGNOF(FoundOrMissingType8) == 8, "FoundOrMissingType8 alignment mismatch");
-ROC_STATIC_ASSERT(offsetof(FoundOrMissingType8, tag) == 24, "FoundOrMissingType8.tag offset mismatch");
+ROC_STATIC_ASSERT(sizeof(FoundOrNoMatch) == 64, "FoundOrNoMatch size mismatch");
+ROC_STATIC_ASSERT(ROC_ALIGNOF(FoundOrNoMatch) == 8, "FoundOrNoMatch alignment mismatch");
+ROC_STATIC_ASSERT(offsetof(FoundOrNoMatch, tag) == 56, "FoundOrNoMatch.tag offset mismatch");
 #else
-struct FoundOrMissingType8 {
-    ROC_ALIGNAS(4) uint8_t payload[12];
-    FoundOrMissingType8Tag tag;
+struct FoundOrNoMatch {
+    ROC_ALIGNAS(8) uint8_t payload[32];
+    FoundOrNoMatchTag tag;
 };
-ROC_STATIC_ASSERT(sizeof(FoundOrMissingType8) == 16, "FoundOrMissingType8 size mismatch");
-ROC_STATIC_ASSERT(ROC_ALIGNOF(FoundOrMissingType8) == 4, "FoundOrMissingType8 alignment mismatch");
-ROC_STATIC_ASSERT(offsetof(FoundOrMissingType8, tag) == 12, "FoundOrMissingType8.tag offset mismatch");
+ROC_STATIC_ASSERT(sizeof(FoundOrNoMatch) == 40, "FoundOrNoMatch size mismatch");
+ROC_STATIC_ASSERT(ROC_ALIGNOF(FoundOrNoMatch) == 8, "FoundOrNoMatch alignment mismatch");
+ROC_STATIC_ASSERT(offsetof(FoundOrNoMatch, tag) == 32, "FoundOrNoMatch.tag offset mismatch");
 #endif
-static inline FoundOrMissingType8 FoundOrMissingType8_make_found(RocStr payload) {
-    FoundOrMissingType8 out = {0};
-    out.tag = FoundOrMissingType8Tag_Found;
+static inline FoundOrNoMatch FoundOrNoMatch_make_found(AnonStruct9ba65f4c7e87294d payload) {
+    FoundOrNoMatch out = {0};
+    out.tag = FoundOrNoMatchTag_Found;
 #if UINTPTR_MAX == UINT64_MAX
     out.payload.found = payload;
 #else
@@ -283,13 +312,66 @@ static inline FoundOrMissingType8 FoundOrMissingType8_make_found(RocStr payload)
     return out;
 }
 
-static inline FoundOrMissingType8 FoundOrMissingType8_make_missing(void) {
-    FoundOrMissingType8 out = {0};
-    out.tag = FoundOrMissingType8Tag_Missing;
+static inline FoundOrNoMatch FoundOrNoMatch_make_no_match(void) {
+    FoundOrNoMatch out = {0};
+    out.tag = FoundOrNoMatchTag_NoMatch;
     return out;
 }
 
-static inline RocStr FoundOrMissingType8_payload_found(const FoundOrMissingType8* value) {
+static inline AnonStruct9ba65f4c7e87294d FoundOrNoMatch_payload_found(const FoundOrNoMatch* value) {
+#if UINTPTR_MAX == UINT64_MAX
+    return value->payload.found;
+#else
+    AnonStruct9ba65f4c7e87294d payload;
+    roc_abi_copy_bytes(&payload, value->payload, sizeof(payload));
+    return payload;
+#endif
+}
+
+typedef uint8_t FoundOrMissingType11Tag;
+enum {
+    FoundOrMissingType11Tag_Found = 0,
+    FoundOrMissingType11Tag_Missing = 1
+};
+typedef union {
+    RocStr found;
+    uint8_t missing;
+} FoundOrMissingType11TagPayloadStorage;
+#if UINTPTR_MAX == UINT64_MAX
+struct FoundOrMissingType11 {
+    FoundOrMissingType11TagPayloadStorage payload;
+    FoundOrMissingType11Tag tag;
+};
+ROC_STATIC_ASSERT(sizeof(FoundOrMissingType11) == 32, "FoundOrMissingType11 size mismatch");
+ROC_STATIC_ASSERT(ROC_ALIGNOF(FoundOrMissingType11) == 8, "FoundOrMissingType11 alignment mismatch");
+ROC_STATIC_ASSERT(offsetof(FoundOrMissingType11, tag) == 24, "FoundOrMissingType11.tag offset mismatch");
+#else
+struct FoundOrMissingType11 {
+    ROC_ALIGNAS(4) uint8_t payload[12];
+    FoundOrMissingType11Tag tag;
+};
+ROC_STATIC_ASSERT(sizeof(FoundOrMissingType11) == 16, "FoundOrMissingType11 size mismatch");
+ROC_STATIC_ASSERT(ROC_ALIGNOF(FoundOrMissingType11) == 4, "FoundOrMissingType11 alignment mismatch");
+ROC_STATIC_ASSERT(offsetof(FoundOrMissingType11, tag) == 12, "FoundOrMissingType11.tag offset mismatch");
+#endif
+static inline FoundOrMissingType11 FoundOrMissingType11_make_found(RocStr payload) {
+    FoundOrMissingType11 out = {0};
+    out.tag = FoundOrMissingType11Tag_Found;
+#if UINTPTR_MAX == UINT64_MAX
+    out.payload.found = payload;
+#else
+    roc_abi_copy_bytes(out.payload, &payload, sizeof(payload));
+#endif
+    return out;
+}
+
+static inline FoundOrMissingType11 FoundOrMissingType11_make_missing(void) {
+    FoundOrMissingType11 out = {0};
+    out.tag = FoundOrMissingType11Tag_Missing;
+    return out;
+}
+
+static inline RocStr FoundOrMissingType11_payload_found(const FoundOrMissingType11* value) {
 #if UINTPTR_MAX == UINT64_MAX
     return value->payload.found;
 #else
@@ -298,6 +380,98 @@ static inline RocStr FoundOrMissingType8_payload_found(const FoundOrMissingType8
     return payload;
 #endif
 }
+
+#if UINTPTR_MAX == UINT64_MAX
+struct AnonStruct8e43eed7b6bbf36f {
+    RocStr err;
+    RocList nodes;
+    RocStr path;
+};
+ROC_STATIC_ASSERT(sizeof(AnonStruct8e43eed7b6bbf36f) == 72, "AnonStruct8e43eed7b6bbf36f size mismatch");
+ROC_STATIC_ASSERT(ROC_ALIGNOF(AnonStruct8e43eed7b6bbf36f) == 8, "AnonStruct8e43eed7b6bbf36f alignment mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct8e43eed7b6bbf36f, err) == 0, "AnonStruct8e43eed7b6bbf36f.err offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct8e43eed7b6bbf36f, nodes) == 24, "AnonStruct8e43eed7b6bbf36f.nodes offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct8e43eed7b6bbf36f, path) == 48, "AnonStruct8e43eed7b6bbf36f.path offset mismatch");
+#else
+struct AnonStruct8e43eed7b6bbf36f {
+    RocStr err;
+    RocList nodes;
+    RocStr path;
+};
+ROC_STATIC_ASSERT(sizeof(AnonStruct8e43eed7b6bbf36f) == 36, "AnonStruct8e43eed7b6bbf36f size mismatch");
+ROC_STATIC_ASSERT(ROC_ALIGNOF(AnonStruct8e43eed7b6bbf36f) == 4, "AnonStruct8e43eed7b6bbf36f alignment mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct8e43eed7b6bbf36f, err) == 0, "AnonStruct8e43eed7b6bbf36f.err offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct8e43eed7b6bbf36f, nodes) == 12, "AnonStruct8e43eed7b6bbf36f.nodes offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct8e43eed7b6bbf36f, path) == 24, "AnonStruct8e43eed7b6bbf36f.path offset mismatch");
+#endif
+
+#if UINTPTR_MAX == UINT64_MAX
+struct AnonStructCab41e0e3e24b946 {
+    uint64_t col;
+    uint64_t depth;
+    uint64_t end_col;
+    uint64_t end_line;
+    uint64_t line;
+    uint64_t parent;
+    RocList attrs;
+    RocList kids;
+    RocStr kind;
+};
+ROC_STATIC_ASSERT(sizeof(AnonStructCab41e0e3e24b946) == 120, "AnonStructCab41e0e3e24b946 size mismatch");
+ROC_STATIC_ASSERT(ROC_ALIGNOF(AnonStructCab41e0e3e24b946) == 8, "AnonStructCab41e0e3e24b946 alignment mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, col) == 0, "AnonStructCab41e0e3e24b946.col offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, depth) == 8, "AnonStructCab41e0e3e24b946.depth offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, end_col) == 16, "AnonStructCab41e0e3e24b946.end_col offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, end_line) == 24, "AnonStructCab41e0e3e24b946.end_line offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, line) == 32, "AnonStructCab41e0e3e24b946.line offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, parent) == 40, "AnonStructCab41e0e3e24b946.parent offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, attrs) == 48, "AnonStructCab41e0e3e24b946.attrs offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, kids) == 72, "AnonStructCab41e0e3e24b946.kids offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, kind) == 96, "AnonStructCab41e0e3e24b946.kind offset mismatch");
+#else
+struct AnonStructCab41e0e3e24b946 {
+    uint64_t col;
+    uint64_t depth;
+    uint64_t end_col;
+    uint64_t end_line;
+    uint64_t line;
+    uint64_t parent;
+    RocList attrs;
+    RocList kids;
+    RocStr kind;
+};
+ROC_STATIC_ASSERT(sizeof(AnonStructCab41e0e3e24b946) == 88, "AnonStructCab41e0e3e24b946 size mismatch");
+ROC_STATIC_ASSERT(ROC_ALIGNOF(AnonStructCab41e0e3e24b946) == 8, "AnonStructCab41e0e3e24b946 alignment mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, col) == 0, "AnonStructCab41e0e3e24b946.col offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, depth) == 8, "AnonStructCab41e0e3e24b946.depth offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, end_col) == 16, "AnonStructCab41e0e3e24b946.end_col offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, end_line) == 24, "AnonStructCab41e0e3e24b946.end_line offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, line) == 32, "AnonStructCab41e0e3e24b946.line offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, parent) == 40, "AnonStructCab41e0e3e24b946.parent offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, attrs) == 48, "AnonStructCab41e0e3e24b946.attrs offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, kids) == 60, "AnonStructCab41e0e3e24b946.kids offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, kind) == 72, "AnonStructCab41e0e3e24b946.kind offset mismatch");
+#endif
+
+#if UINTPTR_MAX == UINT64_MAX
+struct AnonStruct82a96c5d55d63488 {
+    RocStr name;
+    RocStr value;
+};
+ROC_STATIC_ASSERT(sizeof(AnonStruct82a96c5d55d63488) == 48, "AnonStruct82a96c5d55d63488 size mismatch");
+ROC_STATIC_ASSERT(ROC_ALIGNOF(AnonStruct82a96c5d55d63488) == 8, "AnonStruct82a96c5d55d63488 alignment mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct82a96c5d55d63488, name) == 0, "AnonStruct82a96c5d55d63488.name offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct82a96c5d55d63488, value) == 24, "AnonStruct82a96c5d55d63488.value offset mismatch");
+#else
+struct AnonStruct82a96c5d55d63488 {
+    RocStr name;
+    RocStr value;
+};
+ROC_STATIC_ASSERT(sizeof(AnonStruct82a96c5d55d63488) == 24, "AnonStruct82a96c5d55d63488 size mismatch");
+ROC_STATIC_ASSERT(ROC_ALIGNOF(AnonStruct82a96c5d55d63488) == 4, "AnonStruct82a96c5d55d63488 alignment mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct82a96c5d55d63488, name) == 0, "AnonStruct82a96c5d55d63488.name offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct82a96c5d55d63488, value) == 12, "AnonStruct82a96c5d55d63488.value offset mismatch");
+#endif
 
 #if UINTPTR_MAX == UINT64_MAX
 struct AnonStruct1763995a077e9c1f {
@@ -443,6 +617,12 @@ ROC_STATIC_ASSERT(offsetof(AnonStruct389780dd35a9c209, want) == 36, "AnonStruct3
 
 typedef AnonStruct1d63bdf4a74e5a0f ShaleGrepAll;
 typedef FoundOrMissingType7 FoundOrMissing;
+typedef AnonStruct9ba65f4c7e87294d FoundOrNoMatchFound;
+typedef AnonStruct9ba65f4c7e87294d ShaleReFindAll;
+typedef AnonStruct1d63bdf4a74e5a0f ShaleReLines;
+typedef AnonStruct8e43eed7b6bbf36f ShaleRocTree;
+typedef AnonStructCab41e0e3e24b946 ShaleRocTreeNodes;
+typedef AnonStruct82a96c5d55d63488 ShaleRocTreeNodesAttrs;
 typedef AnonStruct389780dd35a9c209 ShaleRunArg0;
 typedef AnonStruct1763995a077e9c1f ShaleRun;
 
@@ -455,7 +635,7 @@ typedef void (*HostedFn)(void);
 
 // Hosted Function Count
 
-#define HOSTED_FUNCTION_COUNT 10
+#define HOSTED_FUNCTION_COUNT 16
 
 
 #define HOSTED_IDX_SHALE_ARG 0
@@ -465,9 +645,15 @@ typedef void (*HostedFn)(void);
 #define HOSTED_IDX_SHALE_GREP_ALL 4
 #define HOSTED_IDX_SHALE_LIST 5
 #define HOSTED_IDX_SHALE_PRINT 6
-#define HOSTED_IDX_SHALE_READ 7
-#define HOSTED_IDX_SHALE_RUN 8
-#define HOSTED_IDX_SHALE_WRITE 9
+#define HOSTED_IDX_SHALE_RE_FIND 7
+#define HOSTED_IDX_SHALE_RE_FIND_ALL 8
+#define HOSTED_IDX_SHALE_RE_LINES 9
+#define HOSTED_IDX_SHALE_RE_MATCH 10
+#define HOSTED_IDX_SHALE_RE_REPLACE 11
+#define HOSTED_IDX_SHALE_READ 12
+#define HOSTED_IDX_SHALE_ROC_TREE 13
+#define HOSTED_IDX_SHALE_RUN 14
+#define HOSTED_IDX_SHALE_WRITE 15
 
 // Argument Structures
 
@@ -538,6 +724,57 @@ typedef struct {
 } ShalePrintArgs;
 
 /**
+ * Arguments for Shale.re_find!
+ * Roc signature: Str, Str => [Found({ at : U64, groups : List(Str), text : Str }), NoMatch]
+ * Refcounted fields are owned by the hosted function.
+ */
+typedef struct {
+    RocStr arg0;
+    RocStr arg1;
+} ShaleReFindArgs;
+
+/**
+ * Arguments for Shale.re_find_all!
+ * Roc signature: Str, Str => List({ at : U64, groups : List(Str), text : Str })
+ * Refcounted fields are owned by the hosted function.
+ */
+typedef struct {
+    RocStr arg0;
+    RocStr arg1;
+} ShaleReFindAllArgs;
+
+/**
+ * Arguments for Shale.re_lines!
+ * Roc signature: Str, Str => List({ line : U64, text : Str })
+ * Refcounted fields are owned by the hosted function.
+ */
+typedef struct {
+    RocStr arg0;
+    RocStr arg1;
+} ShaleReLinesArgs;
+
+/**
+ * Arguments for Shale.re_match!
+ * Roc signature: Str, Str => Bool
+ * Refcounted fields are owned by the hosted function.
+ */
+typedef struct {
+    RocStr arg0;
+    RocStr arg1;
+} ShaleReMatchArgs;
+
+/**
+ * Arguments for Shale.re_replace!
+ * Roc signature: Str, Str, Str => Str
+ * Refcounted fields are owned by the hosted function.
+ */
+typedef struct {
+    RocStr arg0;
+    RocStr arg1;
+    RocStr arg2;
+} ShaleReReplaceArgs;
+
+/**
  * Arguments for Shale.read!
  * Roc signature: Str => [Found(Str), Missing]
  * Refcounted fields are owned by the hosted function.
@@ -545,6 +782,15 @@ typedef struct {
 typedef struct {
     RocStr arg0;
 } ShaleReadArgs;
+
+/**
+ * Arguments for Shale.roc_tree!
+ * Roc signature: List(Str) => List({ err : Str, nodes : List({ attrs : List({ name : Str, value : Str }), col : U64, depth : U64, end_col : U64, end_line : U64, kids : List(U64), kind : Str, line : U64, parent : U64 }), path : Str })
+ * Refcounted fields are owned by the hosted function.
+ */
+typedef struct {
+    RocList arg0;
+} ShaleRocTreeArgs;
 
 /**
  * Arguments for Shale.run!
@@ -626,8 +872,26 @@ extern FoundOrMissingType7 shale_list(RocStr arg0);
 /* Shale.print!: Str => {} */
 extern void shale_print(RocStr arg0);
 
+/* Shale.re_find!: Str, Str => [Found({ at : U64, groups : List(Str), text : Str }), NoMatch] */
+extern FoundOrNoMatch shale_re_find(RocStr arg0, RocStr arg1);
+
+/* Shale.re_find_all!: Str, Str => List({ at : U64, groups : List(Str), text : Str }) */
+extern RocList shale_re_find_all(RocStr arg0, RocStr arg1);
+
+/* Shale.re_lines!: Str, Str => List({ line : U64, text : Str }) */
+extern RocList shale_re_lines(RocStr arg0, RocStr arg1);
+
+/* Shale.re_match!: Str, Str => Bool */
+extern bool shale_re_match(RocStr arg0, RocStr arg1);
+
+/* Shale.re_replace!: Str, Str, Str => Str */
+extern RocStr shale_re_replace(RocStr arg0, RocStr arg1, RocStr arg2);
+
 /* Shale.read!: Str => [Found(Str), Missing] */
-extern FoundOrMissingType8 shale_read(RocStr arg0);
+extern FoundOrMissingType11 shale_read(RocStr arg0);
+
+/* Shale.roc_tree!: List(Str) => List({ err : Str, nodes : List({ attrs : List({ name : Str, value : Str }), col : U64, depth : U64, end_col : U64, end_line : U64, kids : List(U64), kind : Str, line : U64, parent : U64 }), path : Str }) */
+extern RocList shale_roc_tree(RocList arg0);
 
 /* Shale.run!: { argv : List(Str), keep : [Head(U64), Tail(U64), Whole(U64)], timeout_ms : U64, want : Str } => { code : I64, out : Str } */
 extern AnonStruct1763995a077e9c1f shale_run(ShaleRunArgs arg0);
@@ -656,9 +920,15 @@ typedef struct {
     HostedFn shale_grep_all_bang;  /* index 4, C name: shale_grep_all */
     HostedFn shale_list_bang;  /* index 5, C name: shale_list */
     HostedFn shale_print_bang;  /* index 6, C name: shale_print */
-    HostedFn shale_read_bang;  /* index 7, C name: shale_read */
-    HostedFn shale_run_bang;  /* index 8, C name: shale_run */
-    HostedFn shale_write_bang;  /* index 9, C name: shale_write */
+    HostedFn shale_re_find_bang;  /* index 7, C name: shale_re_find */
+    HostedFn shale_re_find_all_bang;  /* index 8, C name: shale_re_find_all */
+    HostedFn shale_re_lines_bang;  /* index 9, C name: shale_re_lines */
+    HostedFn shale_re_match_bang;  /* index 10, C name: shale_re_match */
+    HostedFn shale_re_replace_bang;  /* index 11, C name: shale_re_replace */
+    HostedFn shale_read_bang;  /* index 12, C name: shale_read */
+    HostedFn shale_roc_tree_bang;  /* index 13, C name: shale_roc_tree */
+    HostedFn shale_run_bang;  /* index 14, C name: shale_run */
+    HostedFn shale_write_bang;  /* index 15, C name: shale_write */
 } HostedFunctions;
 
 

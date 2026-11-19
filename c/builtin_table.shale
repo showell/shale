@@ -29,6 +29,9 @@ const BT_HOSTED_C = "roc_platform/host/hosted.gen.c"
 const BT_SURFACE = "roc_platform/surface.gen.shale"
 -- The Roc module the platform's effects are in (Shale.roc).
 const BT_ROC_MODULE = "Shale"
+-- Only effects are exported, with one exception: Shale's regular
+-- expressions, pure but exported because Roc has none (Steve, 2026-11-19).
+const BT_PURE_EXPORTS = {"re_find", "re_find_all", "re_lines", "re_match", "re_replace"}
 
 -- ── Text at depth zero ──────────────────────────────────────────────────
 
@@ -151,7 +154,7 @@ function bt_check_entries(entries)
     end
     if e.opts ~= "" and not has_opts then push(bad, who .. " says `opts:` with no Opts argument") end
     if e.roc ~= "" then
-      if e.kind ~= "effect" then push(bad, who .. " is exported to Roc, and only effects are") end
+      if e.kind ~= "effect" and not has_item(BT_PURE_EXPORTS, e.name) then push(bad, who .. " is exported to Roc, and only effects are (and the regular expressions, BT_PURE_EXPORTS)") end
       for k in {"roc_params", "roc_doc", "values"} do
         if e[k] == "" then push(bad, who .. " is exported to Roc with no `" .. k .. "`") end
       end
@@ -339,6 +342,11 @@ end
 
 -- ── The C: Roc's values as Shale's, and back ────────────────────────────
 
+-- A tag's name as glue spells it in C names: `NoMatch` is `no_match`.
+function bt_snake(tag)
+  return lower(re_replace(tag, "([a-z0-9])([A-Z])", "\\1_\\2"))
+end
+
 -- A fresh C name, `base` and a count: the emitters nest.
 function bt_fresh(g, base)
   g.n = g.n + 1
@@ -392,7 +400,7 @@ function bt_to_shale(g, t, src, ctype, dst, ind)
     push(out, ind .. "    TRY(hosted_new_map(r, pos, &" .. m .. "));")
     push(out, ind .. "    switch ((" .. src .. ").tag) {")
     for tg in t.tags do
-      local low = lower(tg.name)
+      local low = bt_snake(tg.name)
       push(out, ind .. "    case " .. ctype .. "Tag_" .. tg.name .. ": {")
       push(out, ind .. "        TRY(run_map_put_str(r, pos, " .. m .. ", S(\"tag\"), S(\"" .. tg.name .. "\")));")
       if tg.payload.k ~= "none" then
@@ -469,7 +477,7 @@ function bt_from_shale(g, t, val, dst, ctype, ind)
     push(out, ind .. "    if (" .. tv .. ".tag != VALUE_STRING) return hosted_wrong(r, pos, S(\"tag\"));")
     local first = true
     for tg in t.tags do
-      local low = lower(tg.name)
+      local low = bt_snake(tg.name)
       local kw = "} else if"
       if first then kw = "if" end
       first = false

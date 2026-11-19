@@ -24,7 +24,13 @@ platform ""
 		"shale_grep_all": Shale.grep_all!,
 		"shale_list": Shale.list!,
 		"shale_print": Shale.print!,
+		"shale_re_find": Shale.re_find!,
+		"shale_re_find_all": Shale.re_find_all!,
+		"shale_re_lines": Shale.re_lines!,
+		"shale_re_match": Shale.re_match!,
+		"shale_re_replace": Shale.re_replace!,
 		"shale_read": Shale.read!,
+		"shale_roc_tree": Shale.roc_tree!,
 		"shale_run": Shale.run!,
 		"shale_write": Shale.write!,
 	}

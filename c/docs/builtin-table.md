@@ -41,7 +41,12 @@ read(p: Path, offset?: Int, n?: Int) -> Str
 
 **Only effects are exported to Roc**, since Roc does pure work itself (Steve,
 2026-11-19: "exporting things that Roc can do more or less itself would be
-overkill"). An exported effect adds `roc` (its declaration), `roc_params`
+overkill"). **The one exception is the regular expressions** (`re_find`,
+`re_find_all`, `re_lines`, `re_match`, `re_replace`): pure, but exported
+because Roc has none (Steve, 2026-11-19), listed in
+`c/builtin_table.shale`'s `BT_PURE_EXPORTS`. A Roc hosted function is
+always effectful (`=>`), so a Roc function that calls one is effectful too.
+An exported effect adds `roc` (its declaration), `roc_params`
 (its arguments' names), `roc_doc`, `values` (the outcomes that are values:
 every other one is a stop) and its `driver` lines. Ten are exported now;
 the other 76 effects are candidates, each a table entry away.

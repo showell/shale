@@ -39,8 +39,37 @@ Shale := [].{
 	## The text and a newline on the run's output (Shale's `print`).
 	print! : Str => {}
 
+	## The leftmost match of the pattern in the text (Shale's `re_find`): where
+	## it starts (from 1), its text and each group's text, or `NoMatch`. A
+	## pattern Shale cannot read stops the run.
+	re_find! : Str, Str => [Found({ at : U64, text : Str, groups : List(Str) }), NoMatch]
+
+	## Every match of the pattern in the text, left to right, as `re_find!` gives
+	## each (Shale's `re_find_all`).
+	re_find_all! : Str, Str => List({ at : U64, text : Str, groups : List(Str) })
+
+	## The lines of the text holding a match of the pattern, numbered from 1
+	## (Shale's `re_lines`).
+	re_lines! : Str, Str => List({ line : U64, text : Str })
+
+	## Whether the text holds a match of the pattern (Shale's `re_match`).
+	re_match! : Str, Str => Bool
+
+	## The text with every match of the pattern replaced (Shale's `re_replace`;
+	## `\1` to `\9` in the replacement are a group's text). A pattern Shale
+	## cannot read stops the run.
+	re_replace! : Str, Str, Str => Str
+
 	## The file's text, or `Missing` when nothing is at the path.
 	read! : Str => [Found(Str), Missing]
+
+	## Roc's own parser's tree of each file, in order (Shale's `roc_tree`,
+	## through roc-ast): its nodes, or `err`, why roc-ast refused it (`no such
+	## file` for a missing one), `""` for a file read. A node's `parent` and
+	## `kids` are places in `nodes` counted from 1, `parent` 0 for the root;
+	## `line` is 0 for a node with no span. `attrs` are the attributes Roc's tree
+	## gives it (`raw`, `name`, `method`, `op`, ...), each by its name.
+	roc_tree! : List(Str) => List({ path : Str, err : Str, nodes : List({ kind : Str, depth : U64, parent : U64, kids : List(U64), line : U64, col : U64, end_line : U64, end_col : U64, attrs : List({ name : Str, value : Str }) }) })
 
 	## A program run to its end, or stopped at its timeout: its exit code (`-1`
 	## when it did not exit) and what the keep kept of its output. `want` is

@@ -15,11 +15,21 @@ local entries = bt_read(BT_TABLE)
 local bad = bt_check_entries(entries)
 for b in bad do print(b) end
 if #bad > 0 then fail("gen_builtins: " .. BT_TABLE .. " breaks its own rules: each is a line above") end
-for f in bt_generated(entries) do
+function write_if_changed(f)
   if exists(f.path) and read(f.path) == f.text then
     print(f.path .. ": unchanged")
   else
     replace(f.path, f.text)
     print(f.path .. ": written")
   end
+  return nil
+end
+
+-- The Roc files first: they are what glue reads, so a new export's first
+-- run writes them before the C, which needs glue's types, can stop.
+local exports = bt_exports(entries)
+write_if_changed({path = BT_SHALE_ROC, text = bt_render_shale_roc(exports)})
+write_if_changed({path = BT_MAIN_ROC, text = bt_render_main_roc(exports)})
+for f in bt_generated(entries) do
+  if f.path ~= BT_SHALE_ROC and f.path ~= BT_MAIN_ROC then write_if_changed(f) end
 end
