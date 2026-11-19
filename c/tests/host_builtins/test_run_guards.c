@@ -448,12 +448,17 @@ TEST(an_unconfined_copy_s_hosts_are_the_hosts_file_s_and_none_without_one) {
     Str bad_end = S(", line 2, is not a host's: one `user@host` a line");
     Str said = y.r.ctx.stop.message;
     EXPECT(said.len > bad_end.len && str_eq(str_sub(said, said.len - bad_end.len, said.len), bad_end));
-    EXPECT_EQ(setenv("SHALE_HOSTS", none_c, 1), 0);
-    ran_run(&y, S("host(\"run\", {\"ssh\", \"deploy@example.com\", \"true\"}, {timeout_ms = 10000, tail = 3, unconfined = \"t: x\"})\n"), ran_budgets());
-    EXPECT_EQ(y.ran, STOP);
-    EXPECT(str_starts_with(y.r.ctx.stop.message, S("`run`'s `unconfined`: the hosts file ")));
-    EXPECT_EQ(unsetenv("SHALE_HOSTS"), 0);
     ran_free(&y);
+
+    // A SHALE_HOSTS that names no file: y's folder, gone, holds none.
+    static Ran z;
+    guards_ran_with(&z, "", false);
+    EXPECT_EQ(setenv("SHALE_HOSTS", none_c, 1), 0);
+    ran_run(&z, S("host(\"run\", {\"ssh\", \"deploy@example.com\", \"true\"}, {timeout_ms = 10000, tail = 3, unconfined = \"t: x\"})\n"), ran_budgets());
+    EXPECT_EQ(z.ran, STOP);
+    EXPECT(str_starts_with(z.r.ctx.stop.message, S("`run`'s `unconfined`: the hosts file ")));
+    EXPECT_EQ(unsetenv("SHALE_HOSTS"), 0);
+    ran_free(&z);
 }
 
 // The permission bits of the file at `rel`.
