@@ -37,7 +37,7 @@ component of Shale, and its surface is generated from Shale's builtin table.
 `c/builtins.txt` is the one home of Shale's builtins (`c/docs/builtin-table.md`).
 An effect it exports says its Roc signature, which outcomes are values and
 its driver clause, and `c/gen_builtins.shale` writes from it:
-- `platform/Shale.roc` and `platform/main.roc`'s `hosted` block;
+- `platform/Shale.roc`, and the hosted block of `platform/main.roc`;
 - `host/hosted.gen.c`: the driver, each shim (`shale_<name>`), its request
   as a Shale map and its answer as Roc's value.
 
