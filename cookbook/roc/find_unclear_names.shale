@@ -24,8 +24,8 @@
 --                  `cookbook/roc/plants/find_unclear_names/`.
 --
 -- The checks read top-level names, module members and the record fields of
--- types and annotations; `abbreviation` reads module names, parameters and
--- locals too:
+-- types and annotations; `abbreviation` reads module names, parameters,
+-- locals and tags too:
 --
 --   pure_mutator  An annotated pure function whose first word says it changes
 --                 something (`push`, `fill`, `set`, `append`, `add`), though
@@ -52,8 +52,10 @@
 --                 trailing digits go first (`buf0` is `buf`), and a letter
 --                 alone is hunt_names' `short_name`'s. The names read are a
 --                 module's own (its file's), every type, member, field and
---                 top-level value, and every parameter and local. A name is
---                 reported once a file.
+--                 top-level value, every parameter and local, and every tag
+--                 in a union, a pattern or an expression, split at its
+--                 capitals as a type is (`NoRef` holds `ref`), but Roc's own
+--                 `Ok` and `Err`. A name is reported once a file.
 --   module_doc    A module with no `##` doc at the top of its file or above
 --                 its type, or a top comment or a doc above its type that
 --                 tells history (`originally`, `used to`, `emitted`,
@@ -190,14 +192,34 @@ function is_abbreviated(word, lists)
   return is_short_abbreviation(w, lists)
 end
 
--- The names a file gives, each once, with the line it first appears on: its
--- module's name, what it declares, and each parameter and local.
+-- Roc's own tags, which every file may say and none names.
+const ROC_TAGS = {Ok = true, Err = true}
+
+-- The tag a node names, `""` for none: a tag in a union (`[NoRef, Ref(Str)]`,
+-- the bare one and the head of the one with a payload), in a pattern and in
+-- an expression.
+function tag_named(tree, at)
+  local n = tree[at]
+  if n.kind == "p-tag" or n.kind == "e-tag" then return get(n, "raw", "") end
+  if n.kind ~= "ty" or n.parent == 0 then return "" end
+  local holder = tree[n.parent]
+  if holder.kind == "tags" then return get(n, "name", "") end
+  if holder.kind == "ty-apply" and holder.kids[1] == at and tree[holder.parent].kind == "tags" then return get(n, "name", "") end
+  return ""
+end
+
+-- The names a file gives or says, each once, with the line it first appears
+-- on: its module's name, what it declares, each parameter and local, and
+-- each tag but Roc's own (ROC_TAGS), split at its capitals as a type is.
 function names_given(f, declared)
   local out = {}
   if not is_app(f) then push(out, {name = module_name(f.path), line = 1}) end
   for d in declared do push(out, {name = d.name, line = d.line}) end
-  for n in f.nodes do
+  for i = 1, #f.nodes do
+    local n = f.nodes[i]
     if n.kind == "p-ident" then push(out, {name = get(n, "raw", ""), line = n.line}) end
+    local tag = tag_named(f.nodes, i)
+    if tag ~= "" and not has_key(ROC_TAGS, tag) then push(out, {name = tag, line = n.line}) end
   end
   return out
 end
@@ -282,6 +304,8 @@ function self_test()
     {glob = at .. "long_abbreviations/*.roc", counts = {abbreviation = 9}, says = {"Parser.roc:5: abbreviation: `attrs` abbreviates: attrs", "`delim` abbreviates: delim", "`parse_args` abbreviates: args", "`params` abbreviates: params", "`elem_count` abbreviates: elem", "`expr_text` abbreviates: expr", "`stmt_kind` abbreviates: stmt", "`tmpl_name` abbreviates: tmpl"}},
     {glob = at .. "long_abbreviations/*.roc", args = {"accepted=" .. at .. "project_args.txt"}, counts = {abbreviation = 7}, says = {"`attrs` abbreviates: attrs", "`params` abbreviates: params"}},
     {glob = at .. "quiet_long_abbreviations/*.roc"},
+    {glob = at .. "tags.roc", counts = {abbreviation = 4}, says = {"tags.roc:3: abbreviation: `NoRef` abbreviates: ref", "tags.roc:3: abbreviation: `Ref` abbreviates: ref", "tags.roc:5: abbreviation: `TmplMissing` abbreviates: tmpl", "tags.roc:11: abbreviation: `BadAttr` abbreviates: attr"}},
+    {glob = at .. "quiet_tags.roc"},
     {glob = at .. "module_doc/*.roc", counts = {module_doc = 5}, says = {"`NoDoc` has no `##` doc", "`Hashless` has no `##` doc", "`Old`'s top comment says `originally`", "`Sky`'s top comment says `used to`", "Sun.roc:3: module_doc: `Sun`'s doc says `originally`"}},
     {glob = at .. "quiet_module_doc/*.roc"},
     {glob = at .. "module_doc_private/*.roc", counts = {module_doc = 2}, says = {"`Shown` has no `##` doc", "`Silent` has no `##` doc"}},
