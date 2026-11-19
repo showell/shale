@@ -45,6 +45,9 @@ steps left for the writer.
   `shale cookbook:check_page_links.shale url=https://roc.lynrummy.com/`
 - `check_conflict_markers.shale`: checks that files hold no git conflict
   markers. `shale cookbook:check_conflict_markers.shale files=a.zig,docs/b.md`
+- `check_confinement.shale`: whether a program can run from here, confined
+  to the root and the mounts (Landlock); a FAIL is the stop that refused it,
+  naming no folder. `shale cookbook:check_confinement.shale`
 - `check_disk_space.shale`: stops a run when the disk is under a floor of
   free space; `report=1` sizes the folders that grow. `shale cookbook:check_disk_space.shale floor=60`
 - `check_recipe_names.shale`: checks that every recipe here is named by the
