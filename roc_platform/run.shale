@@ -10,6 +10,10 @@
 -- hash of what goes into it, under roc_platform/out/cache: a script run
 -- again unchanged is linked and built no more.
 --
+-- `in=DIR` (an absolute folder) runs the program rooted there instead, with
+-- the build still this checkout's: a cookbook launcher's way to run a Roc
+-- recipe in another repository's root (cookbook/roc/find_unclear_names.shale).
+--
 -- A `name=value` is handed to the script when it reads `name`
 -- (`Shale.arg!("name", ...)`, found in its text, the call's name from
 -- surface.gen.shale): any other stops the launch before anything is built,
@@ -25,6 +29,18 @@
 -- host.c's "where in the Roc a stop is"), from the Roc's DWARF line table,
 -- so a stop made while the Roc waits names the script's line.
 --
+-- **A build is a job of its own** (`job_start`, this launcher again with
+-- `build=script`, which starts `build=host` for the host's object when it is
+-- missing), logged at roc_platform/out/jobs/<key>.log. `job_start` refuses a
+-- log whose job still runs, so one run builds a key while any other run
+-- that wants it waits for that job, saying so once on a `──` line: runs at
+-- once never share a half-built cache. A job outlives a run that is stopped
+-- (by a caller's CPU budget or timeout), so the next run finds its build,
+-- and no caller's `cpu_budget_ms` pays the host's 25 s of gcc. A script's
+-- build is there when its `app.sites` is, written last (by `replace`, a
+-- rename), so a run never starts a program half linked; the host's object is
+-- compiled beside its place and renamed in (`mv -T`).
+--
 -- The script is one file whose header names the platform by any path
 -- (`pf: platform "../platform/main.roc"`): it is copied into the cache with
 -- that path made this checkout's, relative (Roc refuses an absolute one).
@@ -35,11 +51,15 @@ use("./surface.gen.shale")
 const DIR = "roc_platform"
 const OUT = DIR .. "/out"
 const SCRIPT = arg("script", "")
+const IN = arg("in", "")
+const BUILD = arg("build", "")
+if BUILD ~= "" and BUILD ~= "host" and BUILD ~= "script" then fail("run: build=host or build=script (a build job's own), not " .. BUILD) end
 const TIMING = arg("timing", 0) == 1
 const OPT = arg("opt", "dev")
 if OPT ~= "dev" and OPT ~= "speed" then fail("run: opt=dev (the default) or opt=speed, not " .. OPT) end
 if SCRIPT == "" then fail("run: script=<file.roc>") end
 if not exists(SCRIPT) then fail("run: no script " .. SCRIPT) end
+if IN ~= "" and not starts_with(IN, "/") then fail("run: in= is an absolute folder, not " .. IN) end
 
 const pin = trim(read(DIR .. "/roc-version"))
 const roc = real("tools:roc-" .. pin .. "/roc")
@@ -56,24 +76,12 @@ function hash_of(phase, text)
   return trim(r.out)
 end
 
--- ── The host's object: the whole of C Shale, compiled once ──────────────
-
-local host_key = hash_of("host key", read(DIR .. "/host/host.c") .. read(DIR .. "/host/hosted.gen.c") .. read(DIR .. "/host/roc_platform_abi.h") .. must(run({"git", "rev-parse", "HEAD:c"}, {timeout_ms = 10000, whole = 100})).out)
-const host_o = OUT .. "/host/" .. host_key .. ".o"
-if not exists(host_o) then
-  mkdir(OUT .. "/host")
-  must(said("preludes", run({"tcc", "-run", "c/gen_preludes.c"}, {timeout_ms = 60000, tail = 5})))
-  must(said("host compile", run({"gcc", "-std=gnu11", "-O2", "-Wall", "-Wextra", "-Ic/foundation", "-Ic/out/gen", "-Ic", "-I" .. DIR .. "/host", "-c", DIR .. "/host/host.c", "-o", host_o}, {timeout_ms = 300000, tail = 40, nice = 19})))
-end
-
--- ── The script's archive and program ────────────────────────────────────
-
-local source = read(SCRIPT)
+const source = read(SCRIPT)
 
 -- ── The values: each one given, one the script reads ────────────────────
 
 -- The launcher's own values, never the script's.
-const OWN = {"script", "timing", "opt"}
+const OWN = {"script", "timing", "opt", "in", "build"}
 local names = {}
 local reads = {}
 for g in re_find_all(source, substitute(ROC_ARG_CALL, ".", "\\.") .. [=[\("([a-z_0-9]+)"]=]) do
@@ -88,26 +96,22 @@ for given in arg_names() do
   end
 end
 
+-- ── The keys: the host's object and the script's program ────────────────
+
+const host_key = hash_of("host key", read(DIR .. "/host/host.c") .. read(DIR .. "/host/hosted.gen.c") .. read(DIR .. "/host/roc_platform_abi.h") .. must(run({"git", "rev-parse", "HEAD:c"}, {timeout_ms = 10000, whole = 100})).out)
+const host_o = OUT .. "/host/" .. host_key .. ".o"
+
 local m = re_find(source, [=[platform "([^"]*)"]=])
 if m == nil then fail("run: " .. SCRIPT .. " names no platform (`pf: platform \"...\"`)") end
 -- Roc takes no absolute platform path: the cache's folder is three below
 -- roc_platform/.
-local made = substitute(source, m.text, "platform \"../../../platform/main.roc\"")
+const made = substitute(source, m.text, "platform \"../../../platform/main.roc\"")
 local platform = ""
 for p in glob(DIR .. "/platform/*.roc") do platform = platform .. read(p) end
 const key = hash_of("script key", made .. platform .. pin .. host_key .. OPT)
 const cache = OUT .. "/cache/" .. key
 const exe = cache .. "/app"
-if not exists(exe) then
-  mkdir(cache)
-  replace(cache .. "/main.roc", made)
-  must(said("roc build", run({roc, "build", real(cache .. "/main.roc"), "--target=x64musl", "--opt=" .. OPT, "--output=" .. real(cache) .. "/app.a"}, {timeout_ms = 300000, tail = 30, nice = 19})))
-  -- A speed archive is not PIE (README, "What the spike measured").
-  local link = {"gcc", "-z", "noexecstack"}
-  if OPT == "speed" then push(link, "-no-pie") end
-  for a in {host_o, cache .. "/app.a", "-o", exe} do push(link, a) end
-  must(said("link", run(link, {timeout_ms = 120000, tail = 20, nice = 19})))
-end
+const sites = cache .. "/app.sites"
 
 -- ── The script's lines, for a stop's place ──────────────────────────────
 
@@ -146,26 +150,115 @@ function sites_of(exe_path, dir, text)
   return join(out, "\n") .. "\n"
 end
 
-const sites = cache .. "/app.sites"
-if not exists(sites) then replace(sites, sites_of(real(exe), cache, source)) end
+-- ── The build, under the lock ───────────────────────────────────────────
+-- The host's object, the whole of C Shale, compiled once a key: beside its
+-- place, then renamed in.
+function build_host()
+  if exists(host_o) then return nil end
+  mkdir(OUT .. "/host")
+  must(said("preludes", run({"tcc", "-run", "c/gen_preludes.c"}, {timeout_ms = 60000, tail = 5})))
+  local part = host_o .. ".part"
+  must(said("host compile", run({"gcc", "-std=gnu11", "-O2", "-Wall", "-Wextra", "-Ic/foundation", "-Ic/out/gen", "-Ic", "-I" .. DIR .. "/host", "-c", DIR .. "/host/host.c", "-o", part}, {timeout_ms = 300000, tail = 40, nice = 19})))
+  must(run({"mv", "-T", part, host_o}, {timeout_ms = 10000, tail = 5}))
+  return nil
+end
+
+-- The script's archive, its program and, last, its sites table.
+function build_script()
+  mkdir(cache)
+  replace(cache .. "/main.roc", made)
+  must(said("roc build", run({roc, "build", real(cache .. "/main.roc"), "--target=x64musl", "--opt=" .. OPT, "--output=" .. real(cache) .. "/app.a"}, {timeout_ms = 300000, tail = 30, nice = 19})))
+  -- A speed archive is not PIE (README, "What the spike measured").
+  local link = {"gcc", "-z", "noexecstack"}
+  if OPT == "speed" then push(link, "-no-pie") end
+  for a in {host_o, cache .. "/app.a", "-o", exe} do push(link, a) end
+  must(said("link", run(link, {timeout_ms = 120000, tail = 20, nice = 19})))
+  replace(sites, sites_of(real(exe), cache, source))
+  return nil
+end
+
+function start_build(argv, log)
+  return job_start(argv, {log = log, keep_on_stop = true})
+end
+
+-- `done` made by a build job of its own (this launcher with `build=what`),
+-- logged at OUT/jobs/<name>.log: started here, or, when another run's job
+-- for it still runs (`job_start` refuses its log), waited for. A job this
+-- run started that ends without `done` stops the run with its log's end.
+function built_in_job(name, what, done)
+  mkdir(OUT .. "/jobs")
+  local log = OUT .. "/jobs/" .. name .. ".log"
+  for k = 1, 2 do
+    if exists(done) then return nil end
+    local started = attempt(start_build, {"shale", DIR .. "/run.shale", "script=" .. SCRIPT, "opt=" .. OPT, "build=" .. what}, log)
+    local job = log .. ".job"
+    if started.ok then
+      job = started.value
+    else
+      print("── roc: waiting for another run's build (" .. log .. ")")
+      -- The other run's `job_start` makes the log before the record.
+      local tries = 0
+      while not exists(log .. ".job") do
+        tries = tries + 1
+        if tries > 100 then fail("run: " .. log .. " was refused a job, and has no record (" .. log .. ".job) after 10 s") end
+        sleep(100)
+      end
+    end
+    local w = job_wait(job, {timeout_ms = 900000})
+    if exists(done) then
+      if TIMING then
+        for l in lines(read(log)) do
+          if starts_with(l, "-- ") then print(l) end
+        end
+      end
+      return nil
+    end
+    if started.ok then fail("run: the build job (" .. log .. ") ended " .. w.ended .. " without " .. done .. "; its log's end:\n" .. join(last(lines(trim(read(log))), 20), "\n")) end
+  end
+  fail("run: another run's build job (" .. log .. ") ended without " .. done)
+end
+
+if BUILD == "host" then
+  build_host()
+  for p in phases do print("-- " .. p) end
+elseif BUILD == "script" then
+  built_in_job("host-" .. host_key, "host", host_o)
+  build_script()
+  for p in phases do print("-- " .. p) end
+elseif not exists(sites) then
+  built_in_job(key, "script", sites)
+end
 
 -- ── The run ─────────────────────────────────────────────────────────────
-
-local argv = {real(exe), "--roc-sites", real(sites)}
-local budget = re_find(source, "## budget: ([^\n]*)")
-if budget ~= nil then
-  for w in words(budget.group) do
-    push(argv, "--budget")
-    push(argv, w)
+-- The program, given the values of `reads` it was given: its exit code.
+function run_program(reads)
+  local argv = {real(exe), "--roc-sites", real(sites)}
+  if IN ~= "" then
+    push(argv, "--root")
+    push(argv, IN)
   end
+  local budget = re_find(source, "## budget: ([^\n]*)")
+  if budget ~= nil then
+    for w in words(budget.group) do
+      push(argv, "--budget")
+      push(argv, w)
+    end
+  end
+  for name in reads do
+    local v = arg(name, nil)
+    if v ~= nil then push(argv, name .. "=" .. v) end
+  end
+  local r = said("run", run(argv, {timeout_ms = 600000, whole = 4000000, want = "roc: the launcher's own build of a Roc script"}))
+  if TIMING then
+    for p in phases do print("-- " .. p) end
+  end
+  print(trim_end(r.out))
+  return r.code
 end
-for name in reads do
-  local v = arg(name, nil)
-  if v ~= nil then push(argv, name .. "=" .. v) end
+
+-- The stop is the script's own, at its top level, so it has no `called
+-- from` line under it.
+if BUILD == "" then
+  local code = run_program(reads)
+  if code ~= 0 then fail("run: " .. SCRIPT .. " stopped (exit " .. code .. ")") end
 end
-local r = said("run", run(argv, {timeout_ms = 600000, whole = 4000000, want = "roc: the launcher's own build of a Roc script"}))
-if TIMING then
-  for p in phases do print("-- " .. p) end
-end
-print(trim_end(r.out))
-if r.code ~= 0 then fail("run: " .. SCRIPT .. " stopped (exit " .. r.code .. ")") end

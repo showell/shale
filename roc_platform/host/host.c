@@ -721,10 +721,10 @@ static bool roc_budget_taken(const char *spec) {
     return true;
 }
 
-// `<program> [--roc-sites FILE] [--budget NAME=N]... [NAME=VALUE]...`:
-// `shale -e HOSTED_DRIVER` with the rest of the command line, in the folder
-// it runs in. The sites table is the launcher's (roc_run_ended), and the
-// `roc_cpu_ms` budget the host's.
+// `<program> [--roc-sites FILE] [--root DIR] [--budget NAME=N]... [NAME=VALUE]...`:
+// `shale -e HOSTED_DRIVER` with the rest of the command line, rooted at DIR
+// (Shale's `--root`), else in the folder it runs in. The sites table is the
+// launcher's (roc_run_ended), and the `roc_cpu_ms` budget the host's.
 int main(int argc, char **argv) {
     char **all = calloc((size_t)argc + 3, sizeof *all);
     if (all == NULL) return 2;
@@ -734,6 +734,9 @@ int main(int argc, char **argv) {
     for (int k = 1; k < argc; k++) {
         if (strcmp(argv[k], "--roc-sites") == 0 && k + 1 < argc) {
             roc_sites_load(argv[++k]);
+        } else if (strcmp(argv[k], "--root") == 0 && k + 1 < argc) {
+            all[n++] = argv[k];
+            all[n++] = argv[++k];
         } else if (strcmp(argv[k], "--budget") == 0 && k + 1 < argc) {
             k++;
             if (roc_budget_taken(argv[k])) continue;
@@ -744,7 +747,7 @@ int main(int argc, char **argv) {
     all[n++] = "-e";
     all[n++] = (char *)HOSTED_DRIVER;
     for (int k = 1; k < argc; k++) {
-        if ((strcmp(argv[k], "--budget") == 0 || strcmp(argv[k], "--roc-sites") == 0) && k + 1 < argc) {
+        if ((strcmp(argv[k], "--budget") == 0 || strcmp(argv[k], "--roc-sites") == 0 || strcmp(argv[k], "--root") == 0) && k + 1 < argc) {
             k++;
             continue;
         }
