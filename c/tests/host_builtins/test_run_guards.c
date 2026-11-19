@@ -388,7 +388,8 @@ TEST(a_program_writes_and_reads_only_where_the_mounts_allow) {
 
 // What the confinement allows still works: git makes a repository in a mount
 // and commits to it (its objects moved between folders, Landlock's REFER),
-// and a build writes its out folder.
+// a build writes its out folder, and `mktemp` makes a file in the run's own
+// temporary folder, its TMPDIR.
 TEST(git_commits_in_a_mount_and_a_build_writes_its_out_folder_confined) {
     static Ran x;
     guards_ran_with(&x, "work = D/work\n", false);
@@ -400,10 +401,11 @@ TEST(git_commits_in_a_mount_and_a_build_writes_its_out_folder_confined) {
                   "print(c({\"git\", \"rev-list\", \"--count\", \"HEAD\"}).out)\n"
                   "mkdir(\"work:r/out\")\n"
                   "print(c({\"tcc\", \"-c\", \"a.c\", \"-o\", \"out/a.o\"}).code)\n"
-                  "print(exists(\"work:r/out/a.o\"))\n"),
+                  "print(exists(\"work:r/out/a.o\"))\n"
+                  "print(c({\"mktemp\"}).code)\n"),
            ran_budgets());
     EXPECT_OK_IN(&x.r.ctx, x.ran);
-    EXPECT_STR(buf_view(&x.r.out), S("0\n0\n0\n1\n\n0\ntrue\n"));
+    EXPECT_STR(buf_view(&x.r.out), S("0\n0\n0\n1\n\n0\ntrue\n0\n"));
     ran_free(&x);
 }
 

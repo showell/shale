@@ -242,8 +242,11 @@ has none of it):
   `/dev/null`, `/dev/zero`, `/dev/full` and `/dev/urandom`, and a few named
   files (`~/.gitconfig`, `~/.config/git/config`, the mounts file and the
   user prelude); a secrets mount's folder is in no rule. Everything it
-  starts is held the same, for good. `/tmp` and the home's caches
-  (`~/.cache`) are outside it. A `want` never widens it. A program it
+  starts is held the same, for good. Each program gets the run's own
+  temporary folder as TMPDIR (below the inherited TMPDIR, else `/tmp`),
+  which it may write and which goes when the run ends (unless the run
+  started a job); `/tmp` itself and the home's caches (`~/.cache`) are
+  outside it. A `want` never widens it. A program it
   refuses gets EACCES from the call it made, so a script sees the
   program's own words, `Permission denied`, and its exit code: a refusal
   is a gap to name in host_confine.c on purpose. A kernel without Landlock

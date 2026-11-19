@@ -280,25 +280,29 @@ static STATUS_MUST_USE Status host_env_pair(Run *r, Pos pos, Str k, Str v, OsStr
 }
 
 // The environment a program gets, `run`'s or a job's: the inherited one,
-// less what `env` and `secrets` set, then `env`'s, then the secrets' (read
-// from their files). `shown` gets ` K=V` and ` K=<secret path>` for the
-// record.
+// less what `env` and `secrets` set and its TMPDIR, then `env`'s, then the
+// secrets' (read from their files), then TMPDIR, the run's own temporary
+// folder (host_confine.c), unless `env` sets it. `shown` gets ` K=V` and
+// ` K=<secret path>` for the record.
 static STATUS_MUST_USE Status host_run_env(Host *h, Run *r, Pos pos, const HostEnvOpt *envs, const HostEnvOpt *secret_paths, Buf *shown, SpawnStrs *env_out, HostSecrets *secrets_out) {
     Arena *a = r->ctx.values;
+    TRY(host_confine_tmp(h, r, pos, S("run")));
     size_t extra = envs->names.len;
     size_t nsecrets = secret_paths->names.len;
-    OsStr *env = ARENA_ARRAY(a, OsStr, h->env.len + extra + nsecrets);
-    if (env == NULL && h->env.len + extra + nsecrets > 0) return run_values_oom(r, pos);
+    OsStr *env = ARENA_ARRAY(a, OsStr, h->env.len + extra + nsecrets + 1);
+    if (env == NULL) return run_values_oom(r, pos);
     HostSecret *secrets = ARENA_ARRAY(a, HostSecret, nsecrets);
     if (secrets == NULL && nsecrets > 0) return run_values_oom(r, pos);
     SLICE_TYPE(EnvRoom, OsStr);
     SLICE_TYPE(SecretRoom, HostSecret);
-    EnvRoom room = {env, h->env.len + extra + nsecrets};
+    EnvRoom room = {env, h->env.len + extra + nsecrets + 1};
+    bool tmp_given = false;
+    for (size_t j = 0; j < extra; j++) tmp_given = tmp_given || str_eq(at(envs->names, j), S("TMPDIR"));
     SecretRoom sroom = {secrets, nsecrets};
     size_t n = 0;
     for (size_t i = 0; i < h->env.len; i++) {
         OsStr e = at(h->env, i);
-        if (!host_env_overridden(e.s, envs, secret_paths)) at(room, n++) = e;
+        if (!host_env_overridden(e.s, envs, secret_paths) && !str_starts_with(e.s, S("TMPDIR="))) at(room, n++) = e;
     }
     for (size_t j = 0; j < extra; j++) {
         Str k = at(envs->names, j);
@@ -317,6 +321,10 @@ static STATUS_MUST_USE Status host_run_env(Host *h, Run *r, Pos pos, const HostE
         at(sroom, j).name = k;
         at(sroom, j).value = v;
         if (buf_byte(shown, ' ') != OK || buf_str(shown, k) != OK || buf_lit(shown, "=<secret ") != OK || buf_str(shown, given) != OK || buf_byte(shown, '>') != OK) return run_values_oom(r, pos);
+    }
+    if (!tmp_given) {
+        TRY(host_env_pair(r, pos, S("TMPDIR"), h->tmp, &at(room, n)));
+        n++;
     }
     env_out->ptr = env;
     env_out->len = n;

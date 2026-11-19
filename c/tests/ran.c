@@ -263,6 +263,10 @@ static void ran_free(Ran *x) {
     host_zig_stop(&x->zig);
     regex_cache_deinit(&x->r.patterns);
     ran_wait_reapers(x);
+    // Every job's reaper has ended, so no job uses the run's temporary
+    // folder any more.
+    x->lh.started.len = 0;
+    host_confine_tmp_remove(&x->lh, &x->host);
     FileSystemErr del = file_system_delete_tree(&x->host, os_str_own(x->dir));
     if (del != FILE_SYSTEM_OK) {
         Str why = file_system_err_name(del);

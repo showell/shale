@@ -13,8 +13,12 @@
 //   reaper, this program;
 // - **devices**: /dev/null, /dev/zero and /dev/full read and written,
 //   /dev/random and /dev/urandom read.
-// Nothing else: a secrets mount's folder is in no rule, `/tmp` is in none,
-// and a `want` widens none of it. A program refused by it gets EACCES
+// - **the run's own temporary folder**, made below TMPDIR (else /tmp) at
+//   its first program and handed to every program as TMPDIR, written; it
+//   is removed when the run ends, unless the run started a job, which may
+//   still use it.
+// Nothing else: a secrets mount's folder is in no rule, `/tmp` itself is
+// in none, and a `want` widens none of it. A program refused by it gets EACCES
 // ("Permission denied") from the call it made, which it says in its own
 // output; such a refusal is a gap to add here on purpose, never a reason to
 // widen a rule.
@@ -149,10 +153,34 @@ static STATUS_MUST_USE Status host_confine_home(Host *h, Run *r, Pos pos, Str wh
     return OK;
 }
 
+// The run's own temporary folder, made once, at the first call: below the
+// inherited TMPDIR when it is an absolute path, else below /tmp.
+static STATUS_MUST_USE Status host_confine_tmp(Host *h, Run *r, Pos pos, Str who) {
+    if (h->tmp.len > 0) return OK;
+    Str base = S("/tmp");
+    Str given = S("");
+    if (host_confine_env(h->env, S("TMPDIR"), &given) && given.len > 0 && str_byte(given, 0) == '/') base = given;
+    Buf b = buf_make(r->ctx.values);
+    if (buf_str(&b, base) != OK || buf_lit(&b, "/shale-run.XXXXXX") != OK || buf_byte(&b, 0) != OK) return run_values_oom(r, pos);
+    char *made = (char *)buf_view(&b).ptr;
+    if (mkdtemp(made) == NULL) return host_fail(r, pos, CLASS_HOST, S("`{s}`: the run's temporary folder could not be made below {s}: {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_HOST(base), MESSAGE_FROM_HOST(file_system_err_name(file_system_err_of(errno)))));
+    if (!arena_dup(h->paths.arena, (Str){made, strlen(made)}, &h->tmp)) return run_values_oom(r, pos);
+    return OK;
+}
+
+// Removes the run's temporary folder, if it made one and started no job,
+// which may still be using it; the folder's path is forgotten either way.
+static void host_confine_tmp_remove(Host *h, Arena *a) {
+    if (h->tmp.len > 0 && h->started.len == 0) (void)file_system_delete_tree(a, os_str_own(h->tmp)); // ignored: a folder below the temporary root, cleaned by the system's own sweep if left
+    h->tmp = S("");
+}
+
 // The rules into the ruleset `fd`, made for ABI `abi`.
 static STATUS_MUST_USE Status host_confine_rules(Host *h, Run *r, Pos pos, Str who, int fd, int abi) {
     uint64_t handled = landlock_handled(abi);
     TRY(host_confine_mounts(h, r, pos, who, fd, handled));
+    TRY(host_confine_tmp(h, r, pos, who));
+    TRY(host_confine_allow(r, pos, who, fd, h->tmp, handled, handled, S("the run's temporary folder")));
     HostConfineNames system = {HOST_CONFINE_SYSTEM, sizeof HOST_CONFINE_SYSTEM / sizeof *HOST_CONFINE_SYSTEM};
     TRY(host_confine_allow_all(r, pos, who, fd, system, LANDLOCK_READ_RIGHTS, handled));
     HostConfineNames devices = {HOST_CONFINE_DEVICES, sizeof HOST_CONFINE_DEVICES / sizeof *HOST_CONFINE_DEVICES};

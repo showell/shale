@@ -784,6 +784,8 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     // The run's zig-ast, if a Zig call started one, ends with the run, before
     // any report line, so no early return below can skip it.
     host_zig_stop(&zig);
+    // The run's temporary folder goes with it, unless a job may use it.
+    host_confine_tmp_remove(&lh, &host_arena);
     // A stdout that refuses the output does not end the run's work: the
     // report, the jobs' end and the undo still come, then the failure.
     Str out_failed = write_stdout(buf_view(&r.out));
