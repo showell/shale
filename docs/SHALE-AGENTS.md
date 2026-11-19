@@ -527,7 +527,7 @@ function commit(repo, msg, opts?)
 end
 ```
 
-**A repo's own prelude** is `.shale/prelude.shale` at the root. **A
+**A repo's own prelude** is `<repo>/.shale/prelude.shale` at the root. **A
 user's** is `~/.config/shale/prelude.shale` (`SHALE_PRELUDE=<file>` names
 another, `SHALE_PRELUDE=` none). Each holds only functions, and none may
 take an earlier prelude's name. A stop in one names it:

@@ -1396,7 +1396,7 @@ three:
     take their names too);
   - the git prelude (`c/preludes/git.shale`): `git_status`,
     `git_log`, `git_commit`, ...;
-  - the repo's `.shale/prelude.shale` at the root, as metal-vmm's queue
+  - the repo's `<repo>/.shale/prelude.shale` at the root, as metal-vmm's queue
     tool was;
   - the user's: `SHALE_PRELUDE`'s file (`""` for none), else
     `~/.config/shale/prelude.shale`.
