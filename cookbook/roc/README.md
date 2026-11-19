@@ -102,8 +102,19 @@ that doesn't parse is listed at the end, and the run then fails.
   it adds trailing commas and runs `roc fmt`, which lays each such group out
   one item a line.
 
-Five more checks can gate a build, because they exit nonzero on any
+Six more checks can gate a build, because they exit nonzero on any
 finding. A project's own words stay with the project and are passed in.
+
+- [check_module_size.shale](check_module_size.shale) holds each module to 500
+  lines (`limit=`), the whole file counted, its expects, blank lines and
+  comments included, so a module stays small enough to take whole. Test
+  roots have no limit and are left out (`tests=`, `*Spec.roc,test/` by
+  default). `exempt=` names a project's file of `path -- reason` lines for
+  the rare module that properly shows the workhorse pattern; a line with no
+  reason or a path that isn't there stops the run, and an exemption a module
+  within the limit holds is a finding. `all=1` prints every module's count.
+
+      cd <repo> && shale <shale>/cookbook/roc/check_module_size.shale exempt=tools/module_size.txt
 
 - [check_vocabulary.shale](check_vocabulary.shale) holds a project to its decided
   words. `words=` names the project's file of `kept: retired, retired`
