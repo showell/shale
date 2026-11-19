@@ -1,0 +1,16 @@
+module [classify, quoted]
+
+## Names a byte: `c` is the byte, and 'c' is only a letter.
+classify : U8 -> Str
+classify = |byte| {
+    if byte == 'c' {
+        "the letter c"
+    } else if byte == '\'' or byte == '"' {
+        quoted(byte)
+    } else {
+        byte.to_str()
+    }
+}
+
+quoted : U8 -> Str
+quoted = |byte| if byte == '\'' "single ${byte.to_str()}" else "double ${byte.to_str()}"

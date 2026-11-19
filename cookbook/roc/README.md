@@ -183,7 +183,8 @@ end, and fails the run.
   inside the module's own file), `fields=1` takes record fields too, `book=` a
   markdown file's `{{code Mod.from}}` includes, `skip=` globs to leave out
   and `dry=1` only counts. Mentions in comments and strings are left and
-  counted, and a run that renames nothing fails. `to_module=` moves the
+  counted, a character literal (`'c'`, read from roc-ast's tree) is never a
+  name, and a run that renames nothing fails. `to_module=` moves the
   name instead, after a split: with `module=Geom to_module=RiderView`, each
   `Geom.from` becomes `RiderView.from` (or `RiderView.to` given `to=`, and
   bare inside RiderView's own file); a changed file gains `import RiderView` beside
