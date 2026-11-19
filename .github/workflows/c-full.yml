@@ -36,6 +36,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
+      # No checkout keeps its credentials: a kept one is a git config
+      # include under the runner's temp folder, which a program confined to
+      # the mounts (c/host/host_confine.c) cannot read, and git stops on a
+      # config it cannot read. The tier pushes nothing.
+      #
       # The folder that holds the checkouts is the `repos` mount, and the
       # docs check resolves shale's citations in every sibling of
       # tools/doc_check.shale's REPOS, as the box has them all: a citation
@@ -43,6 +48,7 @@ jobs:
       # gone without it.
       - uses: actions/checkout@v7
         with:
+          persist-credentials: false
           ref: ${{ inputs.ref }}
           path: shale
           # The git prelude's goldens and the plants' proofs read history.
@@ -50,30 +56,35 @@ jobs:
 
       - uses: actions/checkout@v7
         with:
+          persist-credentials: false
           repository: showell/angry-gopher
           ref: master
           path: angry-gopher
 
       - uses: actions/checkout@v7
         with:
+          persist-credentials: false
           repository: showell/roc-apps
           ref: master
           path: roc-apps
 
       - uses: actions/checkout@v7
         with:
+          persist-credentials: false
           repository: showell/roc-chat
           ref: main
           path: roc-chat
 
       - uses: actions/checkout@v7
         with:
+          persist-credentials: false
           repository: showell/roc-markdown
           ref: main
           path: roc-markdown
 
       - uses: actions/checkout@v7
         with:
+          persist-credentials: false
           repository: showell/chat-client
           ref: main
           path: chat-client
@@ -83,6 +94,7 @@ jobs:
       # zig-version pins.
       - uses: actions/checkout@v7
         with:
+          persist-credentials: false
           repository: showell/zig-ast
           ref: 7ca0aab74d357e2fdde98f4ce1b22cc23f1d3387
           path: zig-ast
