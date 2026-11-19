@@ -253,8 +253,8 @@ has none of it):
   `build`), and each of the three unless the script's `env` sets it. ssh
   reads `~/.ssh/known_hosts` and `~/.ssh/config`, and no key file: a push
   over ssh authenticates through the agent (`SSH_AUTH_SOCK` is passed on),
-  or, past the rules, `git_push(repo, {unconfined = "tag: why"})` (`run`'s
-  `unconfined`, for a `git push` alone, without a `-c`, `--receive-pack`,
+  or, past the rules, `run({"git", "-C", real(repo), "push", ...},
+  {unconfined = "tag: why", ...})` (`run`'s `unconfined`, for a `git push` alone, without a `-c`, `--receive-pack`,
   `--exec` or `env` of the script's, its hooks off, recorded as
   `(unconfined: ...)`). gh's configuration is closed too: hand it
   `GH_TOKEN` through `secrets` and an empty `GH_CONFIG_DIR`, as
