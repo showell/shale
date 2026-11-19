@@ -760,7 +760,7 @@ path_normal(p: Str) -> Str | Nil
 run(argv: List(Str), opts: Opts) -> RunResult
   impl: prelude linux
   kind: effect
-  stops: argument (a refused program, an option it does not take, no keep or timeout), budget programs, budget cpu
+  stops: refused (a program `run` refuses, without a `want`), argument (an option it does not take, no keep or timeout), budget programs, budget cpu
   opts: timeout_ms: Int, head: Int, tail: Int, whole: Int, cwd: Path, stdin: Str, env: Map(Str), secrets: Map(Path), stdout_secret: Bool, secret_replace: Map(Str), log: Path, want: Str, cpu_budget_ms: Int, stage: Str, nice: Int, re: Str, not_re: Str, nocase: Bool, before: Int, after: Int, width: Int
   doc: a program run to its end or its timeout: `{argv, code, ended, ms, cpu_ms, out, ...}`
   anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
@@ -799,7 +799,7 @@ real(path: Path) -> Str
 job_start(argv: List(Str), opts: Opts) -> Job
   impl: prelude linux
   kind: effect
-  stops: argument (a refused program, a log in use)
+  stops: refused (a program `run` refuses, without a `want`), argument (a log in use)
   opts: log: Path, cwd: Path, env: Map(Str), want: Str, keep_on_stop: Bool
   doc: a program started under a detached reaper, outliving the call
   anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
