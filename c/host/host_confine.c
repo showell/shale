@@ -161,13 +161,16 @@ static STATUS_MUST_USE Status host_confine_home(Host *h, Run *r, Pos pos, Str wh
     return OK;
 }
 
-// The run's own temporary folder, made once, at the first call: below the
-// inherited TMPDIR when it is an absolute path, else below /tmp.
+// The run's own temporary folder, made once, at the first call: below this
+// process's TMPDIR when it is an absolute path, else below /tmp. A `shale`
+// run by a confined program has its parent's temporary folder as TMPDIR, the
+// one place below /tmp its confinement lets it write.
 static STATUS_MUST_USE Status host_confine_tmp(Host *h, Run *r, Pos pos, Str who) {
     if (h->tmp.len > 0) return OK;
     Str base = S("/tmp");
-    Str given = S("");
-    if (host_confine_env(h->env, S("TMPDIR"), &given) && given.len > 0 && str_byte(given, 0) == '/') base = given;
+    const char *given = getenv("TMPDIR"); // cstr: the environment's
+    Str given_s = given != NULL ? (Str){given, strlen(given)} : S("");
+    if (given_s.len > 0 && str_byte(given_s, 0) == '/') base = given_s;
     Buf b = buf_make(r->ctx.values);
     if (buf_str(&b, base) != OK || buf_lit(&b, "/shale-run.XXXXXX") != OK || buf_byte(&b, 0) != OK) return run_values_oom(r, pos);
     char *made = (char *)buf_view(&b).ptr;
