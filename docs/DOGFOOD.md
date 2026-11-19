@@ -20,15 +20,15 @@ vehicle; these fixes are the yield.
 | 2026-11-18 | hunt_names `singular_list` flags a changed copy whose object is the list's element (`set_run(runs, ...) -> runs`) and suggests a misleading name | open |
 | 2026-11-18 | check_name_types `no_value` doesn't see through an alias of a function type | open |
 | 2026-11-18 | hunt_names `world_verb` can't be answered in the code (no `##` doc or `single`-style answer), so each gate builds its own exception table | open |
-| 2026-11-18 | wrap_long_lines `tokens=6` can leave lines past 100 columns that check_stacking then flags, and odd layouts | open |
-| 2026-11-18 | wrap_long_lines takes one `dir=`, and prints every wide-string line it leaves as noise | open |
+| 2026-11-18 | wrap_long_lines `tokens=6` can leave lines past 100 columns that check_stacking then flags, and odd layouts | its wide-line fallback was a second scanner that stacked a function type's arguments, which broke `roc fmt` on safari; it now uses groups.shale's reading, and lists each wide line it can't stack (recipe-leftovers) |
+| 2026-11-18 | wrap_long_lines takes one `dir=`, and prints every wide-string line it leaves as noise | `dir=a,b`, `write=0` for a report, and wide strings and data lines counted, not listed (recipe-leftovers) |
 | 2026-11-18 | most Roc recipes take one glob and can't be limited to git-tracked files, so a gate must hold file counts itself | open |
 | 2026-11-18 | the `── time:` line's `…` cut splits a UTF-8 character, leaving invalid bytes in the output | the C's `host_keep_ends` cuts on a character (seen by frictions-2) |
 | 2026-11-18 | rewrite_method_calls stops the whole run on one file no root reaches, instead of listing it and going on | open |
 | 2026-11-18 | rewrite_method_calls holds every root's types at once: 8 roots ran out of the 2 GB arena, and the stop doesn't say which root | open |
 | 2026-11-18 | `run`'s `re` filter charges the caller's step budget, undocumented; filtering a big child output stopped the caller | open |
-| 2026-11-18 | rewrite_method_calls leaves imports it made unused and lines past 100 columns that the gates then catch | open |
-| 2026-11-18 | wrap_long_lines stacks a list pattern in a `match` arm because a string widened the line | open |
+| 2026-11-18 | rewrite_method_calls leaves imports it made unused and lines past 100 columns that the gates then catch | it reports `made_unused_import` and `made_long_line` in the same run, by roc-ast's trees before and after (recipe-leftovers) |
+| 2026-11-18 | wrap_long_lines stacks a list pattern in a `match` arm because a string widened the line | a group stacks for width only when stacking it brings the line within the width (recipe-leftovers) |
 | 2026-11-18 | check_boundaries `constant` can't be answered in code, unlike `single` | open |
 | 2026-11-18 | roc-apps' quality.shale caches per checkout path, so every lane starts cold (about 205 s), and it can't be limited to some apps | open |
 | 2026-11-18 | quality.shale doesn't pass each project's own tables and exemptions, so its counts differ from Safari's own lints | open |
@@ -43,6 +43,7 @@ vehicle; these fixes are the yield.
 | 2026-11-18 | after a heredoc's closing tag, a second command is refused with "the heredoc has no last line", which doesn't say what went wrong | open |
 | 2026-11-18 | no `range()`, so a counted loop is a hand-written `while` | open |
 | 2026-11-18 | a script can't read the arena's bytes in use: `budget().arena_bytes` counts whole chunks | open |
+| 2026-11-19 | a script's own `line_at` silently shadows the builtin, but a library calling it gets the builtin and a puzzling type stop | open |
 | 2026-11-18 | bench/baseline.shale has no workload filter, and a not-clean run writes TSVs into the tracked tree | open |
 | 2026-11-18 | `c/build.shale binary=release to=` takes an OS path, so a Shale path (`to=scratch:x/y`) made a folder named `scratch:x` inside the checkout, which Shale's own paths then refuse to name or remove | `to=` takes a Shale path (099cf32); one naming the build's own binary passes (frictions-2) |
 | 2026-11-18 | a docs golden is named by its line, so a paragraph added to SHALE-AGENTS.md moves every case below it, each to be named in `refreeze=` (7 for one paragraph) | open |

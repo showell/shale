@@ -2,16 +2,26 @@
 -- wraps a line, but it puts the items of a record, list, call or lambda's
 -- arguments one to a line when the last item has a trailing comma. For each
 -- code line wider than `width`, this script adds that comma to the widest
--- group of two or more items that opens and closes on the line, runs roc
--- fmt, and repeats until no line changes; a folder still changing after 8
--- passes stops the run, naming its files. The passes work on a copy of the
--- folder's .roc files under `scratch:roc_commas_work/`, and the changed
--- files are written back only once the rewrite has finished, so a run that
--- stops, on a pass too many or on a budget, leaves the folder as it was.
--- Then it lists the lines still too wide: comment lines, and code lines with
--- no such group (a function type's arguments, which have no brackets). The
--- list is printed between its counts, as cookbook/findings.shale
--- describes. It runs the Roc that the repository's roc-version file names.
+-- group of two or more items whose stacking brings the line within `width`:
+-- the text up to its opening bracket fits, and so does its closing bracket
+-- with what follows it (groups.shale's `group_to_wrap`). A group beside the
+-- wide part, as a list pattern in a `match` arm whose string makes the line
+-- wide, is left alone, and so are a function type's arguments, which can't
+-- take the comma. It runs roc fmt, and repeats until no line changes; a
+-- folder still changing after 8 passes stops the run, naming its files. The
+-- passes work on a copy of the folder's .roc files under
+-- `scratch:roc_commas_work/`, and the changed files are written back only
+-- once the rewrite has finished, so a run that stops, on a pass too many or
+-- on a budget, leaves the folder as it was.
+--
+-- Then it lists each code line still too wide, as `path:line (width): why:
+-- text`, `why` being `nothing to stack`: no group whose stacking would bring
+-- it within `width`. A line wide only for the text of its strings, by Roc's
+-- parser (as check_stacking.shale's `wide string`), and a comment line are
+-- counted, not listed, as no trailing comma shortens either; so is a line
+-- of numeric data, which stays packed (below). The list is
+-- printed between its counts, as cookbook/findings.shale describes. It runs
+-- the Roc that the repository's roc-version file names.
 --
 -- With `tokens=N`, the script holds the folder to roc-style.md's stacking
 -- rule, whose six tokens are `tokens=6`, whatever a line's width: a group of
@@ -24,14 +34,27 @@
 -- a row of literals are left alone, as check_stacking.shale leaves them, and so is a
 -- platform header's `targets:` section, which `roc fmt` lays out by itself.
 --
+-- The arguments:
+--   dir     the folders to rewrite, `roc` by default; several may be given,
+--           separated by commas, each rewritten in turn.
+--   width   the widest a line may be, 100 by default.
+--   tokens  the stacking rule's tokens, as above; 0 (the default) wraps
+--           wide lines alone.
+--   write   with `write=0`, the rewrite runs in the work copy, the list is
+--           of the lines it would leave, and no folder is written: a
+--           report.
+--
 --   cd <repo> && shale <shale>/cookbook/roc/wrap_long_lines.shale dir=roc width=100
---   cd <repo> && shale <shale>/cookbook/roc/wrap_long_lines.shale dir=roc tokens=6
+--   cd <repo> && shale <shale>/cookbook/roc/wrap_long_lines.shale dir=app,platform tokens=6
+--   cd <repo> && shale <shale>/cookbook/roc/wrap_long_lines.shale dir=roc tokens=6 write=0
 --   shale cookbook:roc/wrap_long_lines.shale self_test=1
 --
 -- `self_test=1` copies the plants in `cookbook/roc/plants/wrap_long_lines/` to
 -- `scratch:wrap_long_lines/`, rewrites them there with `tokens=6` and the
 -- self-test's Roc, and checks that the rewrite ends, that each plant comes
--- out as its `.want` file, and that no group is left to stack or to unstack.
+-- out as its `.want` file, that no group is left to stack or to unstack, and
+-- that the list holds exactly `LONG_PLANTS`' lines and counts
+-- `WIDE_STRING_PLANTS` wide strings and `DATA_PLANTS` lines of data.
 -- `at_the_cap.roc` nests as deep as 8 passes reach, and `too_deep/` one group
 -- deeper, which has to stop the rewrite, name its file and leave it as it was.
 --
@@ -48,119 +71,79 @@
 use("cookbook:findings.shale")
 use("./pinned.shale")
 use("./groups.shale")
+use("./parsed.shale")
 const SELF_TEST = arg("self_test", "") == "1"
 const PLANTS = "cookbook:roc/plants/wrap_long_lines"
-const DIR = SELF_TEST and "scratch:wrap_long_lines" or arg("dir", "roc")
-not_option("wrap_long_lines", "dir", DIR)
+const SELF_TEST_DIR = "scratch:wrap_long_lines"
+const DIRS_ARG = SELF_TEST and SELF_TEST_DIR or arg("dir", "roc")
 const WIDTH = arg("width", 100)
 const TOKENS = SELF_TEST and STACK_TOKENS or arg("tokens", 0)
+const WRITE_ARG = arg("write", "1")
+if WRITE_ARG ~= "0" and WRITE_ARG ~= "1" then fail("wrap_long_lines: write=" .. WRITE_ARG .. ": write must be 1 (the default) or 0") end
+const WRITE = SELF_TEST or WRITE_ARG == "1"
 const MAX_PASSES = 8
 const ROC = roc_bin("wrap_long_lines", SELF_TEST)
 
--- The position of the closing bracket that should get a trailing comma, or
--- 0 if there is none. Of the groups that open and close on the line, it is
--- the widest one with a comma directly inside it. A lambda's arguments,
--- `|a, b|`, count as a group; the pipe `|>` does not.
-function closer_for_trailing_comma(line)
-  local openers = {}
-  local commas_inside = {}
-  local best = 0
-  local best_width = 0
-  local in_string = false
-  local i = 1
-  while i <= #line do
-    local c = sub(line, i, i)
-    local closes_group = false
-    if in_string then
-      if c == "\\" then
-        i = i + 1
-      elseif c == "\"" then
-        in_string = false
-      end
-    elseif c == "\"" then
-      in_string = true
-    elseif c == "#" then
-      break
-    elseif c == "(" or c == "{" or c == "[" then
-      push(openers, i)
-      push(commas_inside, 0)
-    elseif c == "|" and sub(line, i + 1, i + 1) ~= ">" and sub(line, i - 1, i - 1) ~= "|" and sub(line, i + 1, i + 1) ~= "|" then
-      if #openers > 0 and sub(line, openers[#openers], openers[#openers]) == "|" then
-        closes_group = true
-      else
-        push(openers, i)
-        push(commas_inside, 0)
-      end
-    elseif c == ")" or c == "}" or c == "]" then
-      closes_group = #openers > 0
-    elseif c == "," and #commas_inside > 0 then
-      commas_inside[#commas_inside] = commas_inside[#commas_inside] + 1
-    end
-    if closes_group then
-      local open = openers[#openers]
-      if commas_inside[#commas_inside] > 0 and i - open > best_width then
-        best = i
-        best_width = i - open
-      end
-      openers = take(openers, #openers - 1)
-      commas_inside = take(commas_inside, #commas_inside - 1)
-    end
-    i = i + 1
-  end
-  return best
-end
-
--- The line with a trailing comma added, or nil when it has no group to take
--- one or its widest group already ends in a comma.
-function line_with_trailing_comma(line)
-  local at = closer_for_trailing_comma(line)
-  if at == 0 then return nil end
-  if ends_with(trim(sub(line, 1, at - 1)), ",") then return nil end
-  -- The comma goes right after the last item, before any spaces fmt left there.
-  local j = at - 1
-  while j > 0 and sub(line, j, j) == " " do j = j - 1 end
-  return sub(line, 1, j) .. "," .. sub(line, j + 1)
-end
+-- The self-test's list: the plant lines left wide with nothing to stack, and
+-- how many lines are wide only for their strings.
+const LONG_PLANTS = {"function_type.roc:4"}
+const WIDE_STRING_PLANTS = 1
+const DATA_PLANTS = 2
 
 function is_comment(line)
   return starts_with(trim(line), "#")
 end
 
-function roc_files()
+-- The folders of `dir=`, each held to be a path and not an option.
+function dirs_of(text)
   local out = {}
-  for e in walk_all(DIR) do
+  for d in split(text, ",") do
+    local dir = trim(d)
+    not_option("wrap_long_lines", "dir", dir)
+    if dir ~= "" then push(out, dir) end
+  end
+  if #out == 0 then fail("wrap_long_lines: dir= names no folder") end
+  return out
+end
+
+function roc_files(dir)
+  local out = {}
+  for e in walk_all(dir) do
     if e.kind == "file" and ends_with(e.path, ".roc") then push(out, e.path) end
   end
   return out
 end
 
--- The .roc files of DIR, each as its path inside DIR.
-function roc_paths_in_dir()
+-- The .roc files of `dir`, each as its path inside it.
+function roc_paths_in_dir(dir)
   local out = {}
-  for path in roc_files() do push(out, sub(path, #DIR + 2)) end
+  for path in roc_files(dir) do push(out, sub(path, #dir + 2)) end
   return out
 end
 
--- The rewrite works on a copy of the folder's .roc files, so a run that
+-- The rewrite of `dir` works on a copy of its .roc files, so a run that
 -- stops, on a budget or a pass too many, leaves the folder as it was.
-const WORK = SELF_TEST and "scratch:roc_commas_work/self_test" or "scratch:roc_commas_work/" .. re_replace(real(DIR), "[^A-Za-z0-9]", "_")
+function work_of(dir)
+  if SELF_TEST then return "scratch:roc_commas_work/self_test" end
+  return "scratch:roc_commas_work/" .. re_replace(real(dir), "[^A-Za-z0-9]", "_")
+end
 
-function fresh_work_copy(paths)
-  if is_dir(WORK) then remove_tree(WORK) end
-  mkdir(WORK)
-  for p in paths do replace(WORK .. "/" .. p, read(DIR .. "/" .. p)) end
+function fresh_work_copy(dir, work, paths)
+  if is_dir(work) then remove_tree(work) end
+  mkdir(work)
+  for p in paths do replace(work .. "/" .. p, read(dir .. "/" .. p)) end
 end
 
 -- Writes each file the rewrite changed back to the folder. It reads them all
 -- first and checks that what is left of the budgets covers every write, so
 -- the folder gets all of the rewrite or none of it.
-function write_back(paths)
+function write_back(dir, work, paths)
   local changed = {}
   local bytes = 0
   for p in paths do
-    local text = read(WORK .. "/" .. p)
-    if text ~= read(DIR .. "/" .. p) then
-      push(changed, {path = DIR .. "/" .. p, text = text})
+    local text = read(work .. "/" .. p)
+    if text ~= read(dir .. "/" .. p) then
+      push(changed, {path = dir .. "/" .. p, text = text})
       bytes = bytes + #text
     end
   end
@@ -169,11 +152,11 @@ function write_back(paths)
     fail("wrap_long_lines: too little budget left to write the " .. #changed .. " changed files, so none was written")
   end
   for c in changed do replace(c.path, c.text) end
-  print(#changed .. " files rewritten")
+  print(dir .. ": " .. #changed .. " files rewritten")
 end
 
-function run_roc_fmt()
-  local r = run({ROC, "fmt", real(WORK)}, {timeout_ms = 60000, tail = 20})
+function run_roc_fmt(work)
+  local r = run({ROC, "fmt", real(work)}, {timeout_ms = 60000, tail = 20})
   if r.code ~= 0 then
     print(r.out)
     fail("roc fmt failed")
@@ -193,17 +176,14 @@ function commas_before_the_last(l)
 end
 
 -- Line `l` with a trailing comma for its outermost group that should stack,
--- or else, when it is wider than WIDTH, for its widest group. nil when it
--- gets none. A line of data, by groups.shale's is_data_line, gets none.
+-- or else, when it is wider than WIDTH, for groups.shale's `group_to_wrap`.
+-- nil when it gets none. A line of data, by groups.shale's is_data_line,
+-- gets none.
 function line_with_comma(l)
-  local fits = line_width(l) <= WIDTH
-  if fits and (TOKENS == 0 or commas_before_the_last(l) < STACK_ITEMS - 1) then return nil end
-  if TOKENS > 0 then
-    local g = group_to_stack(l, TOKENS, WIDTH)
-    if g ~= nil then return with_trailing_comma(l, g) end
-  end
-  if not fits and not is_data_line(l, WIDTH) then return line_with_trailing_comma(l) end
-  return nil
+  if line_width(l) <= WIDTH and (TOKENS == 0 or commas_before_the_last(l) < STACK_ITEMS - 1) then return nil end
+  local g = group_to_stack(l, TOKENS, WIDTH)
+  if g == nil then return nil end
+  return with_trailing_comma(l, g)
 end
 
 -- Takes the trailing comma from each group of the file at `path`, whose text
@@ -229,14 +209,15 @@ function rewrite_trailing_commas(path, text)
   return changed
 end
 
--- Rewrites commas and runs roc fmt, in the work copy, until a pass changes
--- nothing, and then writes the changed files back. Files still changing after
--- MAX_PASSES stop the run, since the list of long lines would otherwise judge
--- a rewrite that never finished.
-function rewrite()
-  local paths = roc_paths_in_dir()
-  fresh_work_copy(paths)
-  run_roc_fmt()
+-- Rewrites commas and runs roc fmt in `dir`'s work copy until a pass changes
+-- nothing. Files still changing after MAX_PASSES stop the run, since the list
+-- of long lines would otherwise judge a rewrite that never finished. Returns
+-- `{work, paths}`, the work copy holding the rewrite.
+function rewrite_in_work(dir)
+  local work = work_of(dir)
+  local paths = roc_paths_in_dir(dir)
+  fresh_work_copy(dir, work, paths)
+  run_roc_fmt(work)
   local pass = 1
   local changed = 1
   local touched = {}
@@ -247,41 +228,101 @@ function rewrite()
     changed = 0
     touched = {}
     for p in paths do
-      local text = read(WORK .. "/" .. p)
+      local text = read(work .. "/" .. p)
       if not has_key(settled, p) or settled[p] ~= text then
-        local n = rewrite_trailing_commas(WORK .. "/" .. p, text)
+        local n = rewrite_trailing_commas(work .. "/" .. p, text)
         if n > 0 then
           changed = changed + n
-          push(touched, DIR .. "/" .. p)
+          push(touched, dir .. "/" .. p)
         else
           settled[p] = text
         end
       end
     end
-    print("pass " .. pass .. ": " .. changed .. " trailing commas added or taken out")
-    run_roc_fmt()
+    print(dir .. ": pass " .. pass .. ": " .. changed .. " trailing commas added or taken out")
+    run_roc_fmt(work)
     pass = pass + 1
   end
   if changed > 0 then fail("wrap_long_lines: still changing after " .. MAX_PASSES .. " passes, so no file was written: " .. join(touched, ", ")) end
-  write_back(paths)
-  remove_tree(WORK)
+  return {work = work, paths = paths}
+end
+
+-- Rewrites `dir` and writes it back (with WRITE).
+function rewrite_dir(dir)
+  local r = rewrite_in_work(dir)
+  if WRITE then write_back(dir, r.work, r.paths) end
+  remove_tree(r.work)
   return nil
 end
 
+-- The self-test's folder rewritten, for its `attempt`, which takes no
+-- arguments.
+function rewrite_self_test_dir()
+  return rewrite_dir(SELF_TEST_DIR)
+end
+
+-- The lines wider than WIDTH in the files `paths` of folder `at`, named as
+-- `dir`'s, added to `report`: a comment and a line wide only for its strings'
+-- text are counted, any other is listed. Only a file with a wide line is
+-- parsed, for its strings; a file roc-ast refuses goes in `report.refused`.
+function report_wide_lines(report, dir, at, paths)
+  local wide = {}
+  for p in paths do
+    for l in lines(read(at .. "/" .. p)) do
+      if line_width(l) > WIDTH then
+        push(wide, at .. "/" .. p)
+        break
+      end
+    end
+  end
+  if #wide == 0 then return nil end
+  local parsed = parse_roc_files(wide)
+  for r in parsed.refused do push(report.refused, r) end
+  for f in parsed.files do
+    local ls = split(read(f.path), "\n")
+    local strings = string_columns_on_lines(f.nodes, ls, "wrap_long_lines: " .. f.path)
+    local named = dir .. sub(f.path, #at + 1)
+    for i = 1, #ls do
+      local w = line_width(ls[i])
+      if w > WIDTH then
+        if is_comment(ls[i]) then
+          report.comments = report.comments + 1
+        elseif w - get(strings, "" .. i, 0) <= WIDTH then
+          report.wide_strings = report.wide_strings + 1
+        elseif is_data_line(ls[i], WIDTH) then
+          report.data = report.data + 1
+        else
+          push(report.long, named .. ":" .. i .. " (" .. w .. "): nothing to stack: " .. trim(sub(ls[i], 1, 140)))
+        end
+      end
+    end
+  end
+  return nil
+end
+
+function fresh_report()
+  return {long = {}, wide_strings = 0, data = 0, comments = 0, refused = {}}
+end
+
+function report_summary(report)
+  return "still over " .. WIDTH .. ": " .. #report.long .. " code lines with nothing to stack, " .. report.wide_strings .. " wide only for their strings, " .. report.data .. " of numeric data, " .. report.comments .. " comment lines"
+end
+
 function fresh_copies(plants)
-  if is_dir(DIR) then remove_tree(DIR) end
-  mkdir(DIR)
-  for p in glob(plants .. "/*.roc") do replace(DIR .. "/" .. basename(p), read(p)) end
+  if is_dir(SELF_TEST_DIR) then remove_tree(SELF_TEST_DIR) end
+  mkdir(SELF_TEST_DIR)
+  for p in glob(plants .. "/*.roc") do replace(SELF_TEST_DIR .. "/" .. basename(p), read(p)) end
 end
 
 function self_test()
+  local dir = SELF_TEST_DIR
   fresh_copies(PLANTS)
-  rewrite()
+  rewrite_dir(dir)
   local bad = 0
   for p in glob(PLANTS .. "/*.roc") do
     local name = basename(p)
     local want = PLANTS .. "/" .. sub(name, 1, #name - 4) .. ".want"
-    local got = read(DIR .. "/" .. name)
+    local got = read(dir .. "/" .. name)
     local ok = got == read(want)
     print((ok and "ok   " or "FAIL ") .. name .. ": comes out as its .want")
     if not ok then bad = bad + 1 end
@@ -298,36 +339,44 @@ function self_test()
       bad = bad + 1
     end
   end
+  -- The list after the rewrite: exactly LONG_PLANTS' lines, and the wide
+  -- strings counted.
+  local report = fresh_report()
+  report_wide_lines(report, dir, dir, roc_paths_in_dir(dir))
+  local listed = {}
+  for l in report.long do push(listed, sub(split(l, " ")[1], #dir + 2)) end
+  local list_ok = join(sort(listed), ",") == join(sort(LONG_PLANTS), ",")
+  print((list_ok and "ok   " or "FAIL ") .. "the list of lines left wide is " .. join(LONG_PLANTS, ", ") .. " (" .. join(report.long, "; ") .. ")")
+  if not list_ok then bad = bad + 1 end
+  local wide_ok = report.wide_strings == WIDE_STRING_PLANTS and report.data == DATA_PLANTS and #report.refused == 0
+  print((wide_ok and "ok   " or "FAIL ") .. report.wide_strings .. " lines wide only for their strings and " .. report.data .. " of numeric data, counted and not listed, want " .. WIDE_STRING_PLANTS .. " and " .. DATA_PLANTS .. " (" .. #report.refused .. " refused)")
+  if not wide_ok then bad = bad + 1 end
   if bad > 0 then fail(bad .. " checks failed") end
-  if is_dir(WORK) then fail("wrap_long_lines: a finished rewrite should remove its work copy, " .. WORK) end
+  if is_dir(work_of(dir)) then fail("wrap_long_lines: a finished rewrite should remove its work copy, " .. work_of(dir)) end
   fresh_copies(PLANTS .. "/too_deep")
-  local stopped = attempt(rewrite)
-  local named = "still changing after " .. MAX_PASSES .. " passes, so no file was written: " .. DIR .. "/too_deep.roc"
+  local stopped = attempt(rewrite_self_test_dir)
+  local named = "still changing after " .. MAX_PASSES .. " passes, so no file was written: " .. dir .. "/too_deep.roc"
   if stopped.ok or not contains(stopped.error, named) then fail("wrap_long_lines: too_deep.roc should stop with `" .. named .. "`") end
-  if read(DIR .. "/too_deep.roc") ~= read(PLANTS .. "/too_deep/too_deep.roc") then fail("wrap_long_lines: a rewrite that stops should leave too_deep.roc as it was") end
+  if read(dir .. "/too_deep.roc") ~= read(PLANTS .. "/too_deep/too_deep.roc") then fail("wrap_long_lines: a rewrite that stops should leave too_deep.roc as it was") end
   print("ok   too_deep.roc: stops naming its file, and is left as it was")
-  remove_tree(WORK)
-  print("PASS: the rewrite ends, every plant comes out as its .want, no group is left to stack or to unstack, and a rewrite past its passes stops naming its file and changes none")
+  remove_tree(work_of(dir))
+  print("PASS: the rewrite ends, every plant comes out as its .want, no group is left to stack or to unstack, the lines left wide are listed or counted, and a rewrite past its passes stops naming its file and changes none")
 end
 
 if SELF_TEST then
   self_test()
 else
-  rewrite()
-  local long_comments = 0
-  local long_code = {}
-  for path in roc_files() do
-    local ls = split(read(path), "\n")
-    for i = 1, #ls do
-      local w = line_width(ls[i])
-      if w > WIDTH then
-        if is_comment(ls[i]) then
-          long_comments = long_comments + 1
-        else
-          push(long_code, path .. ":" .. i .. " (" .. w .. "): " .. trim(sub(ls[i], 1, 140)))
-        end
-      end
+  local report = fresh_report()
+  for dir in dirs_of(DIRS_ARG) do
+    local r = rewrite_in_work(dir)
+    if WRITE then
+      write_back(dir, r.work, r.paths)
+      report_wide_lines(report, dir, dir, r.paths)
+    else
+      report_wide_lines(report, dir, r.work, r.paths)
     end
+    remove_tree(r.work)
   end
-  print_findings("still over " .. WIDTH .. ": " .. #long_code .. " code lines, " .. long_comments .. " comment lines", long_code)
+  print_findings((WRITE and "" or "report, nothing written: ") .. report_summary(report), report.long)
+  fail_if_refused("wrap_long_lines", report.refused)
 end

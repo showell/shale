@@ -136,7 +136,6 @@ use("./headers.shale")
 use("./house.shale")
 const TOKENS = arg("tokens", STACK_TOKENS)
 const MAX_PASSES = 12
-const STRING_TEXT = {["e-string-part"] = true, ["p-string-text"] = true}
 
 -- Text cut to 60 characters for a finding line.
 function shortened(s)
@@ -304,15 +303,7 @@ function string_columns_in(files)
   if #wide_files == 0 then return {columns = columns, refused = {}} end
   local parsed = parse_roc_files(wide_files)
   for f in parsed.files do
-    local ls = split(read(f.path), "\n")
-    local by_line = {}
-    for n in f.nodes do
-      if has_key(STRING_TEXT, n.kind) then
-        if n.line ~= n.end_line then fail("check_stacking: " .. f.path .. ":" .. n.line .. ": a run of string text crosses a line") end
-        incr(by_line, "" .. n.line, line_width(sub(ls[n.line], n.col, n.end_col - 1)))
-      end
-    end
-    columns[f.path] = by_line
+    columns[f.path] = string_columns_on_lines(f.nodes, split(read(f.path), "\n"), "check_stacking: " .. f.path)
   end
   return {columns = columns, refused = parsed.refused}
 end

@@ -281,26 +281,67 @@ function should_stack(l, g, min_tokens, width)
   return is_big(g, min_tokens) and not g.trailing and not g.fn_type and not is_literal_row(l, g, width) and not is_number_data(l, g)
 end
 
--- The group on line `l` the rewrite gives a trailing comma: the outermost,
--- then widest, group that should stack; or else, on a line wider than
--- `width`, the widest group of two or more items. nil when no group
--- qualifies or the line is a line of data.
-function group_to_stack(l, min_tokens, width)
-  if is_data_line(l, width) then return nil end
+-- Whether stacking group `g` brings line `l` within `width`, as far as the
+-- line itself goes: once stacked, the text up to its opening bracket is one
+-- line and its closing bracket and what follows it, at the line's indent,
+-- another, and both must fit. Its items are lines of their own, which a
+-- later pass reaches. A group beside the wide part, as a list pattern in a
+-- `match` arm whose string is what makes the line wide, would leave that
+-- part as wide as ever.
+function stacking_fits(l, g, width)
+  if line_width(sub(l, 1, g.open)) > width then return false end
+  local indent = re_find(l, "^[ \t]*").text
+  return line_width(indent .. sub(l, g.close)) <= width
+end
+
+-- The group on line `l`, wider than `width`, that the rewrite stacks for its
+-- width alone: the widest group of two or more items, not a function type's
+-- arguments, whose stacking brings the line within `width`
+-- (`stacking_fits`). nil when no group does.
+function group_to_wrap(l, width, groups)
   local best = nil
-  local groups = groups_on_line(l)
   for g in groups do
-    if should_stack(l, g, min_tokens, width) then
-      if best == nil or g.depth < best.depth or (g.depth == best.depth and g.close - g.open > best.close - best.open) then best = g end
-    end
-  end
-  if best ~= nil or line_width(l) <= width then return best end
-  for g in groups do
-    if g.items >= 2 and not g.trailing and not g.fn_type then
+    if g.items >= 2 and not g.trailing and not g.fn_type and stacking_fits(l, g, width) then
       if best == nil or g.close - g.open > best.close - best.open then best = g end
     end
   end
   return best
+end
+
+-- The group on line `l` the rewrite gives a trailing comma: the outermost,
+-- then widest, group that should stack; or else, on a line wider than
+-- `width`, `group_to_wrap`'s. nil when no group qualifies or the line is a
+-- line of data.
+function group_to_stack(l, min_tokens, width)
+  if is_data_line(l, width) then return nil end
+  local best = nil
+  local groups = groups_on_line(l)
+  if min_tokens > 0 then
+    for g in groups do
+      if should_stack(l, g, min_tokens, width) then
+        if best == nil or g.depth < best.depth or (g.depth == best.depth and g.close - g.open > best.close - best.open) then best = g end
+      end
+    end
+  end
+  if best ~= nil or line_width(l) <= width then return best end
+  return group_to_wrap(l, width, groups)
+end
+
+-- The node kinds that hold a string's own text, between its quotes.
+const STRING_TEXT = {["e-string-part"] = true, ["p-string-text"] = true}
+
+-- The columns that strings' text takes up on each line of a file, from its
+-- roc-ast `nodes` and its lines `ls`, by line number as text. A line wider
+-- than the width only for its strings is one no trailing comma can shorten.
+function string_columns_on_lines(nodes, ls, who)
+  local by_line = {}
+  for n in nodes do
+    if has_key(STRING_TEXT, n.kind) then
+      if n.line ~= n.end_line then fail(who .. ": line " .. n.line .. ": a run of string text crosses a line") end
+      incr(by_line, "" .. n.line, line_width(sub(ls[n.line], n.col, n.end_col - 1)))
+    end
+  end
+  return by_line
 end
 
 -- Line `l` with a comma after the last item of group `g`, before any

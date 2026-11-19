@@ -44,100 +44,15 @@ const GLOB = arg("glob", "**/*.roc")
 use("cookbook:findings.shale")
 use("./parsed.shale")
 use("./gate_recipe.shale")
+use("./imports.shale")
 const CHECKS = {"unused_import"}
 
--- The first part of a dotted name: `Mod` of `Mod.Type.name`.
-function head_of(name)
-  return split(name, ".")[1]
-end
-
--- The name a pattern's tag is written with, read from the source line `text`
--- at byte `col`, since the tree keeps only `.Red` of `Color.Red`.
-function written_tag(text, col)
-  local m = re_find(sub(text, col), "^([A-Za-z_][A-Za-z0-9_.]*)")
-  if m == nil then return "" end
-  return m.group
-end
-
--- Each import of the file, as `{line, label, names}`: `names` are the names a
--- use of the line may start with.
-function imports_of(tree)
-  local out = {}
-  for i = 1, #tree do
-    local node = tree[i]
-    if node.kind == "s-import" then
-      local parts = split(node.raw, ".")
-      local name = get(node, "alias", "")
-      if name == "" then name = parts[#parts] end
-      local names = {name}
-      for k in node.kids do
-        if tree[k].kind == "exposing" then
-          for e in tree[k].kids do
-            if tree[e].kind == "exposed-upper-ident" then push(names, tree[e].text) end
-            if tree[e].kind == "exposed-lower-ident" then
-              for t in tree[e].kids do push(names, tree[t].value) end
-            end
-          end
-        end
-      end
-      push(out, {line = node.line, label = "`" .. node.raw .. "`" .. (get(node, "alias", "") == "" and "" or " as `" .. node.alias .. "`"), names = names})
-    elseif node.kind == "s-file-import" then
-      for k in node.kids do
-        if tree[k].kind == "name" then push(out, {line = node.line, label = "the file import `" .. tree[k].value .. "`", names = {tree[k].value}}) end
-      end
-    end
-  end
-  return out
-end
-
--- The indexes, as text, of the nodes of `tree` that are kids of a node of
--- kind `kind`.
-function kids_of_kind(tree, kind)
-  local out = {}
-  for node in tree do
-    if node.kind == kind then
-      for k in node.kids do out["" .. k] = true end
-    end
-  end
-  return out
-end
-
--- The set of first parts of every value, tag and type name the file uses. A
--- bare tag (`Other`, in an expression, a pattern or a tag union type) names
--- no module, so only a qualified one counts, or one that is a nominal type's
--- name (`Point.{ x: 0 }`).
-function heads_used(tree, src)
-  local used = {}
-  local union_tags = kids_of_kind(tree, "tags")
-  local nominal_names = kids_of_kind(tree, "mapper")
-  for i = 1, #tree do
-    local node = tree[i]
-    local name = ""
-    if node.kind == "e-ident" then name = node.raw end
-    if node.kind == "e-tag" and (contains(node.raw, ".") or has_key(nominal_names, "" .. i)) then name = node.raw end
-    if node.kind == "ty" and not has_key(union_tags, "" .. i) then name = node.name end
-    if node.kind == "p-tag" then
-      local written = starts_with(node.raw, ".") and written_tag(src[node.line], node.col) or node.raw
-      if contains(written, ".") then name = written end
-    end
-    if name ~= "" then used[head_of(name)] = true end
-  end
-  return used
-end
-
 function judge_file(f, report)
-  local tree = f.nodes
-  local used = heads_used(tree, split(read(f.path), "\n"))
-  for imp in imports_of(tree) do
-    local is_used = false
-    for name in imp.names do
-      if has_key(used, name) then is_used = true end
-    end
-    if not is_used then push(report, {path = f.path, line = imp.line, check = "unused_import", what = imp.label .. " is imported and never used: delete the line"}) end
+  for imp in unused_imports(f.nodes, split(read(f.path), "\n")) do
+    push(report, {path = f.path, line = imp.line, check = "unused_import", what = imp.label .. " is imported and never used: delete the line"})
   end
   return nil
 end
-
 function self_test()
   local at = "cookbook:roc/plants/find_unused_imports/"
   check_plants("find_unused_imports", "cookbook:roc/find_unused_imports.shale", CHECKS, {

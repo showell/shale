@@ -147,9 +147,11 @@ end, and fails the run.
 ## Rewrites and comparisons
 
 - [wrap_long_lines.shale](wrap_long_lines.shale) shortens lines wider than `width=`
-  in the folder `dir=` by adding a trailing comma to a group on each, so
-  that `roc fmt` lays it out one item a line. It edits the files, then
-  lists the lines it couldn't shorten. With `tokens=6` it also holds the
+  in the folders `dir=` (several separated by commas) by adding a trailing
+  comma to a group on each whose stacking brings the line within the width,
+  so that `roc fmt` lays it out one item a line. It edits the files, then
+  lists the lines it couldn't shorten, and counts those wide only for their
+  strings or holding numeric data; `write=0` rewrites only a copy, a report. With `tokens=6` it also holds the
   folder to the stacking rule, stacking and joining groups whatever their
   width, reading groups as `check_stacking.shale` does. Numeric data, such as a
   list of polygon points, stays packed, as both recipes leave it (`groups.shale`'s
@@ -197,7 +199,10 @@ end, and fails the run.
   types, each such method call (`a.max(b)`) is a `peer_receiver` finding,
   counted in the summary, and `peers=undo` turns them back into module
   calls, judged by the compiler as a rewrite is. Every other function, a
-  unit's `plus` or `starts_with`, keeps its method call.
+  unit's `plus` or `starts_with`, keeps its method call. What a rewrite
+  leaves for the sweep is reported, not fixed: an import it made unused
+  (`made_unused_import`) and a line it pushed past 100 columns
+  (`made_long_line`), each counted in the summary.
 
       cd <repo> && shale --undo-on-stop <shale>/cookbook/roc/rewrite_method_calls.shale glob='app/*.roc' root=app/main.roc,app/Specs.roc
       cd <repo> && shale <shale>/cookbook/roc/rewrite_method_calls.shale glob='app/*.roc' root=app/main.roc trials=0
@@ -297,7 +302,9 @@ run on their own.
   `hunt_names`, `wrap_long_lines` and `check_stacking`.
 - [groups.shale](groups.shale): the stacking rule, the bracket groups and
   their items and tokens, `groups_in_lines(ls)`, what a rewrite does to
-  them, `group_to_stack(l, tokens, width)` and
+  them, `group_to_stack(l, tokens, width)` (with `group_to_wrap`, the group
+  whose stacking brings a wide line within the width),
+  `string_columns_on_lines(nodes, ls, who)`, and
   `groups_to_unstack(ls, tokens, width)`, and what it can't reach,
   `without_targets_section(ls)`. Used by `wrap_long_lines` and `check_stacking`, so the two
   read a group the same way.
@@ -318,6 +325,12 @@ run on their own.
   comes from unsuffixed number literals alone (`takes_literal_type`), so it
   defaults as a receiver. Used by `rewrite_method_calls`.
 
+- [imports.shale](imports.shale): `unused_imports(nodes, src)`, a file's
+  imports that no name uses, by its tree. Used by `find_unused_imports` and
+  `rewrite_method_calls`.
+- [method_text.shale](method_text.shale): `rewrite_method_calls`' trees with
+  byte spans (`parse_trees`) and the text with chosen calls turned
+  (`rewritten_text`).
 - [declared.shale](declared.shale): what the naming recipes read out of a
   parse tree: `declarations_of(file)`, each type, value and record field a
   file declares, with `render_type`, `name_words` and `word_set`, and what

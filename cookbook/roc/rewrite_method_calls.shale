@@ -155,10 +155,12 @@
 -- gigabytes there.
 --
 -- The output is the summary line (`files N, candidates N, rewritten N, left
--- N, peer_receiver N`, and the programs used, the files being those begun, so a gate can tell
--- that the glob found what it meant), a line `path:line: Module.fn: why` for each call that
--- stays, the count of each kind the types found, and the summary again
--- (cookbook/findings.shale).
+-- N, peer_receiver N`, the programs used, the files being those begun, so a gate can tell
+-- that the glob found what it meant, then `made_unused_import N, made_long_line N`), a line
+-- `path:line: Module.fn: why` for each call that stays, a `made_*` line for each import
+-- the rewrite left unused and each line it pushed past 100 columns, which a sweep fixes in
+-- the same pass (`made_by_rewrites`), the count of each kind the types found, and the
+-- summary again (cookbook/findings.shale).
 --
 -- The compiler is the one the tree pins: `tools:roc-<pin>/roc`, with the pin
 -- read from the `roc-version` file in the directory the run starts in, and
@@ -207,6 +209,8 @@ use("cookbook:findings.shale")
 use("./types.shale")
 use("./number_literals.shale")
 use("./peer_calls.shale")
+use("./imports.shale")
+use("./method_text.shale")
 
 -- Each round leaves out the calls the compiler refused, and the next round
 -- may find more that their errors hid.
@@ -217,66 +221,8 @@ const MAX_ROUNDS = 6
 const MAX_PROGRAMS = budget().programs
 const PROGRAMS_PER_FILE = MAX_ROUNDS + 5
 
--- The node kinds a receiver can be without parentheses, as in `f(x).len()`
--- or `"a".to_utf8()`. Any other (a number, a sum, a lambda, an `if`) is
--- wrapped in them: `(a + b).to_str()`.
-const BARE_RECEIVER_KINDS = {["e-ident"] = true, ["e-apply"] = true, ["e-method-call"] = true, ["e-field-access"] = true, ["e-string"] = true, ["e-list"] = true, ["e-record"] = true, ["e-tuple"] = true, ["e-tag"] = true}
+-- ── the candidates ─────────────────────────────────────────────────────
 
--- ── the tree ─────────────────────────────────────────────────────────────
-
--- A node's span as byte offsets into the file's text: `from` is its first
--- byte (1-based) and `to` one past its last. nil for a node with no position.
-function span_of(n, starts)
-  if n.line == 0 then return nil end
-  return {from = starts[n.line] + n.col - 1, to = starts[n.end_line] + n.end_col - 1}
-end
-
--- The byte offset at which each line starts.
-function line_starts(text)
-  local out = {1}
-  local at = 1
-  for l in split(text, "\n") do
-    at = at + #l + 1
-    push(out, at)
-  end
-  return out
-end
-
--- Every file's syntax tree from `roc_tree`, by path: `{nodes, text, starts}`,
--- each node `{kind, raw, name, span, has_span, kids, parent, region}`, where
--- `kids` are its children's indexes in order, `parent` is 0 at the top, and
--- `region` is the compiler's `line:col:end_line:end_col`, by which the types
--- are looked up.
-function parse_trees(paths)
-  local out = {}
-  for f in roc_tree(paths) do
-    if f.err ~= "" then fail("rewrite_method_calls: roc-ast: " .. f.path .. ": " .. f.err) end
-    local text = read(f.path)
-    local t = {nodes = {}, text = text, starts = line_starts(text)}
-    for n in f.nodes do
-      local span = span_of(n, t.starts)
-      push(t.nodes, {kind = n.kind, raw = get(n, "raw", ""), name = get(n, "name", ""), field = get(n, "field", ""), method = get(n, "method", ""), span = span or {from = 0, to = 0}, has_span = span ~= nil, kids = n.kids, parent = n.parent, region = n.line .. ":" .. n.col .. ":" .. n.end_line .. ":" .. n.end_col})
-    end
-    out[f.path] = t
-  end
-  return out
-end
-
--- The nodes that carry node `i`'s text: `i` itself when it has a span, else
--- its nearest descendants that do (`args` and `receiver` have none).
-function spanned_nodes(t, i)
-  local n = t.nodes[i]
-  if n.has_span then return {i} end
-  local out = {}
-  for k in n.kids do for j in spanned_nodes(t, k) do push(out, j) end end
-  return out
-end
-
-function line_at(t, offset)
-  local l = 1
-  while l < #t.starts and t.starts[l + 1] <= offset do l = l + 1 end
-  return l
-end
 
 -- The reason the call `module.fn(...)` at node `i` must stay, whatever the
 -- types say, or "" when it may be tried.
@@ -320,86 +266,11 @@ function candidates_in(t, own_module)
       if callee.kind == "e-ident" and m ~= nil and m.groups[1] ~= own_module then
         local module = m.groups[1]
         local fn = m.groups[2]
-        push(out, {node = i, module = module, fn = fn, line = line_at(t, n.span.from), why_left = reason_call_stays(t, i, module, fn), proven = false, kind = "", from_line = 0, to_line = 0})
+        push(out, {node = i, module = module, fn = fn, line = line_of_offset(t, n.span.from), why_left = reason_call_stays(t, i, module, fn), proven = false, kind = "", from_line = 0, to_line = 0})
       end
     end
   end
   return out
-end
-
--- ── the rewrite ──────────────────────────────────────────────────────────
-
-function emit(writer, s)
-  push(writer.out, s)
-  writer.line = writer.line + #split(s, "\n") - 1
-end
-
--- Writes node `i`'s text, from byte `start` on. A call being turned is
--- written as a method call. Any other node is written as it is, with each
--- child that has a span written in its place by the same rule, so nested
--- calls turn too. Spans may overlap (a type module's `type-mod` and its
--- declaration both start at the type's name), so a child is written from
--- where the text so far ends, and one wholly before that is skipped.
-function emit_node(writer, i, start)
-  local t = writer.t
-  local n = t.nodes[i]
-  writer.line_of_node["" .. i] = writer.line
-  if has_key(writer.turning, "" .. i) then
-    local c = writer.turning["" .. i]
-    c.from_line = writer.line
-    -- A peer method call turned back, `a.max(b)` to `U64.max(a, b)`.
-    if get(c, "undo", false) then
-      emit(writer, c.module .. "." .. c.fn .. "(")
-      emit_node(writer, t.nodes[n.kids[1]].kids[1], 0)
-      for a in t.nodes[n.kids[2]].kids do
-        emit(writer, ", ")
-        emit_node(writer, a, 0)
-      end
-      emit(writer, ")")
-      c.to_line = writer.line
-      return nil
-    end
-    local args = drop(n.kids, 1)
-    local needs_parens = not has_key(BARE_RECEIVER_KINDS, t.nodes[args[1]].kind)
-    if needs_parens then emit(writer, "(") end
-    emit_node(writer, args[1], 0)
-    if needs_parens then emit(writer, ")") end
-    emit(writer, "." .. c.fn .. "(")
-    for k = 2, #args do
-      if k > 2 then emit(writer, ", ") end
-      emit_node(writer, args[k], 0)
-    end
-    emit(writer, ")")
-    c.to_line = writer.line
-    return nil
-  end
-  local at = n.span.from
-  if start > at then at = start end
-  for k in n.kids do
-    for j in spanned_nodes(t, k) do
-      local s = t.nodes[j].span
-      if s.to > at then
-        if s.from > at then emit(writer, sub(t.text, at, s.from - 1)) end
-        emit_node(writer, j, at)
-        at = s.to
-      end
-    end
-  end
-  emit(writer, sub(t.text, at, n.span.to - 1))
-  return nil
-end
-
--- The file's text with every candidate in `turning` (keyed by node) turned
--- into a method call. Each turned call records its lines in the new text
--- (`from_line`, `to_line`), and `t.trial_line_of_node` records each node's
--- first line there.
-function rewritten_text(t, turning)
-  local writer = {out = {}, line = line_at(t, t.nodes[1].span.from), t = t, turning = turning, line_of_node = {}}
-  emit_node(writer, 1, 0)
-  t.trial_line_of_node = writer.line_of_node
-  -- The file node spans what roc-ast parsed; the bytes outside it, such as a
-  -- final newline, are kept.
-  return sub(t.text, 1, t.nodes[1].span.from - 1) .. join(writer.out, "") .. sub(t.text, t.nodes[1].span.to)
 end
 
 function is_below(t, i, top)
@@ -653,10 +524,92 @@ function judge_method_peers(j, t, p, types, aliases)
     local v = peer_verdict(get(types.by_region, real_path .. "|" .. t.nodes[m.recv].region, ""), get(types.by_region, real_path .. "|" .. t.nodes[m.first].region, ""), aliases)
     if v.peers then
       local why = m.spanned and "" or "an argument with no span in the tree, whose text cannot be moved"
-      push(j.peers, {node = m.node, module = v.module, fn = m.fn, line = line_at(t, t.nodes[m.node].span.from), why_left = why, proven = true, kind = "", from_line = 0, to_line = 0, undo = true, type = v.type})
+      push(j.peers, {node = m.node, module = v.module, fn = m.fn, line = line_of_offset(t, t.nodes[m.node].span.from), why_left = why, proven = true, kind = "", from_line = 0, to_line = 0, undo = true, type = v.type})
     end
   end
   return nil
+end
+
+-- ── what a rewrite leaves for the sweep ─────────────────────────────────
+
+-- The width past which a line is long, as check_stacking.shale's `long`.
+const LONG_LINE = 100
+
+-- Records, for `made_by_rewrites`, that the file at `p`, whose tree is `t`,
+-- had the calls in `turning` turned: by a passing trial or confirm, or
+-- under `trials=0` the proven calls. The text after is the rewrite's, before
+-- any `roc fmt`, and `joined` holds its lines where a turned call that
+-- spanned several lines now sits on one, as a stacked call's arguments do.
+function note_rewrite(ctx, p, t, turning)
+  local after = rewritten_text(t, turning)
+  local joined = {}
+  for k in keys(turning) do
+    local c = turning[k]
+    local s = t.nodes[c.node].span
+    if c.from_line == c.to_line and line_of_offset(t, s.from) < line_of_offset(t, s.to - 1) then push(joined, c.from_line) end
+  end
+  if after ~= t.text then ctx.rewrites[p] = {before = t.text, after = after, joined = joined} end
+  return nil
+end
+
+-- A line's width, a tab counting four columns.
+function columns_of(l)
+  return #l + 3 * (#split(l, "\t") - 1)
+end
+
+-- What the rewrites in `ctx.rewrites` left for a sweep to fix in the same
+-- pass, which the recipe reports and does not fix: each import that the
+-- file used before its rewrite and no longer uses after it, by roc-ast's
+-- trees of both texts (imports.shale's `unused_imports`), and each line
+-- wider than LONG_LINE columns where a turned call joined its lines (a turn
+-- alone only shortens a line). A line is named by its number in the
+-- rewritten text, before any `roc fmt`. Returns `{lines, unused, long, programs}`, `lines` a
+-- `path:line: made_unused_import: why` or `made_long_line` each.
+function made_by_rewrites(ctx)
+  local out = {lines = {}, unused = 0, long = 0, programs = 0}
+  local paths = sort(keys(ctx.rewrites))
+  if #paths == 0 then return out end
+  -- roc_tree reads files, so both texts are written to a scratch folder.
+  local dir = fresh_dir("scratch:", "made_by_rewrites")
+  local files = {}
+  for k = 1, #paths do
+    local r = ctx.rewrites[paths[k]]
+    replace(dir .. "/" .. k .. "/before.roc", r.before)
+    replace(dir .. "/" .. k .. "/after.roc", r.after)
+    push(files, dir .. "/" .. k .. "/before.roc")
+    push(files, dir .. "/" .. k .. "/after.roc")
+  end
+  out.programs = 1
+  local trees = {}
+  for f in roc_tree(files) do
+    if f.err ~= "" then fail("rewrite_method_calls: roc-ast refused a rewritten text (" .. f.path .. "): " .. f.err) end
+    trees[f.path] = f.nodes
+  end
+  for k = 1, #paths do
+    local p = paths[k]
+    local r = ctx.rewrites[p]
+    local before_lines = split(r.before, "\n")
+    local after_lines = split(r.after, "\n")
+    local was_unused = {}
+    for imp in unused_imports(trees[dir .. "/" .. k .. "/before.roc"], before_lines) do was_unused[imp.label] = true end
+    for imp in unused_imports(trees[dir .. "/" .. k .. "/after.roc"], after_lines) do
+      if not has_key(was_unused, imp.label) then
+        out.unused = out.unused + 1
+        push(out.lines, p .. ":" .. imp.line .. ": made_unused_import: " .. imp.label .. " was used only by the calls the rewrite turned: delete the line")
+      end
+    end
+    local seen = {}
+    for i in sort(r.joined) do
+      local l = after_lines[i]
+      if columns_of(l) > LONG_LINE and not has_key(seen, "" .. i) then
+        seen["" .. i] = true
+        out.long = out.long + 1
+        push(out.lines, p .. ":" .. i .. ": made_long_line: " .. columns_of(l) .. " columns after the rewrite joined a call's lines: stack it (wrap_long_lines.shale): " .. trim(sub(l, 1, 120)))
+      end
+    end
+  end
+  remove_tree(dir)
+  return out
 end
 
 -- ── the trial and the confirm ────────────────────────────────────────────
@@ -685,6 +638,7 @@ function try_file(ctx, p, t, cands, root, baseline_test)
         replace(p, original)
         return 0
       end
+      note_rewrite(ctx, p, t, open.turning)
       if not APPLY then replace(p, original) end
       return open.count
     end
@@ -754,6 +708,7 @@ function confirm_proven_files(ctx, root, files, baseline_test)
         if f.fmt_was_clean then roc_fmt(ctx, f.p) end
       end
       local test_summary = roc_test_summary(ctx, root)
+      if test_summary == baseline_test then for f in remaining do note_rewrite(ctx, f.p, f.t, f.turning) end end
       if test_summary ~= baseline_test or not APPLY then for f in remaining do replace(f.p, f.t.text) end end
       if test_summary == baseline_test then for f in remaining do ctx.confirmed[f.p] = f.count end end
       return nil
@@ -853,11 +808,16 @@ end
 -- rewritten, an open one the types didn't settle as unsettled, with a line
 -- naming the kind of type they gave, and a call that stays as left, with
 -- its reason. Nothing is written or compiled.
-function counted_by_types(total, paths, from, judged)
+function counted_by_types(total, paths, from, judged, trees)
   for k = from, #paths do
     local p = paths[k]
     local j = judged[p]
     local cands = j.unreached and {} or j.cands
+    local proven = {}
+    for c in cands do
+      if c.why_left == "" and c.proven then proven["" .. c.node] = c end
+    end
+    if #keys(proven) > 0 then note_rewrite(total.ctx, p, trees[p], proven) end
     if not j.unreached then total.files = total.files + 1 end
     for kind in keys(j.kind_counts) do incr(total.ctx.type_kind_counts, kind, j.kind_counts[kind]) end
     total.candidates = total.candidates + #cands
@@ -900,7 +860,7 @@ function run_all(paths, root, from, trees, use_types, roc, opts?)
   if types_from ~= "" then
     for p in paths do only[real(p)] = true end
   end
-  local ctx = {programs_used = 0, type_kind_counts = {}, types_by_root = {}, roc = roc, types_from = types_from, only = only, rounds = 0, confirms = 0, confirmed = {}}
+  local ctx = {programs_used = 0, type_kind_counts = {}, types_by_root = {}, roc = roc, types_from = types_from, only = only, rounds = 0, confirms = 0, confirmed = {}, rewrites = {}}
   if trees == nil then
     trees = parse_trees(paths)
     ctx.programs_used = 1
@@ -958,7 +918,7 @@ function run_all(paths, root, from, trees, use_types, roc, opts?)
     end
     if j.open_count == 0 or j.unreached then j.all_proven = false end
   end
-  if count_only then return counted_by_types(total, paths, from, judged) end
+  if count_only then return counted_by_types(total, paths, from, judged, trees) end
   local baselines = {}
   for k = from, #paths do
     local p = paths[k]
@@ -1079,6 +1039,12 @@ const EXPECT = {
   Peers = {left = 6, why = "Peers.roc:24: U64.max: peers: `max` is symmetric and both arguments are U64s, so neither is the subject", root = "TypedApp", types = true, confirms = 1, rounds = 0, peers = 0},
   PeersCount = {file = "Peers", count = true, proven = 5, unsettled = 0, left = 6, peers = 0, why = "Peers.roc:24: U64.max: peers: `max` is symmetric", root = "TypedApp", types = true},
   PeerMethods = {undo = true, left = 0, peers = 0, root = "TypedApp", types = true, confirms = 1, rounds = 0},
+  -- What a rewrite leaves for the sweep, reported and not fixed: an import
+  -- it made unused, and a line it pushed past 100 columns; KeptImport is
+  -- MadeUnused's near miss, an import a type still names.
+  MadeUnused = {left = 0, made_unused = 1, made_says = "MadeUnused.roc:4: made_unused_import: `Ref` was used only by the calls the rewrite turned"},
+  KeptImport = {left = 0},
+  MadeLong = {left = 0, made_long = 1, made_says = "MadeLong.roc:11: made_long_line"},
   PeerMethodsCount = {file = "PeerMethods", count = true, proven = 0, unsettled = 0, left = 6, peers = 6, why = "PeerMethods.roc:24: peer_receiver: `.max` is symmetric and its receiver and first argument are both U64s, so neither is the subject: U64.max(...)", root = "TypedApp", types = true},
 }
 
@@ -1122,6 +1088,13 @@ function self_test_plant(name)
     report_check(failures, read(p) == read(PLANTS_DIR .. "/" .. file .. ".roc"), name .. ": counted, and left as it was")
   end
   if has_key(want, "peers") then report_check(failures, got.peers == want.peers, name .. ": " .. got.peers .. " peer_receiver, want " .. want.peers) end
+  if not has_key(want, "stop") then
+    local made = made_by_rewrites(got.ctx)
+    local want_unused = get(want, "made_unused", 0)
+    local want_long = get(want, "made_long", 0)
+    report_check(failures, made.unused == want_unused and made.long == want_long, name .. ": " .. made.unused .. " made_unused_import and " .. made.long .. " made_long_line, want " .. want_unused .. " and " .. want_long .. (#made.lines > 0 and (" (" .. join(made.lines, "; ") .. ")") or ""))
+    if has_key(want, "made_says") then report_check(failures, contains(join(made.lines, "\n"), want.made_says), name .. ": reports " .. want.made_says) end
+  end
   if types_from ~= "" then report_check(failures, got.ctx.programs_used == 1, name .. ": the types read from a file, so roc-ast the one program (" .. got.ctx.programs_used .. ")") end
   local want_unreached = get(want, "unreached", 0)
   report_check(failures, #got.unreached == want_unreached, name .. ": " .. #got.unreached .. " not reached by a root, want " .. want_unreached .. " (" .. join(got.unreached, ", ") .. ")")
@@ -1200,7 +1173,10 @@ else
   local summary = (UNDO and "peers=undo, " or "") .. (APPLY and "" or "dry run: ") .. "files " .. total.files .. ", candidates " .. total.candidates .. ", rewritten " .. total.rewritten .. ", left " .. total.left .. ", peer_receiver " .. total.peers .. ", programs " .. total.ctx.programs_used .. " (checks: " .. total.ctx.confirms .. " confirming proven calls, " .. total.ctx.rounds .. " in trial rounds)"
   if COUNT_ONLY then summary = "count: files " .. total.files .. ", candidates " .. total.candidates .. ", proven " .. total.rewritten .. ", unsettled " .. total.unsettled .. ", left " .. total.left .. ", peer_receiver " .. total.peers .. ", programs " .. total.ctx.programs_used .. " (no trials: the types alone decide)" end
   if total.next > 0 then summary = summary .. ", in files " .. FROM .. " to " .. (total.next - 1) .. " of " .. #paths .. ": a run holds " .. MAX_PROGRAMS .. " programs; go on with from=" .. total.next end
+  local made = made_by_rewrites(total.ctx)
+  summary = summary .. ", made_unused_import " .. made.unused .. ", made_long_line " .. made.long
   local finding_lines = total.lines
+  for l in made.lines do push(finding_lines, l) end
   if USE_TYPES then
     local kinds = {}
     for kind in sort(keys(total.ctx.type_kind_counts)) do push(kinds, kind .. " " .. total.ctx.type_kind_counts[kind]) end
