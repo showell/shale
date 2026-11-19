@@ -251,7 +251,52 @@ TEST(copy_mode_gives_a_copy_its_source_s_bits_and_a_read_only_mount_refuses_it) 
     ran_free(&x);
 }
 
-TEST_PART(run_guards, TEST_CASE(copy_mode_gives_a_copy_its_source_s_bits_and_a_read_only_mount_refuses_it),
+// A link made in the root to a refused program, under an innocent name: the
+// guards read the name of the file it reaches. The link is never run.
+TEST(a_refused_program_by_another_name_is_refused_by_the_one_it_reaches) {
+    static Ran x;
+    guards_ran_with(&x, "", false);
+    FileSystemCPath link_cp;
+    const char *link_c = NULL;
+    EXPECT_EQ(file_system_cstr(&link_cp, os_str_own(ran_at(&x, "root/tool")), &link_c), FILE_SYSTEM_OK);
+    EXPECT_EQ(symlink("/bin/bash", link_c), 0);
+    ran_run(&x, S("function f(a, o) return host(\"run\", a, o) end\nfunction j(a, o) return host(\"job_start\", a, o) end\n"
+                  "print(attempt(f, {\"./tool\", \"-c\", \"exit 0\"}, {timeout_ms = 5000, tail = 1}).error)\n"
+                  "print(attempt(j, {\"./tool\", \"-c\", \"exit 0\"}, {log = \"j.log\"}).error)\n"),
+           ran_budgets());
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("`run` of `tool`, which is `bash`: a shell or an interpreter: Shale is the script; {want = \"tag: why\"} to run it anyway\n"
+                                     "`job_start` of `tool`, which is `bash`: a shell or an interpreter: Shale is the script; {want = \"tag: why\"} to run it anyway\n"));
+    EXPECT_EQ(x.r.host_runs, 0);
+    ran_free(&x);
+}
+
+// The lists' names past the first ones: another shell, an editor that runs
+// commands, a text tool, a wrapper and a grep by another name.
+TEST(each_kind_of_refused_program_is_refused_by_its_other_names) {
+    static Ran x;
+    guards_ran_with(&x, "", false);
+    ran_run(&x, S("function f(a, o) return host(\"run\", a, o) end\n"
+                  "for p in {\"rbash\", \"tclsh\", \"vim\", \"ed\", \"tac\", \"mawk\", \"flock\", \"unshare\", \"script\"} do print(attempt(f, {p}, {timeout_ms = 5000, tail = 1}).error) end\n"
+                  "print(attempt(f, {\"zgrep\"}, {timeout_ms = 5000, tail = 1, want = \"t: x\"}).error)\n"),
+           ran_budgets());
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("`run` of `rbash`: a shell or an interpreter: Shale is the script; {want = \"tag: why\"} to run it anyway\n"
+                                     "`run` of `tclsh`: a shell or an interpreter: Shale is the script; {want = \"tag: why\"} to run it anyway\n"
+                                     "`run` of `vim`: an editor or a debugger, which runs any command it is given: `edit(p, old, new)` changes a file; {want = \"tag: why\"} to run it anyway\n"
+                                     "`run` of `ed`: an editor or a debugger, which runs any command it is given: `edit(p, old, new)` changes a file; {want = \"tag: why\"} to run it anyway\n"
+                                     "`run` of `tac`: a text tool: Shale's builtins and run's own filter and keep do this; {want = \"tag: why\"} to run it anyway\n"
+                                     "`run` of `mawk`: a text tool: Shale's builtins and run's own filter and keep do this; {want = \"tag: why\"} to run it anyway\n"
+                                     "`run` of `flock`: a wrapper that runs another program: run that program, with run's own options; {want = \"tag: why\"} to run it anyway\n"
+                                     "`run` of `unshare`: a wrapper that runs another program: run that program, with run's own options; {want = \"tag: why\"} to run it anyway\n"
+                                     "`run` of `script`: a wrapper that runs another program: run that program, with run's own options; {want = \"tag: why\"} to run it anyway\n"
+                                     "`run` of `zgrep`, even with a want: `grep_tree(place, needle, {regex, nocase, ext, like, context})` searches a tree; `grep(p, lit)`, `re_lines(read(p), pattern)` or `grep_all(p, lit)` one file; `report_run(argv, {grep = {...}})` or `run`'s `re` a program's output\n"));
+    EXPECT_EQ(x.r.host_runs, 0);
+    ran_free(&x);
+}
+
+TEST_PART(run_guards, TEST_CASE(a_refused_program_by_another_name_is_refused_by_the_one_it_reaches),
+          TEST_CASE(each_kind_of_refused_program_is_refused_by_its_other_names), TEST_CASE(copy_mode_gives_a_copy_its_source_s_bits_and_a_read_only_mount_refuses_it),
           TEST_CASE(a_nul_in_an_argument_an_env_a_secrets_name_or_a_secret_is_refused_before_any_guard),
           TEST_CASE(a_git_that_cannot_start_is_said_not_taken_for_a_program_it_does_not_track),
           TEST_CASE(a_program_by_a_secret_s_path_is_the_secrets_guard_s_before_git_is_asked),

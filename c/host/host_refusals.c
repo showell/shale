@@ -13,16 +13,17 @@ SLICE_TYPE(HostRefusedGroups, const HostRefusedGroup);
 
 // Programs `run` refuses without a `want`.
 static const HostRefusedGroup HOST_REFUSED[] = {
-    {"bash sh dash zsh busybox python python3 perl node ", "a shell or an interpreter: Shale is the script"},
-    {"head tail awk gawk cut sort uniq wc cat tr ", "a text tool: Shale's builtins and run's own filter and keep do this"},
-    {"env xargs timeout nohup setsid stdbuf time ", "a wrapper that runs another program: run that program, with run's own options"},
+    {"bash sh dash zsh busybox python python3 perl node rbash ash ksh mksh csh tcsh fish yash nodejs tclsh wish expect ruby irb php lua luajit pypy pypy3 deno bun guile Rscript ", "a shell or an interpreter: Shale is the script"},
+    {"vim vi ex view ed gdb ", "an editor or a debugger, which runs any command it is given: `edit(p, old, new)` changes a file"},
+    {"head tail awk gawk mawk nawk cut sort uniq wc cat tr tac nl rev fold paste ", "a text tool: Shale's builtins and run's own filter and keep do this"},
+    {"env xargs timeout nohup setsid stdbuf time flock script chroot unshare nsenter setpriv prlimit taskset chrt ionice watch strace ltrace sudo su runuser systemd-run numactl tmux screen sg dbus-run-session run-parts start-stop-daemon capsh doas pkexec fakeroot faketime unbuffer parallel firejail ", "a wrapper that runs another program: run that program, with run's own options"},
     {"nice ", "a wrapper that runs another program: run that program, with run's own `nice = N` (0 to 19)"},
 };
 
 // Programs `run` refuses even with a `want`.
 static const HostRefusedGroup HOST_NEVER[] = {
     {"sed gsed ", "`edit(p, old, new)` changes a file and stops the run when `old` isn't there; `re_replace(s, pattern, new)` then `replace(p, s)` for a pattern; `lines(read(p))`, or `shale cookbook:look.shale at=f:N-M`, for a file's lines"},
-    {"grep egrep fgrep ", "`grep_tree(place, needle, {regex, nocase, ext, like, context})` searches a tree; `grep(p, lit)`, `re_lines(read(p), pattern)` or `grep_all(p, lit)` one file; `report_run(argv, {grep = {...}})` or `run`'s `re` a program's output"},
+    {"grep egrep fgrep zgrep zegrep zfgrep rgrep xzgrep xzegrep xzfgrep bzgrep lzgrep rg ", "`grep_tree(place, needle, {regex, nocase, ext, like, context})` searches a tree; `grep(p, lit)`, `re_lines(read(p), pattern)` or `grep_all(p, lit)` one file; `report_run(argv, {grep = {...}})` or `run`'s `re` a program's output"},
 };
 
 // Whether `name` is one of a group's space-ended names.
@@ -65,6 +66,50 @@ static Str host_base_name(Str argv0) {
         b = str_sub(b, 0, dot - 1);
     }
     return b;
+}
+
+// The last part of the file `argv0` names once every link is followed, found
+// as `execve` finds it (spawn_candidates: its path, from `cwd` when
+// relative, else along the inherited PATH), with `host_base_name`'s suffix
+// dropped, into `*out`; false when no candidate is there to run (the spawn
+// says so) or the arena refuses.
+// DRAGON: a refused program by another name. The guards read argv[0]'s
+// name, so `rbash` (a link to bash on Debian), or a link a script made with
+// `ln -s` to a shell, would pass them by a name the lists don't hold.
+// REMEDY: the name is read again from the file it reaches, and a refused
+// program is refused by either name. test_run_guards'
+// a_refused_program_by_another_name_is_refused_by_the_one_it_reaches plants
+// a link.
+static bool host_resolved_name(Host *h, Arena *a, OsStr argv0_os, Str cwd, Str *out) {
+    SpawnCStrs paths;
+    if (!spawn_candidates(a, argv0_os, h->env, &paths)) return false;
+    char *real = ARENA_ARRAY(a, char, PATH_MAX);
+    if (real == NULL) return false;
+    for (size_t i = 0; i < paths.len; i++) {
+        const char *c = at(paths, i); // cstr: spawn_candidates' path
+        Str cand = {c, strlen(c)};
+        Buf full = buf_make(a);
+        if (str_byte(cand, 0) != '/' && (buf_str(&full, cwd) != OK || buf_lit(&full, "/") != OK)) return false;
+        if (buf_str(&full, cand) != OK) return false;
+        const char *f = arena_cstr(a, os_str_own(buf_view(&full)));
+        if (f == NULL) return false;
+        if (access(f, X_OK) != 0 || realpath(f, real) == NULL) continue; // skip: not there to run, as execve passes it
+        *out = host_base_name((Str){real, strlen(real)});
+        return true;
+    }
+    return false;
+}
+
+// The group of `groups` holding `name`, or its name without trailing digits
+// (`python3` as `python`), or NULL.
+static const HostRefusedGroup *host_group_of(HostRefusedGroups groups, Str name) {
+    Str bare = name;
+    while (bare.len > 0 && str_byte(bare, bare.len - 1) >= '0' && str_byte(bare, bare.len - 1) <= '9') bare = str_sub(bare, 0, bare.len - 1);
+    for (size_t g = 0; g < groups.len; g++) {
+        const HostRefusedGroup *grp = &at(groups, g);
+        if (host_group_has(grp, name) || host_group_has(grp, bare)) return grp;
+    }
+    return NULL;
 }
 
 // Whether `argv0`, an absolute path, is inside a mount marked ` tools`.
@@ -114,23 +159,29 @@ static STATUS_MUST_USE Status host_tracked(Host *h, Run *r, Pos pos, Str who, Os
 static STATUS_MUST_USE Status host_refuse(Host *h, Run *r, Pos pos, Str who, OsStr argv0_os, Str cwd, bool has_want) {
     Str argv0 = argv0_os.s;
     Str base = host_base_name(argv0);
-    Str bare = base;
-    while (bare.len > 0 && str_byte(bare, bare.len - 1) >= '0' && str_byte(bare, bare.len - 1) <= '9') bare = str_sub(bare, 0, bare.len - 1);
+    // The name of the file it reaches, every link followed; its own when
+    // none is found.
+    Str reached = base;
+    if (!host_resolved_name(h, r->ctx.values, argv0_os, cwd, &reached)) reached = base;
     HostRefusedGroups never = {HOST_NEVER, sizeof HOST_NEVER / sizeof *HOST_NEVER};
-    for (size_t g = 0; g < never.len; g++) {
-        const HostRefusedGroup *grp = &at(never, g);
-        if (host_group_has(grp, base) || host_group_has(grp, bare)) {
-            return host_fail(r, pos, CLASS_REFUSED, S("`{s}` of `{s}`, even with a want: {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(base), MESSAGE_FROM_HOST(((Str){grp->why, strlen(grp->why)}))));
+    HostRefusedGroups refused = {HOST_REFUSED, sizeof HOST_REFUSED / sizeof *HOST_REFUSED};
+    for (int pass = 0; pass < 2; pass++) {
+        Str name = pass == 0 ? base : reached;
+        if (pass == 1 && str_eq(reached, base)) break;
+        // A program by another name is said as the one it reaches.
+        Str shown = base;
+        if (pass == 1) TRY(paths_cat(&builtin_files_of(r)->path, pos, base, S("`, which is `"), reached, &shown));
+        const HostRefusedGroup *grp = host_group_of(never, name);
+        if (grp != NULL) {
+            return host_fail(r, pos, CLASS_REFUSED, S("`{s}` of `{s}`, even with a want: {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(shown), MESSAGE_FROM_HOST(((Str){grp->why, strlen(grp->why)}))));
+        }
+        if (has_want) continue;
+        grp = host_group_of(refused, name);
+        if (grp != NULL) {
+            return host_fail(r, pos, CLASS_REFUSED, S("`{s}` of `{s}`: {s}; {{want = \"tag: why\"}} to run it anyway"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(shown), MESSAGE_FROM_HOST(((Str){grp->why, strlen(grp->why)}))));
         }
     }
     if (has_want) return OK;
-    HostRefusedGroups refused = {HOST_REFUSED, sizeof HOST_REFUSED / sizeof *HOST_REFUSED};
-    for (size_t g = 0; g < refused.len; g++) {
-        const HostRefusedGroup *grp = &at(refused, g);
-        if (host_group_has(grp, base) || host_group_has(grp, bare)) {
-            return host_fail(r, pos, CLASS_REFUSED, S("`{s}` of `{s}`: {s}; {{want = \"tag: why\"}} to run it anyway"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(base), MESSAGE_FROM_HOST(((Str){grp->why, strlen(grp->why)}))));
-        }
-    }
     if (str_find_byte(argv0, '/') == NULL || host_under_tools_mount(h, argv0)) return OK;
     bool known = false;
     TRY(host_tracked(h, r, pos, who, argv0_os, cwd, &known));
