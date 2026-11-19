@@ -290,6 +290,7 @@ eat
 ebb
 echo
 edge
+edit
 egg
 ego
 elf

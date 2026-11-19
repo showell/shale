@@ -31,6 +31,7 @@ eq      -- Roc's own `is_eq`
 fnv     -- the hash's own name
 fps     -- a unit, frames a second
 gib     -- a unit, gibibytes
+gif     -- the image format's own name
 git     -- the program's own name
 glsl    -- the shader language's own name
 gt      -- Roc's own `is_gt`, and HTML's entity
@@ -45,6 +46,7 @@ id      -- computing's word for an identifier
 img     -- HTML's element
 init    -- a Roc platform's own name for its start
 io      -- computing's word for input and output
+jpeg    -- the image format's own name
 js      -- the language's own name
 json    -- the format's own name
 lerp    -- graphics' own name for a linear blend
@@ -90,6 +92,7 @@ url     -- computing's word for an address
 utc     -- the time standard's own name
 utf8    -- the encoding's own name
 wasm    -- the format's own name
+webp    -- the image format's own name
 xs      -- a list of `x`, Roc's own habit
 ys      -- a list of `y`
 zig     -- the language's own name
