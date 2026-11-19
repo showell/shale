@@ -1272,8 +1272,8 @@ test "host: the gate's fake spawn: the same bytes into both engines, the keep an
     t.host.spawn_fn = Fake.spawnFn;
     t.host.spawn_ctx = &fake;
     try t.expectOutput("print(host(\"run\", {\"anything\"}, {timeout_ms = 10, re = \"a$\", head = 1, tail = 1}).out)", "alpha\n… 1 line left out …\ngamma\n\n");
-    // A want lets a refused name through to the spawn.
-    try t.expectOutput("print(host(\"run\", {\"bash\", \"-c\", \"x\"}, {timeout_ms = 10, tail = 1, want = \"test: a fake\"}).out)", "… 2 lines left out …\ngamma\n\n");
+    // A want lets a refused name through to the spawn. 10 s: its golden runs a real bash, which a busy box held past 10 ms.
+    try t.expectOutput("print(host(\"run\", {\"bash\", \"-c\", \"x\"}, {timeout_ms = 10000, tail = 1, want = \"test: a fake\"}).out)", "… 2 lines left out …\ngamma\n\n");
     // The `programs` budget: at 64, the 65th is a stop naming how to raise it,
     // counted per run (per engine); `budget()` says what is left.
     t.budgets.programs = 64;

@@ -1,1 +1,1 @@
-print(host("run", {"bash", "-c", "x"}, {timeout_ms = 10, tail = 1, want = "test: a fake"}).out)
+print(host("run", {"bash", "-c", "x"}, {timeout_ms = 10000, tail = 1, want = "test: a fake"}).out)
