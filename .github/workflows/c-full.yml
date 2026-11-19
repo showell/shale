@@ -148,6 +148,17 @@ jobs:
           said=$(~/tools/zig-ast/bin/zig-ast --serve < /dev/null)
           case "$said" in "zig-ast serve "*) echo "$said" ;; *) echo "zig-ast said: $said"; exit 1 ;; esac
 
+      # The pinned Zig copied under ~/tools, the `tools` mount, and put first
+      # on PATH: a program runs confined to the mounts (c/host/host_confine.c),
+      # and the Zig unit-deps unpacks in the home is under none, so a recipe's
+      # `zig` could not be run.
+      - name: Zig under the tools mount
+        run: |
+          zdir=$(dirname "$(readlink -f "$(command -v zig)")")
+          mkdir -p ~/tools
+          cp -a "$zdir" ~/tools/
+          echo "$HOME/tools/$(basename "$zdir")" >> "$GITHUB_PATH"
+
       # The runner's own mounts file, made here: the tools, the writable
       # `build` and `scratch` folders the golden tests and recipes use, the
       # checkouts' folder as `repos` (writable: a root inside a read-only
