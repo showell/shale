@@ -42,9 +42,19 @@
 -- `harness`, beside the `build`, `tools` and `scratch` mounts it
 -- was given, and runs the body under it.
 --
+-- **The body runs under umask 002**, the box's, whatever the caller's: the
+-- goldens freeze each file's mode, and a 022 (GitHub's runner, most
+-- machines) makes a folder 755 where the frozen one is 775. The body
+-- inherits it, and so does each case it starts, the harness's own folders
+-- and copies included, so the run and the freeze both have it from here.
+-- Shale has no `umask` call, so a `sh` sets it and `exec`s the body.
+--
 -- budget: programs=10 output_bytes=8000000
 
 const RUN_ARGS = {"bin", "base", "dir", "only", "keep"}
+
+-- The umask every golden run is made under, set before the body starts.
+const UMASK_WRAP = [=[umask 0002 && exec "$@"]=]
 const FREEZE_ARGS = {"bin", "base", "dir", "only", "refreeze"}
 
 -- The mounts the body may want, by the words each gets.
@@ -78,12 +88,12 @@ end
 mkdir("c/out")
 local mounts = "c/out/golden.mounts"
 if exists(mounts) then replace(mounts, text) else create(mounts, text) end
-local argv = {"shale", body}
+local argv = {"sh", "-c", UMASK_WRAP, "golden", "shale", body}
 for n in names do
   local v = arg(n, "")
   if n == "base" and v == "" then v = checkout_base() end
   if v ~= "" then push(argv, n .. "=" .. v) end
 end
-local r = run(argv, {timeout_ms = 14400000, tail = 100000, env = {SHALE_MOUNTS = real(mounts)}, not_re = "^── budgets from the script's header"})
+local r = run(argv, {timeout_ms = 14400000, tail = 100000, env = {SHALE_MOUNTS = real(mounts)}, not_re = "^── budgets from the script's header", want = "golden: the body under the goldens' umask, 002"})
 print(trim(r.out))
 if get(r, "code", -1) ~= 0 then fail("golden: " .. body .. " ended " .. r.ended .. " " .. tostring(get(r, "code", ""))) end

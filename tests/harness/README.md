@@ -88,6 +88,9 @@ Every run is in a fresh folder at one fixed path, with one mounts file
 (`cookbook`, copied from this checkout; `tools`; `scratch`, a folder beside
 the root) and one environment. `SHALE_NOW` pins `now()`, git's dates and
 identity are pinned, there is no user prelude, and HOME and PATH are fixed.
+The umask is 002 whatever the caller's: tests/golden.shale sets it before
+the run or the freeze starts, so the harness's own folders and every case
+inherit it, and a mode frozen on the box holds on a 022 machine.
 The binary is copied to one path, so a message that names it is the same.
 
 A case's frozen output is each step's ending, its stdout and its stderr
