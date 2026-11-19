@@ -83,8 +83,12 @@ static STATUS_MUST_USE Status host_call(void *ctx, Run *r, Pos pos, Str name, Co
     bool procs = false;
     Status ps = host_procs_call(lh, r, pos, name, args, out, &procs);
     if (procs) return ps;
+    // zig-ast runs confined as every program does: its ruleset is made
+    // before the call that may start it.
+    if (host_zig_is_call(name) && !lh->zig->started) TRY(host_confine_open(lh, r, pos, name, &lh->zig->confine_fd));
     bool zig = false;
     Status zs = host_zig_call(h, lh->zig, r, pos, name, args, out, &zig);
+    host_confine_close(&lh->zig->confine_fd);
     if (zig) return zs;
     return run_failf(r, pos, CLASS_HOST, "`{s}`: not on this host", S("`"), name, S("`: not on this host"));
 }

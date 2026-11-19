@@ -17,8 +17,11 @@ use("build:lib.shale")
 -- faults below planted in a copy of c/ (`run_plants`), each caught by its
 -- `aim` tests.
 
-const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 14, ["c/tests/host_builtins/test_run_guards.c"] = 14}
+const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 14, ["c/tests/host_builtins/test_run_guards.c"] = 15}
 const HOST_BUILTINS_PLANTS = {
+  {name = "zig-ast runs unconfined", file = "host_call.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "zig_ast_runs_confined_to_the_mounts",
+   old = "    if (host_zig_is_call(name) && !lh->zig->started) TRY(", new = "    if (0) TRY("},
   {name = "a program runs unconfined", file = "spawn_child.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "a_program_writes_and_reads_only_where_the_mounts_allow",
    old = "    if (c->confine_fd >= 0) {\n        if (prctl(", new = "    if (0) {\n        if (prctl("},

@@ -17,6 +17,12 @@ static void guards_ran_with(Ran *x, const char *mounts, bool undo) { // cstr: a 
     ran_init(x, o);
 }
 
+// What a decoy file under the test's folder holds, or "absent".
+static Str guards_decoy(Ran *x, const char *rel) { // cstr: a test's literal
+    Str got = S("");
+    return ran_file(x, rel, &got) ? got : S("absent");
+}
+
 static const char *const GUARDS_SECRETS_MOUNT = "k = D/root/keys secrets\n";
 
 // A secrets mount outside the root, as one must be for a program to run
@@ -219,6 +225,28 @@ TEST(zig_ast_s_stderr_is_drained_while_it_answers_and_a_hung_one_stops_at_the_de
     EXPECT_EQ(unsetenv("SHALE_ZIG_AST"), 0);
 }
 
+// zig-ast runs confined as `run`'s programs do: a fake one, outside every
+// mount, writes a decoy beside it before it serves, and the decoy is never
+// made.
+TEST(zig_ast_runs_confined_to_the_mounts) {
+    static Ran x;
+    guards_ran_with(&x, NULL, false);
+    ran_put(&x, "root/a.zig", "const a = 1;\n");
+    Str script = ran_d(&x, "#!/bin/sh\necho w > D/decoy.txt 2>/dev/null\necho 'zig-ast serve 1 fake'\nread n\nhead -c \"$n\" >/dev/null\nprintf '9\\nbad\\tdone\\n'\n");
+    Str fake = guards_zig_fake(&x, "fake.sh", "");
+    ran_write(&x, "fake.sh", script);
+    FileSystemCPath fake_cp;
+    const char *fake_c = NULL;
+    EXPECT_EQ(file_system_cstr(&fake_cp, os_str_own(fake), &fake_c), FILE_SYSTEM_OK);
+    EXPECT_EQ(setenv("SHALE_ZIG_AST", fake_c, 1), 0);
+    ran_run(&x, S("host(\"zig_decls\", \"a.zig\")\n"), ran_budgets());
+    EXPECT_EQ(unsetenv("SHALE_ZIG_AST"), 0);
+    EXPECT_EQ(x.ran, STOP);
+    EXPECT_STR(x.r.ctx.stop.message, S("`zig_decls`: zig-ast refused the request: done"));
+    EXPECT_STR(guards_decoy(&x, "decoy.txt"), S("absent"));
+    ran_free(&x);
+}
+
 // The permission bits of the file at `rel`.
 static mode_t guards_mode(Ran *x, const char *rel) { // cstr: a test's literal
     FileSystemCPath cp;
@@ -323,12 +351,6 @@ TEST(an_env_that_picks_the_program_needs_a_want) {
     ran_free(&x);
 }
 
-// What a decoy file under the test's folder holds, or "absent".
-static Str guards_decoy(Ran *x, const char *rel) { // cstr: a test's literal
-    Str got = S("");
-    return ran_file(x, rel, &got) ? got : S("absent");
-}
-
 // A program runs confined to the mounts (host_confine.c): it writes only under
 // the root and the writable mounts, reads nothing outside them and the
 // system's folders, and a link out of the root reaches nothing. Each refusal
@@ -419,4 +441,4 @@ TEST_PART(run_guards, TEST_CASE(a_program_writes_and_reads_only_where_the_mounts
           TEST_CASE(a_log_or_a_secret_at_a_fifo_is_refused_not_waited_on),
           TEST_CASE(stdout_secret_s_file_is_held_to_one_byte_past_its_cap_while_the_program_runs),
           TEST_CASE(job_wait_names_the_script_s_path_never_the_os_path),
-          TEST_CASE(zig_ast_s_stderr_is_drained_while_it_answers_and_a_hung_one_stops_at_the_deadline));
+          TEST_CASE(zig_ast_s_stderr_is_drained_while_it_answers_and_a_hung_one_stops_at_the_deadline), TEST_CASE(zig_ast_runs_confined_to_the_mounts));
