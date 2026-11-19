@@ -265,9 +265,11 @@ static int jobs_read_small(Arena *a, const char *path, Bytes *out) { // cstr: NU
 // of this process's tree with `env`, and reads the job's record once the
 // reaper says it is written by a byte on its fd 3, a pipe. End of file with
 // no byte means the reaper died first (JOBS_NO_RECORD, or JOBS_BAD_RECORD
-// for one there that is no record). A slow reaper is
+// for one there that is no record). The reaper, and so the job it starts,
+// is confined to the Landlock ruleset `confine_fd` (spawn_child.c), or to
+// none at -1, a unit test's. A slow reaper is
 // only slow, so there is no deadline. The record's strings are in `a`.
-static JobsLaunched jobs_launch(Arena *a, OsStr reaper, OsStr record, OsStr log, OsStr cwd, OsStr program, SpawnStrs argv, SpawnStrs env, JobRecord *out) {
+static JobsLaunched jobs_launch(Arena *a, OsStr reaper, OsStr record, OsStr log, OsStr cwd, OsStr program, SpawnStrs argv, SpawnStrs env, int confine_fd, JobRecord *out) {
     size_t n = 7 + argv.len;
     OsStr *all = ARENA_ARRAY(a, OsStr, n);
     if (all == NULL) return JOBS_OUT_OF_MEMORY;
@@ -300,6 +302,7 @@ static JobsLaunched jobs_launch(Arena *a, OsStr reaper, OsStr record, OsStr log,
     child.group = SPAWN_CHILD_INHERIT;
     child.pass_fd = at(pipe_ends, 1);
     child.pass_at = JOBS_STARTED_FD;
+    child.confine_fd = confine_fd;
     child.paths = (SpawnCStrs){exe_room, 1};
     child.argv = zargv;
     child.envp = zenv;

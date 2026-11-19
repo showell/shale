@@ -2,7 +2,7 @@
 // text tool or a wrapper without a `want`, `sed` and `grep` even with one,
 // and a program by a path git does not track (`host_refuse`).
 //
-// Include host.c first.
+// Include host.c and host_confine.c first.
 
 typedef struct {
     const char *names; // cstr: the names, each ended by a space
@@ -158,12 +158,14 @@ static STATUS_MUST_USE Status host_tracked(Host *h, Run *r, Pos pos, Str who, Os
     spec.cwd = os_str_own(cwd);
     spec.env = h->env;
     spec.timeout_ms = 10000;
+    TRY(host_confine_open(h, r, pos, who, &spec.confine_fd));
     SpawnSink sink = {NULL, host_discard};
     SpawnOutcome o;
     SpawnResult got = spawn_run(r->ctx.values, &spec, sink, &o);
+    host_confine_close(&spec.confine_fd);
     if (got == SPAWN_OUT_OF_MEMORY) return run_values_oom(r, pos);
     if (got != SPAWN_OK) {
-        Str why = got == SPAWN_NOT_FOUND ? S("there is no git") : got == SPAWN_NOT_RUNNABLE ? S("git is not runnable") : got == SPAWN_NO_CWD ? S("its folder cannot be entered") : S("the kernel refused a pipe or a fork");
+        Str why = got == SPAWN_NOT_FOUND ? S("there is no git") : got == SPAWN_NOT_RUNNABLE ? S("git is not runnable") : got == SPAWN_NO_CWD ? S("its folder cannot be entered") : got == SPAWN_NOT_CONFINED ? S("the kernel refused its Landlock confinement") : S("the kernel refused a pipe or a fork");
         return host_fail(r, pos, CLASS_REFUSED, S("`{s}` of `{s}`: a program by path is run only when git tracks it, and git could not start to say: {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(path.s), MESSAGE_FROM_HOST(why)));
     }
     *out = o.ended == SPAWN_EXIT && o.code == 0;

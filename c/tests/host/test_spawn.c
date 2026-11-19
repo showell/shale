@@ -16,6 +16,7 @@
 #include "../../host/keep.c"
 #include "../../host/spawn_argv.c"
 #include "../../host/pgroup.c"
+#include "../../host/landlock.c"
 #include "../../host/spawn_child.c"
 #include "../../host/spawn.c"
 

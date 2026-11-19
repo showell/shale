@@ -19,6 +19,10 @@ static void guards_ran_with(Ran *x, const char *mounts, bool undo) { // cstr: a 
 
 static const char *const GUARDS_SECRETS_MOUNT = "k = D/root/keys secrets\n";
 
+// A secrets mount outside the root, as one must be for a program to run
+// beside it (host_confine.c).
+static const char *const GUARDS_SECRETS_APART = "k = D/keys secrets\n";
+
 TEST(a_nul_in_an_argument_an_env_a_secrets_name_or_a_secret_is_refused_before_any_guard) {
     static Ran x;
     guards_ran_with(&x, GUARDS_SECRETS_MOUNT, false);
@@ -72,7 +76,7 @@ TEST(a_program_by_a_secret_s_path_is_the_secrets_guard_s_before_git_is_asked) {
     EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("`run`'s argument 1 names the mount `k`'s folder, which holds secrets: hand one over as `secrets`\n"
                                      "`job_start`'s argument 1 names the mount `k`'s folder, which holds secrets: hand one over as `secrets`\n"
-                                     "`run` of `./nope.sh`: a program by path that git does not track (a script just written?); {want = \"tag: why\"} to run it anyway\n"));
+                                     "`run`: a secrets mount's folder is inside the root or another mount, which a program may read, and Landlock cannot hide a folder below one it allows: move the secrets folder out, and then programs run\n"));
     EXPECT_EQ(x.r.host_runs, 0);
     ran_free(&x);
 }
@@ -128,8 +132,8 @@ TEST(a_log_or_a_secret_at_a_fifo_is_refused_not_waited_on) {
 
 TEST(stdout_secret_s_file_is_held_to_one_byte_past_its_cap_while_the_program_runs) {
     static Ran x;
-    guards_ran_with(&x, GUARDS_SECRETS_MOUNT, false);
-    ran_put(&x, "root/keys/tok", "s3cret\n");
+    guards_ran_with(&x, GUARDS_SECRETS_APART, false);
+    ran_put(&x, "keys/tok", "s3cret\n");
     // About 20 MB to stdout: the kernel stops the file at 65537 bytes.
     ran_run(&x, S("host(\"run\", {\"seq\", \"1\", \"3000000\"}, {timeout_ms = 20000, stdout_secret = \"k:big\"})\n"), ran_budgets());
     EXPECT_EQ(x.ran, STOP);
@@ -137,9 +141,9 @@ TEST(stdout_secret_s_file_is_held_to_one_byte_past_its_cap_while_the_program_run
     EXPECT_STR(x.r.ctx.stop.message, S("`run`: `seq` printed 65537 bytes, past the 65536 `secrets` reads: nothing is stored in k:big"));
     // Nothing stored, and no temporary file left beside it.
     Str got = S("");
-    EXPECT(!ran_file(&x, "root/keys/big", &got));
+    EXPECT(!ran_file(&x, "keys/big", &got));
     char tmp[64];
-    int n = snprintf(tmp, sizeof tmp, "root/keys/.big.%d.shale-tmp", (int)getpid());
+    int n = snprintf(tmp, sizeof tmp, "keys/.big.%d.shale-tmp", (int)getpid());
     EXPECT(n > 0);
     EXPECT(!ran_file(&x, tmp, &got));
     ran_free(&x);

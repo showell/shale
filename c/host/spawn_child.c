@@ -4,8 +4,8 @@
 // is made by `spawn_exec_child` from a `SpawnChild` its parent built before
 // the fork, so the rules of that stretch are kept in one place.
 //
-// Include spawn_argv.c first. The including file defines _GNU_SOURCE before
-// its first include, for syscall.
+// Include spawn_argv.c and landlock.c first. The including file defines
+// _GNU_SOURCE before its first include, for syscall.
 
 #include <errno.h>
 #include <fcntl.h>
@@ -24,6 +24,10 @@ enum { SPAWN_NICE_UNSET = -1 };
 // A failure's word on the report pipe for a `chdir` that failed: this plus
 // its errno, so it reads apart from an exec's errno.
 enum { SPAWN_CHILD_NO_CWD = 1000 };
+
+// A failure's word for a Landlock confinement the kernel refused: this plus
+// its errno.
+enum { SPAWN_CHILD_NOT_CONFINED = 2000 };
 
 // The process group the child is in once it runs.
 typedef enum {
@@ -66,6 +70,10 @@ typedef struct {
     SpawnCStrs paths;
     char **argv;
     char **envp;
+    // A Landlock ruleset the child restricts itself to just before its exec
+    // (landlock.c, built by the host's host_confine.c), or -1 for none: a
+    // unit test of the spawn alone. Every program the host starts has one.
+    int confine_fd;
     // A close-on-exec pipe's write end, where a failure before the exec
     // writes its word (an errno, or SPAWN_CHILD_NO_CWD plus one), so the
     // parent reads an end of file at the exec and a word otherwise; -1 for
@@ -84,6 +92,7 @@ static void spawn_child_default(SpawnChild *c) {
     c->file_max = SPAWN_UNLIMITED;
     c->nice = SPAWN_NICE_UNSET;
     c->cwd = NULL;
+    c->confine_fd = -1;
     c->report_w = -1;
 }
 
@@ -140,6 +149,23 @@ static void spawn_exec_child(const SpawnChild *c) {
     sigset_t none;
     sigemptyset(&none);
     sigprocmask(SIG_SETMASK, &none, NULL);
+    // DRAGON: the file system's boundaries. A program holds every file power
+    // of the user's, so the mounts and their ` ro` would bind Shale's own
+    // builtins alone: `cp` could write a read-only mount, `cat` read any
+    // file.
+    // REMEDY: the child restricts itself to the host's Landlock ruleset
+    // (the mounts, the root and the system's folders) before its exec, so
+    // `shale` itself is never confined and the program and all it starts
+    // are, for good. It comes before the descriptors are placed, whose
+    // close_range would close the ruleset, and what the child opens after it
+    // (/dev/null) a rule allows. No new privileges first, which the kernel
+    // requires of an unprivileged restrict (a setuid program then runs as
+    // the user). A refusal exits 127 with its word, never an exec
+    // unconfined; test_run_guards' landlock tests plant each escape.
+    if (c->confine_fd >= 0) {
+        if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) spawn_child_fail(c, SPAWN_CHILD_NOT_CONFINED + (uint32_t)errno, 127);
+        if (syscall(LANDLOCK_SYS_RESTRICT_SELF, c->confine_fd, (uint32_t)0) != 0) spawn_child_fail(c, SPAWN_CHILD_NOT_CONFINED + (uint32_t)errno, 127);
+    }
     if (c->pass_fd >= 0) {
         spawn_child_place(c->pass_fd, c->pass_at);
         syscall(SYS_close_range, (unsigned)c->pass_at + 1, ~0u, 0u);
