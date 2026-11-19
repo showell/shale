@@ -247,6 +247,95 @@ TEST(zig_ast_runs_confined_to_the_mounts) {
     ran_free(&x);
 }
 
+// A bare repository at the OS path `path`, made by git run unconfined, as no
+// confined program could make it outside every mount.
+static void guards_git_bare(Ran *x, Str path) {
+    OsStr argv[5] = {os_str_own(S("git")), os_str_own(S("init")), os_str_own(S("-q")), os_str_own(S("--bare")), os_str_own(path)};
+    SpawnSpec s;
+    spawn_spec_default(&s);
+    s.argv = (SpawnStrs){argv, 5};
+    s.timeout_ms = 10000;
+    SpawnSink sink = {NULL, host_discard};
+    SpawnOutcome o;
+    if (spawn_run(&x->host, &s, sink, &o) != SPAWN_OK || o.ended != SPAWN_EXIT || o.code != 0) abort();
+}
+
+// ssh reads its known hosts and its configuration from a decoy home, and no
+// key file there; gh's configuration stays closed; every program gets its
+// caches in the `build` mount's cache folder, unless the script's `env`
+// says otherwise.
+TEST(ssh_reads_its_known_hosts_and_no_key_and_the_caches_are_the_build_mount_s) {
+    static Ran x;
+    guards_ran_with(&x, "build = D/b\n", false);
+    ran_put(&x, "home/.ssh/known_hosts", "known\n");
+    ran_put(&x, "home/.ssh/config", "config\n");
+    ran_put(&x, "home/.ssh/id_ed25519", "key\n");
+    ran_put(&x, "home/.config/gh/hosts.yml", "token\n");
+    ran_put(&x, "b/.keep", "");
+    static OsStr home_env[1];
+    SLICE_TYPE(EnvRoom, OsStr);
+    EnvRoom room = {home_env, 1};
+    at(room, 0) = os_str_own(ran_d(&x, "HOME=D/home"));
+    x.lh.env = (SpawnStrs){home_env, 1};
+    // The home's path comes from a file: the source holds capital Ds.
+    ran_write(&x, "root/home.txt", ran_at(&x, "home"));
+    ran_run(&x, S("function c(a) return host(\"run\", a, {timeout_ms = 5000, tail = 3}).code end\n"
+                  "local h = read(\"home.txt\")\n"
+                  "print(c({\"cp\", h .. \"/.ssh/known_hosts\", \"kh\"}))\n"
+                  "print(c({\"cp\", h .. \"/.ssh/config\", \"cf\"}))\n"
+                  "print(c({\"cp\", h .. \"/.ssh/id_ed25519\", \"key\"}))\n"
+                  "print(c({\"cp\", h .. \"/.config/gh/hosts.yml\", \"gh\"}))\n"
+                  "print(host(\"run\", {\"printenv\", \"XDG_CACHE_HOME\", \"ZIG_GLOBAL_CACHE_DIR\"}, {timeout_ms = 5000, tail = 3}).out)\n"
+                  "print(host(\"run\", {\"printenv\", \"XDG_CACHE_HOME\"}, {timeout_ms = 5000, tail = 3, env = {XDG_CACHE_HOME = \"mine\"}}).out)\n"),
+           ran_budgets());
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), ran_d(&x, "0\n0\n1\n1\nD/b/cache\nD/b/cache\n\nmine\n\n"));
+    EXPECT_STR(guards_decoy(&x, "root/kh"), S("known\n"));
+    EXPECT_STR(guards_decoy(&x, "root/key"), S("absent"));
+    EXPECT_STR(guards_decoy(&x, "root/gh"), S("absent"));
+    ran_free(&x);
+}
+
+// `unconfined` runs a git push past the mounts, to a bare repository no
+// mount names, and nothing else: another program, a `-c`, a
+// `--receive-pack` and an `env` that could name a program git starts are
+// each refused, and the record says the push was unconfined.
+TEST(an_unconfined_run_is_a_git_push_alone) {
+    static Ran x;
+    guards_ran_with(&x, "", false);
+    guards_git_bare(&x, ran_at(&x, "outside.git"));
+    ran_write(&x, "root/where.txt", ran_at(&x, "outside.git"));
+    ran_run(&x, S("function c(a, o) return host(\"run\", a, o) end\n"
+                  "function g(args)\n  local argv = {\"git\", \"-c\", \"user.name=t\", \"-c\", \"user.email=t@t\"}\n  for a in args do push(argv, a) end\n  return c(argv, {timeout_ms = 10000, tail = 3}).code\nend\n"
+                  "local out = read(\"where.txt\")\n"
+                  "print(g({\"init\", \"-q\", \"-b\", \"master\"}), g({\"add\", \"where.txt\"}), g({\"commit\", \"-q\", \"-m\", \"m\"}))\n"
+                  "local o = {timeout_ms = 10000, tail = 3}\n"
+                  "print(c({\"git\", \"push\", \"-q\", out, \"master\"}, o).code ~= 0)\n"
+                  "o.unconfined = \"t: past the mounts\"\n"
+                  "print(attempt(c, {\"cp\", \"where.txt\", \"x\"}, o).error)\n"
+                  "print(attempt(c, {\"git\", \"-c\", \"core.sshCommand=x\", \"push\", out, \"master\"}, o).error)\n"
+                  "print(attempt(c, {\"git\", \"push\", \"--receive-pack=x\", out, \"master\"}, o).error)\n"
+                  "print(attempt(c, {\"git\", \"push\", out, \"master\"}, {timeout_ms = 10000, tail = 3, unconfined = \"t: x\", env = {GIT_SSH_COMMAND = \"x\"}}).error)\n"
+                  "print(c({\"git\", \"push\", \"-q\", out, \"master\"}, o).code)\n"),
+           ran_budgets());
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("0\t0\t0\ntrue\n"
+                                     "`run`'s `unconfined` (t: past the mounts) is for a `git push` alone, which needs ssh's key files; every other program runs confined to the mounts\n"
+                                     "`run`'s `unconfined` push takes no `-c` but `color.ui=never`: a setting could name a program git starts outside the confinement\n"
+                                     "`run`'s `unconfined` push takes no `--receive-pack` or `--exec`: each names a program it would start outside the confinement\n"
+                                     "`run`'s `unconfined` push takes no `env` but GIT_TERMINAL_PROMPT, not GIT_SSH_COMMAND: a variable could name a program git starts\n"
+                                     "0\n"));
+    Str ref = S("");
+    EXPECT(ran_file(&x, "outside.git/refs/heads/master", &ref));
+    EXPECT(x.lh.records.len > 0);
+    Buf want = buf_make(&x.host);
+    EXPECT_EQ(buf_lit(&want, "run git push -q "), OK);
+    EXPECT_EQ(buf_str(&want, ran_at(&x, "outside.git")), OK);
+    EXPECT_EQ(buf_lit(&want, " master (unconfined: t: past the mounts) -> exit 0"), OK);
+    EXPECT(str_starts_with(at(x.lh.records, x.lh.records.len - 1), buf_view(&want)));
+    ran_free(&x);
+}
+
 // The permission bits of the file at `rel`.
 static mode_t guards_mode(Ran *x, const char *rel) { // cstr: a test's literal
     FileSystemCPath cp;
@@ -445,4 +534,5 @@ TEST_PART(run_guards, TEST_CASE(a_program_writes_and_reads_only_where_the_mounts
           TEST_CASE(a_log_or_a_secret_at_a_fifo_is_refused_not_waited_on),
           TEST_CASE(stdout_secret_s_file_is_held_to_one_byte_past_its_cap_while_the_program_runs),
           TEST_CASE(job_wait_names_the_script_s_path_never_the_os_path),
-          TEST_CASE(zig_ast_s_stderr_is_drained_while_it_answers_and_a_hung_one_stops_at_the_deadline), TEST_CASE(zig_ast_runs_confined_to_the_mounts));
+          TEST_CASE(zig_ast_s_stderr_is_drained_while_it_answers_and_a_hung_one_stops_at_the_deadline), TEST_CASE(zig_ast_runs_confined_to_the_mounts),
+          TEST_CASE(ssh_reads_its_known_hosts_and_no_key_and_the_caches_are_the_build_mount_s), TEST_CASE(an_unconfined_run_is_a_git_push_alone));

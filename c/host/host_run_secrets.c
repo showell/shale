@@ -280,29 +280,31 @@ static STATUS_MUST_USE Status host_env_pair(Run *r, Pos pos, Str k, Str v, OsStr
 }
 
 // The environment a program gets, `run`'s or a job's: the inherited one,
-// less what `env` and `secrets` set and its TMPDIR, then `env`'s, then the
-// secrets' (read from their files), then TMPDIR, the run's own temporary
-// folder (host_confine.c), unless `env` sets it. `shown` gets ` K=V` and
-// ` K=<secret path>` for the record.
+// less what `env` and `secrets` set and what the host sets, then `env`'s,
+// then the secrets' (read from their files), then what the host sets
+// (host_confine_sets: TMPDIR and the caches), each unless `env` sets it.
+// `shown` gets ` K=V` and ` K=<secret path>` for the record.
 static STATUS_MUST_USE Status host_run_env(Host *h, Run *r, Pos pos, const HostEnvOpt *envs, const HostEnvOpt *secret_paths, Buf *shown, SpawnStrs *env_out, HostSecrets *secrets_out) {
     Arena *a = r->ctx.values;
-    TRY(host_confine_tmp(h, r, pos, S("run")));
+    HostConfineSet set_room[HOST_CONFINE_SETS];
+    HostConfineSets sets = {set_room, HOST_CONFINE_SETS};
+    TRY(host_confine_sets(h, r, pos, S("run"), sets));
     size_t extra = envs->names.len;
     size_t nsecrets = secret_paths->names.len;
-    OsStr *env = ARENA_ARRAY(a, OsStr, h->env.len + extra + nsecrets + 1);
+    OsStr *env = ARENA_ARRAY(a, OsStr, h->env.len + extra + nsecrets + HOST_CONFINE_SETS);
     if (env == NULL) return run_values_oom(r, pos);
     HostSecret *secrets = ARENA_ARRAY(a, HostSecret, nsecrets);
     if (secrets == NULL && nsecrets > 0) return run_values_oom(r, pos);
     SLICE_TYPE(EnvRoom, OsStr);
     SLICE_TYPE(SecretRoom, HostSecret);
-    EnvRoom room = {env, h->env.len + extra + nsecrets + 1};
-    bool tmp_given = false;
-    for (size_t j = 0; j < extra; j++) tmp_given = tmp_given || str_eq(at(envs->names, j), S("TMPDIR"));
+    EnvRoom room = {env, h->env.len + extra + nsecrets + HOST_CONFINE_SETS};
     SecretRoom sroom = {secrets, nsecrets};
     size_t n = 0;
     for (size_t i = 0; i < h->env.len; i++) {
         OsStr e = at(h->env, i);
-        if (!host_env_overridden(e.s, envs, secret_paths) && !str_starts_with(e.s, S("TMPDIR="))) at(room, n++) = e;
+        bool host_set = false;
+        for (size_t k = 0; k < sets.len; k++) host_set = host_set || (str_starts_with(e.s, at(sets, k).name) && e.s.len > at(sets, k).name.len && str_byte(e.s, at(sets, k).name.len) == '=');
+        if (!host_env_overridden(e.s, envs, secret_paths) && !host_set) at(room, n++) = e;
     }
     for (size_t j = 0; j < extra; j++) {
         Str k = at(envs->names, j);
@@ -322,8 +324,11 @@ static STATUS_MUST_USE Status host_run_env(Host *h, Run *r, Pos pos, const HostE
         at(sroom, j).value = v;
         if (buf_byte(shown, ' ') != OK || buf_str(shown, k) != OK || buf_lit(shown, "=<secret ") != OK || buf_str(shown, given) != OK || buf_byte(shown, '>') != OK) return run_values_oom(r, pos);
     }
-    if (!tmp_given) {
-        TRY(host_env_pair(r, pos, S("TMPDIR"), h->tmp, &at(room, n)));
+    for (size_t k = 0; k < sets.len; k++) {
+        bool given = false;
+        for (size_t j = 0; j < extra; j++) given = given || str_eq(at(envs->names, j), at(sets, k).name);
+        if (given) continue; // skip: the script's own `env` sets it
+        TRY(host_env_pair(r, pos, at(sets, k).name, at(sets, k).value, &at(room, n)));
         n++;
     }
     env_out->ptr = env;

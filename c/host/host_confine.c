@@ -17,7 +17,8 @@
 // - **the run's own temporary folder**, made below TMPDIR (else /tmp) at
 //   its first program and handed to every program as TMPDIR, written; it
 //   is removed when the run ends, unless the run started a job, which may
-//   still use it.
+//   still use it. The caches go to the `build` mount's cache folder
+//   (host_confine_sets).
 // Nothing else: a secrets mount's folder is in no rule, `/tmp` itself is
 // in none, and a `want` widens none of it. A program refused by it gets EACCES
 // ("Permission denied") from the call it made, which it says in its own
@@ -48,8 +49,16 @@ static const char *const HOST_CONFINE_RANDOM[] = {"/dev/random", "/dev/urandom"}
 // configuration, its default excludes and attributes, which git refuses to
 // run without reading when they are there (a file it cannot read is a fatal
 // error to it, not a missing one: `git add` stopped on
-// ~/.config/git/ignore in the box's census).
-static const char *const HOST_CONFINE_HOME_FILES[] = {".gitconfig", ".config/git/config", ".config/git/ignore", ".config/git/attributes"};
+// ~/.config/git/ignore in the box's census); and ssh's known hosts and its
+// configuration, so a push over ssh can check the host and authenticate
+// through the agent (SSH_AUTH_SOCK, a socket, which Landlock's file rules
+// do not reach). No key file is in it: a key reaches ssh only through the
+// agent, or through an unconfined push (`run`'s `unconfined`, host_run.c).
+static const char *const HOST_CONFINE_HOME_FILES[] = {".gitconfig", ".config/git/config", ".config/git/ignore", ".config/git/attributes", ".ssh/known_hosts", ".ssh/config"};
+
+// git's own files below XDG_CONFIG_HOME, where git reads them in place of
+// ~/.config/git when it is set.
+static const char *const HOST_CONFINE_XDG_GIT_FILES[] = {"git/config", "git/ignore", "git/attributes"};
 
 SLICE_TYPE(HostConfineNames, const char *const);
 
@@ -134,9 +143,23 @@ static STATUS_MUST_USE Status host_confine_mounts(Host *h, Run *r, Pos pos, Str 
     return OK;
 }
 
+// Allows `rights` on each of `names` below the folder `dir`.
+static STATUS_MUST_USE Status host_confine_allow_below(Run *r, Pos pos, Str who, int fd, Str dir, HostConfineNames names, uint64_t rights, uint64_t handled) {
+    PathRun *pr = &builtin_files_of(r)->path;
+    for (size_t i = 0; i < names.len; i++) {
+        Str rel = {at(names, i), strlen(at(names, i))};
+        Str p = S("");
+        TRY(paths_cat(pr, pos, dir, S("/"), rel, &p));
+        TRY(host_confine_allow(r, pos, who, fd, p, rights, handled, rel));
+    }
+    return OK;
+}
+
 // The files a child `shale` and git read from the user's home: the mounts
 // file this run read, the user prelude (SHALE_PRELUDE's, else the home's),
-// and HOST_CONFINE_HOME_FILES. None is a folder, so none allows a listing.
+// git's global configuration where GIT_CONFIG_GLOBAL or XDG_CONFIG_HOME
+// moves it, and HOST_CONFINE_HOME_FILES. None is a folder, so none allows
+// a listing.
 static STATUS_MUST_USE Status host_confine_home(Host *h, Run *r, Pos pos, Str who, int fd, uint64_t handled) {
     PathRun *pr = &builtin_files_of(r)->path;
     uint64_t file_read = LANDLOCK_READ_FILE;
@@ -150,15 +173,18 @@ static STATUS_MUST_USE Status host_confine_home(Host *h, Run *r, Pos pos, Str wh
         TRY(paths_cat(pr, pos, home, S("/.config/shale/prelude.shale"), S(""), &prelude));
         TRY(host_confine_allow(r, pos, who, fd, prelude, file_read, handled, S("the user prelude")));
     }
+    // git's global configuration where GIT_CONFIG_GLOBAL moves it (the
+    // golden harness's pinned identity does), as ~/.gitconfig is read.
+    Str global = S("");
+    if (host_confine_env(h->env, S("GIT_CONFIG_GLOBAL"), &global) && global.len > 0 && str_byte(global, 0) == '/') TRY(host_confine_allow(r, pos, who, fd, global, file_read, handled, S("GIT_CONFIG_GLOBAL's file")));
+    Str xdg = S("");
+    if (host_confine_env(h->env, S("XDG_CONFIG_HOME"), &xdg) && xdg.len > 0 && str_byte(xdg, 0) == '/') {
+        HostConfineNames git = {HOST_CONFINE_XDG_GIT_FILES, sizeof HOST_CONFINE_XDG_GIT_FILES / sizeof *HOST_CONFINE_XDG_GIT_FILES};
+        TRY(host_confine_allow_below(r, pos, who, fd, xdg, git, file_read, handled));
+    }
     if (!has_home) return OK;
     HostConfineNames files = {HOST_CONFINE_HOME_FILES, sizeof HOST_CONFINE_HOME_FILES / sizeof *HOST_CONFINE_HOME_FILES};
-    for (size_t i = 0; i < files.len; i++) {
-        Str rel = {at(files, i), strlen(at(files, i))};
-        Str p = S("");
-        TRY(paths_cat(pr, pos, home, S("/"), rel, &p));
-        TRY(host_confine_allow(r, pos, who, fd, p, file_read, handled, rel));
-    }
-    return OK;
+    return host_confine_allow_below(r, pos, who, fd, home, files, file_read, handled);
 }
 
 // The run's own temporary folder, made once, at the first call: below this
@@ -184,6 +210,48 @@ static STATUS_MUST_USE Status host_confine_tmp(Host *h, Run *r, Pos pos, Str who
 static void host_confine_tmp_remove(Host *h, Arena *a) {
     if (h->tmp.len > 0 && h->started.len == 0) (void)file_system_delete_tree(a, os_str_own(h->tmp)); // ignored: a folder below the temporary root, cleaned by the system's own sweep if left
     h->tmp = S("");
+}
+
+// What the host sets in every program's environment, unless the script's
+// `env` sets it: TMPDIR, the run's own temporary folder, and the caches a
+// toolchain would put below the home, which no rule allows: XDG_CACHE_HOME
+// (roc's, Go's, any XDG program's) and ZIG_GLOBAL_CACHE_DIR (Zig's), both
+// `<the build mount>/cache`, or `<the run's temporary folder>/cache` when no
+// writable mount is named `build`, a cache that goes with the run.
+typedef struct {
+    Str name;
+    Str value;
+} HostConfineSet;
+
+enum { HOST_CONFINE_SETS = 3 };
+
+SLICE_TYPE(HostConfineSets, HostConfineSet);
+
+// The cache folder, made if it is not there, into `*out`.
+static STATUS_MUST_USE Status host_confine_cache(Host *h, Run *r, Pos pos, Str who, Str *out) {
+    PathRun *pr = &builtin_files_of(r)->path;
+    Str base = h->tmp;
+    for (size_t k = 0; k < h->paths.mounts.len; k++) {
+        const Mount *m = &at(h->paths.mounts, k);
+        if (str_eq(m->name, S("build")) && m->access == MOUNT_READ_WRITE) base = paths_run_dir_of(&h->paths, pr, m);
+    }
+    TRY(paths_cat(pr, pos, base, S("/cache"), S(""), out));
+    char *c = arena_cstr(r->ctx.values, os_str_own(*out));
+    if (c == NULL) return run_values_oom(r, pos);
+    if (mkdir(c, 0777) != 0 && errno != EEXIST) return host_fail(r, pos, CLASS_HOST, S("`{s}`: the programs' cache folder (the `build` mount's cache, or the run's temporary folder's) could not be made: {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_HOST(file_system_err_name(file_system_err_of(errno)))));
+    return OK;
+}
+
+// The names and values the host sets, into `sets` (HOST_CONFINE_SETS of
+// them), the run's temporary folder made first.
+static STATUS_MUST_USE Status host_confine_sets(Host *h, Run *r, Pos pos, Str who, HostConfineSets sets) {
+    TRY(host_confine_tmp(h, r, pos, who));
+    Str cache = S("");
+    TRY(host_confine_cache(h, r, pos, who, &cache));
+    at(sets, 0) = (HostConfineSet){S("TMPDIR"), h->tmp};
+    at(sets, 1) = (HostConfineSet){S("XDG_CACHE_HOME"), cache};
+    at(sets, 2) = (HostConfineSet){S("ZIG_GLOBAL_CACHE_DIR"), cache};
+    return OK;
 }
 
 // The rules into the ruleset `fd`, made for ABI `abi`.

@@ -247,7 +247,18 @@ has none of it):
   temporary folder as TMPDIR (below the inherited TMPDIR, else `/tmp`),
   which it may write and which goes when the run ends (unless the run
   started a job); `/tmp` itself and the home's caches (`~/.cache`) are
-  outside it. A `want` never widens it. A program it
+  outside it, so every program gets `XDG_CACHE_HOME` and
+  `ZIG_GLOBAL_CACHE_DIR` set to `build:cache` (the `build` mount's `cache`
+  folder, or the run's temporary folder's when no writable mount is named
+  `build`), and each of the three unless the script's `env` sets it. ssh
+  reads `~/.ssh/known_hosts` and `~/.ssh/config`, and no key file: a push
+  over ssh authenticates through the agent (`SSH_AUTH_SOCK` is passed on),
+  or, past the rules, `git_push(repo, {unconfined = "tag: why"})` (`run`'s
+  `unconfined`, for a `git push` alone, without a `-c`, `--receive-pack`,
+  `--exec` or `env` of the script's, its hooks off, recorded as
+  `(unconfined: ...)`). gh's configuration is closed too: hand it
+  `GH_TOKEN` through `secrets` and an empty `GH_CONFIG_DIR`, as
+  `cookbook/build_on_github.shale` does. A `want` never widens it. A program it
   refuses gets EACCES from the call it made, so a script sees the
   program's own words, `Permission denied`, and its exit code: a refusal
   is a gap to name in host_confine.c on purpose. A kernel without Landlock

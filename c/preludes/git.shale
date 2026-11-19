@@ -58,6 +58,7 @@ function git_call(repo, args, opts, reading, stdin)
   for a in args do push(argv, a) end
   local o = {timeout_ms = 60000, env = {GIT_TERMINAL_PROMPT = "0"}}
   if opts ~= nil and has_key(opts, "timeout_ms") then o.timeout_ms = opts.timeout_ms end
+  if opts ~= nil and has_key(opts, "unconfined") then o.unconfined = opts.unconfined end
   if reading then o.whole = 16777216 else
     o.head = 10
     o.tail = 10
@@ -242,8 +243,14 @@ end
 -- **A bare push refuses a branch whose upstream has another name** (one
 -- made from origin/master tracks master) **or that has none**, naming the
 -- call that pushes it, so it never lands on master unasked.
+-- **`{unconfined = "tag: why"}`** runs the push itself outside the
+-- Landlock confinement (`run`'s `unconfined`), for an ssh push that needs
+-- the key files no rule allows; a push through ssh-agent needs none.
 function git_push(repo, opts?)
-  git_opts("git_push", opts, {"remote", "branch", "tag", "timeout_ms"})
+  git_opts("git_push", opts, {"remote", "branch", "tag", "timeout_ms", "unconfined"})
+  -- The reads that find the upstream run confined, as every git call does.
+  local read_opts = opts
+  if opts ~= nil and has_key(opts, "unconfined") then read_opts = {timeout_ms = get(opts, "timeout_ms", 60000)} end
   local args = {"push", "-q"}
   if opts ~= nil and has_key(opts, "tag") then
     if has_key(opts, "branch") then fail("`git_push` takes a `branch` or a `tag`, not both") end
@@ -254,14 +261,14 @@ function git_push(repo, opts?)
     push(args, git_value("git_push", "remote", get(opts, "remote", "origin")))
     push(args, git_value("git_push", "branch", opts.branch))
   else
-    local name = trim(git_call(repo, {"rev-parse", "--abbrev-ref", "HEAD"}, opts, true, nil).out)
+    local name = trim(git_call(repo, {"rev-parse", "--abbrev-ref", "HEAD"}, read_opts, true, nil).out)
     if name == "HEAD" then fail("`git_push`: HEAD is detached, on no branch; `git_push(repo, {branch = \"<name>\"})` names one") end
     local ref = "refs/heads/" .. name
     local remote = nil
     if opts ~= nil and has_key(opts, "remote") then
       remote = git_value("git_push", "remote", opts.remote)
     else
-      local up = split(trim(git_call(repo, {"for-each-ref", "--format=%(upstream:remotename)%09%(upstream:remoteref)", ref}, opts, true, nil).out), "\t")
+      local up = split(trim(git_call(repo, {"for-each-ref", "--format=%(upstream:remotename)%09%(upstream:remoteref)", ref}, read_opts, true, nil).out), "\t")
       local again = "`git_push(repo, {branch = \"" .. name .. "\"})` pushes it to origin's " .. name .. " and makes that its upstream"
       if #up < 2 or up[1] == "" then fail("`git_push`: the branch " .. name .. " has no upstream; " .. again) end
       if up[2] ~= ref then fail("`git_push`: the branch " .. name .. " tracks " .. up[1] .. "'s " .. sub(up[2], #"refs/heads/" + 1) .. ", another name, and a bare push goes only to its own; " .. again) end

@@ -61,6 +61,9 @@ typedef struct {
     Value stage;
     // The program's niceness, 0 to 19; HOST_UNSET leaves `shale`'s.
     uint64_t nice;
+    // `unconfined = "tag: why"`: a `git push` run outside the Landlock
+    // confinement (host_run_unconfined); nil for none.
+    Value unconfined;
     // Decided from the keep options once they are read: then `head` and
     // `tail` are 0 unset, and `width` KEEP_WIDTH_DEFAULT.
     HostKeepMode keep;
@@ -124,6 +127,7 @@ static STATUS_MUST_USE Status host_read_opts(Run *r, Pos pos, const Value *v, Ru
     value_nil(&o->want);
     value_nil(&o->stdout_secret);
     value_nil(&o->stage);
+    value_nil(&o->unconfined);
     if (v->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`run`'s options are a map, not {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(value_type_name(v))));
     Table *m = v->as.table;
     if (m->kind == TABLE_LIST) return host_fail_plain(r, pos, CLASS_TYPE, S("`run`'s options are a map, `{{timeout_ms = ..., tail = ...}}`, not a list"));
@@ -172,11 +176,13 @@ static STATUS_MUST_USE Status host_read_opts(Run *r, Pos pos, const Value *v, Ru
             TRY(host_int_opt(r, pos, who, k, &x, &o->cpu_budget_ms));
         } else if (str_eq(k, S("stage"))) {
             TRY(host_str_value_opt(r, pos, who, k, &x, &o->stage));
+        } else if (str_eq(k, S("unconfined"))) {
+            TRY(host_str_value_opt(r, pos, who, k, &x, &o->unconfined));
         } else if (str_eq(k, S("nice"))) {
             TRY(host_int_opt(r, pos, who, k, &x, &o->nice));
             if (o->nice > 19) return host_fail(r, pos, CLASS_ARGUMENT, S("`run`'s `nice` is 0 to 19 (19 the lowest priority), not {d}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(run_num(r, x.as.integer))));
         } else {
-            return host_fail(r, pos, CLASS_ARGUMENT, S("`run` takes timeout_ms, re, not_re, nocase, before, after, head, tail, width, whole, log, cwd, stdin, env, secrets, want, stdout_secret, secret_replace, cpu_budget_ms, stage and nice, not `{s}`"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(k)));
+            return host_fail(r, pos, CLASS_ARGUMENT, S("`run` takes timeout_ms, re, not_re, nocase, before, after, head, tail, width, whole, log, cwd, stdin, env, secrets, want, stdout_secret, secret_replace, cpu_budget_ms, stage, nice and unconfined, not `{s}`"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(k)));
         }
     }
     if (o->timeout_ms == HOST_UNSET) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run` needs `timeout_ms`: how long the program may take is the script's to say"));
@@ -321,7 +327,8 @@ static STATUS_MUST_USE Status host_run_answer(Run *r, Pos pos, SpawnStrs argv, c
     return OK;
 }
 
-// The record of a program run: `run ARGV[ ENV] [(want: W)] -> ENDED[ CODE]
+// The record of a program run: `run ARGV[ ENV] [(want: W)] [(unconfined:
+// U)] -> ENDED[ CODE]
 // (MS ms)[, stdout to ...]`.
 static STATUS_MUST_USE Status host_run_record(Host *h, Run *r, Pos pos, Str joined, Str shown_env, const RunOpts *o, const SpawnOutcome *out, Str secret_said) {
     Buf b = buf_make(r->ctx.values);
@@ -331,6 +338,9 @@ static STATUS_MUST_USE Status host_run_record(Host *h, Run *r, Pos pos, Str join
     if (s == OK && host_given(&o->want)) s = buf_lit(&b, " (want: ");
     if (s == OK && host_given(&o->want)) s = buf_str(&b, o->want.as.string);
     if (s == OK && host_given(&o->want)) s = buf_byte(&b, ')');
+    if (s == OK && host_given(&o->unconfined)) s = buf_lit(&b, " (unconfined: ");
+    if (s == OK && host_given(&o->unconfined)) s = buf_str(&b, o->unconfined.as.string);
+    if (s == OK && host_given(&o->unconfined)) s = buf_byte(&b, ')');
     if (s == OK) s = buf_lit(&b, " -> ");
     if (s == OK) s = buf_str(&b, host_ended_word(out->ended));
     if (s == OK && out->code != SPAWN_NO_CODE) s = buf_byte(&b, ' ');
@@ -546,6 +556,59 @@ static STATUS_MUST_USE Status host_run_out(Run *r, Pos pos, const RunOpts *o, Ho
     return OK;
 }
 
+// git's own settings an unconfined push runs under, ahead of the script's
+// argv: no hook, no fsmonitor and no credential helper of the repository's
+// (each a program git would start, outside the confinement), and ssh itself
+// as ssh. They come before every `-c` of the script's, which
+// host_run_unconfined refuses, so none is undone.
+static const char *const HOST_UNCONFINED_GIT[] = {"-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "credential.helper=", "-c", "core.sshCommand=ssh"};
+
+SLICE_TYPE(HostConfineArgs, const char *const);
+
+// `unconfined = "tag: why"`: the one program `run` starts outside the
+// Landlock confinement, a `git push` that needs ssh's key files, which no
+// rule allows (an agent's push runs confined). Into `*out`, the argv with
+// HOST_UNCONFINED_GIT after `git`.
+// DRAGON: the file system's boundaries. An unconfined git runs every
+// program its settings name with all the user's file powers: a hook, an
+// ssh command, a receive-pack, a credential helper.
+// REMEDY: it is refused but for `git` (by its name and the file it reaches)
+// with a `push` among its words, no `-c` but `color.ui=never` (the git
+// prelude's), no `--receive-pack` or `--exec`, and no `env` but
+// GIT_TERMINAL_PROMPT; HOST_UNCONFINED_GIT turns off the repository's own
+// programs; the record says `(unconfined: ...)`. What is left: a
+// repository's `url.*.insteadOf` and a remote's `receivepack`, read from
+// its config. test_run_guards' an_unconfined_run_is_a_git_push_alone plants
+// each refusal.
+static STATUS_MUST_USE Status host_run_unconfined(Host *h, Run *r, Pos pos, SpawnStrs argv, const HostEnvOpt *env, Str why, Str cwd, SpawnStrs *out) {
+    Str reached = S("");
+    bool found = host_resolved_name(h, r->ctx.values, at(argv, 0), cwd, &reached);
+    bool git = str_eq(host_base_name(at(argv, 0).s), S("git")) && found && str_eq(reached, S("git"));
+    bool push_word = false;
+    for (size_t i = 1; i < argv.len; i++) {
+        Str w = at(argv, i).s;
+        push_word = push_word || str_eq(w, S("push"));
+        if (str_starts_with(w, S("--receive-pack")) || str_starts_with(w, S("--exec"))) return host_fail_plain(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` push takes no `--receive-pack` or `--exec`: each names a program it would start outside the confinement"));
+        if (str_eq(w, S("-c")) && (i + 1 >= argv.len || !str_eq(at(argv, i + 1).s, S("color.ui=never")))) return host_fail_plain(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` push takes no `-c` but `color.ui=never`: a setting could name a program git starts outside the confinement"));
+    }
+    if (!git || !push_word) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` ({s}) is for a `git push` alone, which needs ssh's key files; every other program runs confined to the mounts"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(why)));
+    for (size_t j = 0; j < env->names.len; j++) {
+        if (!str_eq(at(env->names, j), S("GIT_TERMINAL_PROMPT"))) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` push takes no `env` but GIT_TERMINAL_PROMPT, not {s}: a variable could name a program git starts"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(at(env->names, j))));
+    }
+    HostConfineArgs fixed = {HOST_UNCONFINED_GIT, sizeof HOST_UNCONFINED_GIT / sizeof *HOST_UNCONFINED_GIT};
+    size_t n = argv.len + fixed.len;
+    OsStr *all = ARENA_ARRAY(r->ctx.values, OsStr, n);
+    if (all == NULL) return run_values_oom(r, pos);
+    SLICE_TYPE(ArgvRoom, OsStr);
+    ArgvRoom room = {all, n};
+    at(room, 0) = at(argv, 0);
+    for (size_t i = 0; i < fixed.len; i++) at(room, 1 + i) = os_str_own((Str){at(fixed, i), strlen(at(fixed, i))});
+    for (size_t i = 1; i < argv.len; i++) at(room, fixed.len + i) = at(argv, i);
+    out->ptr = all;
+    out->len = n;
+    return OK;
+}
+
 // Runs the program, streams its output through the scrubber to the log and
 // the keep, and gives the answer, once `host_run_program` has read the
 // options.
@@ -587,8 +650,13 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     if (secret) host_secret_as_stdout(&held->secret, &spec);
     if (o->nice != HOST_UNSET) spec.nice = (int)o->nice;
     // The confinement is the mounts' alone: a `want` lets a refused program
-    // run, and never widens what it may touch.
-    TRY(host_confine_open(h, r, pos, S("run"), &held->confine_fd));
+    // run, and never widens what it may touch. Only `unconfined`, for a git
+    // push alone, runs a program outside it.
+    if (host_given(&o->unconfined)) {
+        TRY(host_run_unconfined(h, r, pos, argv, &o->env, o->unconfined.as.string, cwd, &spec.argv));
+    } else {
+        TRY(host_confine_open(h, r, pos, S("run"), &held->confine_fd));
+    }
     spec.confine_fd = held->confine_fd;
     spec.timeout_ms = o->timeout_ms;
     SpawnOutcome outcome;
