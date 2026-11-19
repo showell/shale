@@ -285,7 +285,10 @@ enters `node_modules`; `walk_all` with `skip` does not. The `zig/` and
     shale tests/golden.shale      # a build held to every golden case, from the outside
 
 [c/docs/building.md](c/docs/building.md) says what each tier runs and
-costs. The golden tests are the one judge of behaviour
+costs. The full tier also runs on GitHub, on demand only, never on a push:
+`shale cookbook:build_on_github.shale workflow=c-full.yml ref=my-branch`
+dispatches [.github/workflows/c-full.yml](.github/workflows/c-full.yml) and
+returns, and `run=<id>` reads its verdict later. The golden tests are the one judge of behaviour
 ([tests/harness/README.md](tests/harness/README.md)). `shale
 bench/baseline.shale` is the whole program's baseline, the runtime on an
 agent's workloads and the build's time, one TSV a run

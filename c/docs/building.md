@@ -33,6 +33,21 @@ would.
 the rest. Run the fast tier on every edit. Run the full tier before a
 merge, and defer it while you're about 90% sure it has nothing new to say.
 
+**The full tier on GitHub.** `.github/workflows/c-full.yml` runs `shale
+c/build.shale full=1` (or `plants=all`) on an Ubuntu 24.04 runner, the
+box's Ubuntu, so a heavy run leaves the box's two cores free. It is
+`workflow_dispatch` only, never on a push, a PR or a schedule:
+`shale cookbook:build_on_github.shale workflow=c-full.yml ref=<branch>`
+dispatches it and returns, and `run=<id>` reads its verdict later, with the
+tier's `PASS full` and wall time. The runner starts with no `shale`: it
+builds the first one as "First install on a new machine" below says and
+installs it by `c/install.shale`, under a mounts file the workflow writes for
+itself. Beside the checkout it installs what the tier reaches for: TCC, the
+pinned Zig and zig-ast built by it, roc-ast, go-ast, the pinned Roc nightly
+and roc-types under `~/tools`, and angry-gopher and zig-ast checked out
+beside shale for the docs' citations. The tier's whole output is the run's
+`c-full-log` artifact.
+
 | Build | Compiler | Tier | What it's for |
 |---|---|---|---|
 | Every test, built and run | TCC | fast | does it compile, do the tests pass |

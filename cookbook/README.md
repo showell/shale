@@ -37,8 +37,9 @@ steps left for the writer.
 ## For any project
 
 - `build_on_github.shale`: runs a workflow on GitHub (by default Zig Shale's
-  `zig build test`, in legacy_zig/), not on the box,
-  and reports the run. `shale cookbook:build_on_github.shale ref=my-branch`
+  `zig build test`, in legacy_zig/; `workflow=c-full.yml`, C Shale's full
+  tier), not on the box, and reports the run.
+  `shale cookbook:build_on_github.shale workflow=c-full.yml ref=my-branch`
 - `check_page_links.shale`: checks every link and image on a web page,
   through its redirects, by HEAD: what doesn't answer 200, and what moved.
   `shale cookbook:check_page_links.shale url=https://roc.lynrummy.com/`
