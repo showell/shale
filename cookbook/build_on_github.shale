@@ -50,13 +50,13 @@ end
 -- the REST paths works wherever `gh` does.
 
 -- The newest dispatched run's id, or "" when there is none.
-function newest()
+function newest_run_id()
   return gh({"gh", "api", "repos/" .. SLUG .. "/actions/workflows/" .. WORKFLOW .. "/runs?event=workflow_dispatch&per_page=1", "-q", ".workflow_runs[0].id // \"\""})
 end
 
 -- The workflow dispatched on `ref`, and its run's id once listed.
 function dispatch(ref)
-  local before = newest()
+  local before = newest_run_id()
   -- The workflow's own file is the default branch's; `ref` is its input,
   -- the commit it checks out.
   local home = gh({"gh", "api", "repos/" .. SLUG, "-q", ".default_branch"})
@@ -68,7 +68,7 @@ function dispatch(ref)
     looks = looks + 1
     if looks > 10 then fail("build_on_github: no new " .. WORKFLOW .. " run listed for " .. SLUG .. " after 10 looks") end
     sleep(2000)
-    id = newest()
+    id = newest_run_id()
   end
   return id
 end

@@ -124,12 +124,25 @@ TEST(a_core_prelude_function_is_parsed_at_its_first_call_and_only_then) {
     EXPECT_STR(at(r.prog.functions, 0).name, S("the prelude's twice"));
     EXPECT_EQ(at(r.prog.functions, 0).pos.line, 1);
     arena_deinit(&r.arena);
-    // The script's own function by a prelude's name takes its calls from its
-    // line on.
-    parse_plain(&r, S("print(twice(\"a\"))\nfunction twice(s) return s end\nprint(twice(\"b\"))\n"));
+}
+
+TEST(a_function_takes_no_builtins_or_preludes_name) {
+    Parsed r;
+    // A prelude's name is refused at the function's line, as is a builtin's:
+    // the name would be the script's here and the other's in a library.
+    parse_plain(&r, S("print(twice(\"a\"))\nfunction twice(s) return s end\n"));
+    expect_stop(&r, 2, 1, CLASS_NAME, S("`twice` is the prelude's function already: a function by its name would be it in this file alone, while a library or prelude calling it still gets the other, so name the function otherwise"));
+    arena_deinit(&r.arena);
+    parse_plain(&r, S("local x = 1\nfunction line_at(p, o) return 1 end\n"));
+    expect_stop(&r, 2, 1, CLASS_NAME, S("`line_at` is a builtin already: a function by its name would be it in this file alone, while a library or prelude calling it still gets the other, so name the function otherwise"));
+    arena_deinit(&r.arena);
+    // A near miss is the script's own, and a local may still take a builtin's
+    // name, since a call by it is refused while it is a value.
+    parse_plain(&r, S("function line_at_end(p) return 1 end\nfunction twice_over(s) return s end\nlocal lines = line_at_end(\"x\")\nprint(twice_over(\"b\"))\n"));
     EXPECT(r.status == OK);
     EXPECT_EQ(r.prog.functions.len, 2);
-    EXPECT_STR(at(r.prog.functions, 1).name, S("twice"));
+    EXPECT_STR(at(r.prog.functions, 0).name, S("line_at_end"));
+    EXPECT_STR(at(r.prog.functions, 1).name, S("twice_over"));
     arena_deinit(&r.arena);
 }
 
@@ -535,6 +548,7 @@ TEST(the_parsers_own_lookups_end_the_process_on_a_miss) {
 TEST_MAIN(TEST_CASE(a_script_parses_to_its_tree_each_name_a_slot),
           TEST_CASE(a_minus_folds_into_its_literal_and_nil_comparisons_get_their_own_ops),
           TEST_CASE(a_core_prelude_function_is_parsed_at_its_first_call_and_only_then),
+          TEST_CASE(a_function_takes_no_builtins_or_preludes_name),
           TEST_CASE(a_call_is_held_to_its_functions_parameters),
           TEST_CASE(names_are_resolved_where_they_stand),
           TEST_CASE(a_syntax_error_right_after_a_long_string_names_its_closer),

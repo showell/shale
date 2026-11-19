@@ -1,1 +1,1 @@
-{"id":"docs-SHALE-3b3e88a4","source":"docs","origin":"docs/SHALE.md:122","files":["script.shale"],"steps":[{"argv":["{case}/script.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}
+{"id":"docs-SHALE-3b3e88a4","source":"docs","origin":"docs/SHALE.md:124","files":["script.shale"],"steps":[{"argv":["{case}/script.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

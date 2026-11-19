@@ -208,8 +208,13 @@ The host chooses, not the script; a signed request names it
   the script.
 - `function name(a, b) ... end`, at the top level only. A function may
   recurse, and **is called only after it is declared**, as in Lua: a call
-  above the declaration is an error (or, for a builtin's name, the
-  builtin). **A call gives every parameter**, or it is an error when the
+  above the declaration is an error. **A function never takes a builtin's
+  or a prelude's name** (`function line_at(p, o)`, `function walk_all(p,
+  o)`): the parse stops at its line, a `name` stop naming what the name
+  already is, since the name would be the function in this file alone and
+  the builtin in a library or prelude it calls. A local may still take
+  one (`local lines = ...`): a call by a name that is a value here is
+  refused, so it is never quietly the other. **A call gives every parameter**, or it is an error when the
   script is parsed, **except an optional one**: `function f(a, b?)`
   marks `b` optional, the optional ones last, and a call that leaves one
   out gives it nil (`f(1)` is `f(1, nil)`). An options map is the usual

@@ -98,7 +98,7 @@ end
 
 -- ── The phases' times ───────────────────────────────────────────────────
 
-function seconds(ms)
+function seconds_of(ms)
   return (ms // 1000) .. "." .. ((ms % 1000) // 100) .. " s"
 end
 
@@ -124,12 +124,12 @@ function report_phases(full, plants)
       local ph = p.phases[name]
       local shown = name
       if get(ph, "overlapped", false) then shown = name .. " *" end
-      push(rows, {phase = shown, programs = ph.programs, wall = seconds(ph.ms), cpu = seconds(ph.cpu_ms)})
+      push(rows, {phase = shown, programs = ph.programs, wall = seconds_of(ph.ms), cpu = seconds_of(ph.cpu_ms)})
       ms = ms + ph.ms
       cpu = cpu + ph.cpu_ms
     end
   end
-  push(rows, {phase = "all", programs = "", wall = seconds(ms), cpu = seconds(cpu)})
+  push(rows, {phase = "all", programs = "", wall = seconds_of(ms), cpu = seconds_of(cpu)})
   print(table(rows, {"phase", "programs", "wall", "cpu"}))
   if full then
     local ran = 0

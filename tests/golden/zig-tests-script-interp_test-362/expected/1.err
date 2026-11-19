@@ -1,0 +1,2 @@
+── stopped at {base}/case/script.shale:1:1: name: `count` is a builtin already: a function by its name would be it in this file alone, while a library or prelude calling it still gets the other, so name the function otherwise (0 steps)
+── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

@@ -43,7 +43,7 @@ vehicle; these fixes are the yield.
 | 2026-11-18 | after a heredoc's closing tag, a second command is refused with "the heredoc has no last line", which doesn't say what went wrong | open |
 | 2026-11-18 | no `range()`, so a counted loop is a hand-written `while` | open |
 | 2026-11-18 | a script can't read the arena's bytes in use: `budget().arena_bytes` counts whole chunks | open |
-| 2026-11-19 | a script's own `line_at` silently shadows the builtin, but a library calling it gets the builtin and a puzzling type stop | open |
+| 2026-11-19 | a script's own `line_at` silently shadows the builtin, but a library calling it gets the builtin and a puzzling type stop | a `function` may not take a builtin's or a prelude's name: the parse stops at its line, naming the clash (no-builtin-shadow) |
 | 2026-11-18 | bench/baseline.shale has no workload filter, and a not-clean run writes TSVs into the tracked tree | open |
 | 2026-11-18 | `c/build.shale binary=release to=` takes an OS path, so a Shale path (`to=scratch:x/y`) made a folder named `scratch:x` inside the checkout, which Shale's own paths then refuse to name or remove | `to=` takes a Shale path (099cf32); one naming the build's own binary passes (frictions-2) |
 | 2026-11-18 | a docs golden is named by its line, so a paragraph added to SHALE-AGENTS.md moves every case below it, each to be named in `refreeze=` (7 for one paragraph) | open |

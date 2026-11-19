@@ -88,7 +88,7 @@ function map_tree(dir)
 end
 
 -- `got` equal to `want`, or the self-test fails, naming `what`.
-function same(what, got, want)
+function same_or_fail(what, got, want)
   if got ~= want then fail("map_file self-test: " .. what .. " is\n" .. got .. "\nit should be\n" .. want) end
   return nil
 end
@@ -111,14 +111,14 @@ function self_test()
   -- The masker: every column kept, a `"` in a character literal the
   -- literal's, a `//` in a string the string's, a macro's `/* */` blanked.
   local raw = [=[    if (c == '"') { x("a // b"); } // c]=]
-  same("the mask of `" .. raw .. "`", c_mask(raw), [=[    if (c == ' ') { x("      "); }     ]=])
+  same_or_fail("the mask of `" .. raw .. "`", c_mask(raw), [=[    if (c == ' ') { x("      "); }     ]=])
   local macro_line = [=[#define M(x) /* it's */ \]=]
-  same("the mask of `" .. macro_line .. "`", c_mask(macro_line), "#define M(x) " .. rep(" ", 10) .. " \\")
+  same_or_fail("the mask of `" .. macro_line .. "`", c_mask(macro_line), "#define M(x) " .. rep(" ", 10) .. " \\")
   checks = checks + 2
   local h = PLANTS .. "/kinds.h"
   local hi = c_items(h, {uses = true})
   accounted(h, hi)
-  same(h .. "'s map", join(map_lines(hi), "\n"), join({
+  same_or_fail(h .. "'s map", join(map_lines(hi), "\n"), join({
     "2-3 guard SHALE_KINDS_H", "5-5 include stdint.h", "6-6 include slice.h", "9-9 macro KINDS_MAX",
     "10-17 macro KINDS_DEFINE", "19-19 directive if defined", "20-20 macro KINDS_LINUX", "21-21 directive endif",
     "23-26 struct KindsPair", "28-28 enum KindsKind", "30-33 union KindsWord", "35-35 typedef KindsHook",
@@ -127,33 +127,33 @@ function self_test()
     "67-67 data KINDS_ONE", "69-69 guard SHALE_KINDS_H"}, "\n"))
   checks = checks + 1
   local macro = item_named(hi, "macro", "KINDS_DEFINE")
-  same("KINDS_DEFINE's makes", join(macro.makes, ","), "make,first")
-  same("KINDS_DEFINE's spans", spans(macro), "comment 0-0, sig 10-10, body 11-17")
-  same("KINDS_MAX's spans", spans(item_named(hi, "macro", "KINDS_MAX")), "comment 8-8, sig 9-9, body 0-0")
-  same("KindsKind's enumerators", join(item_named(hi, "enum", "KindsKind").enumerators, ","), "KINDS_A,KINDS_B")
-  same("the anonymous enum's enumerators", join(item_named(hi, "enum", "KINDS_FIRST").enumerators, ","), "KINDS_FIRST,KINDS_SECOND")
+  same_or_fail("KINDS_DEFINE's makes", join(macro.makes, ","), "make,first")
+  same_or_fail("KINDS_DEFINE's spans", spans(macro), "comment 0-0, sig 10-10, body 11-17")
+  same_or_fail("KINDS_MAX's spans", spans(item_named(hi, "macro", "KINDS_MAX")), "comment 8-8, sig 9-9, body 0-0")
+  same_or_fail("KindsKind's enumerators", join(item_named(hi, "enum", "KindsKind").enumerators, ","), "KINDS_A,KINDS_B")
+  same_or_fail("the anonymous enum's enumerators", join(item_named(hi, "enum", "KINDS_FIRST").enumerators, ","), "KINDS_FIRST,KINDS_SECOND")
   local vec = item_named(hi, "generator", "KindsVec")
-  same("KindsVec's macro and type", vec.macro .. " " .. vec.of, "VEC_DEFINE KindsPair")
+  same_or_fail("KindsVec's macro and type", vec.macro .. " " .. vec.of, "VEC_DEFINE KindsPair")
   local sum = item_named(hi, "function", "kinds_sum")
-  same("kinds_sum", sum.storage .. " | " .. sum.type .. " | " .. spans(sum) .. " | " .. join(sum.uses, ","), "static inline | uint32_t | comment 0-0, sig 47-47, body 47-47 | p")
+  same_or_fail("kinds_sum", sum.storage .. " | " .. sum.type .. " | " .. spans(sum) .. " | " .. join(sum.uses, ","), "static inline | uint32_t | comment 0-0, sig 47-47, body 47-47 | p")
   local name = item_named(hi, "function", "kinds_name")
-  same("kinds_name", name.type .. " | " .. spans(name) .. " | " .. join(name.uses, ","), "Str | comment 49-50, sig 51-51, body 52-57 | KINDS_A,KINDS_LINUX,S,k,kinds_label")
+  same_or_fail("kinds_name", name.type .. " | " .. spans(name) .. " | " .. join(name.uses, ","), "Str | comment 49-50, sig 51-51, body 52-57 | KINDS_A,KINDS_LINUX,S,k,kinds_label")
   local check = item_named(hi, "prototype", "kinds_check")
-  same("kinds_check", check.type .. " | " .. spans(check), "Status | comment 0-0, sig 60-61, body 0-0")
-  same("KINDS_NAMES's spans", spans(item_named(hi, "data", "KINDS_NAMES")), "comment 0-0, sig 63-63, body 64-65")
+  same_or_fail("kinds_check", check.type .. " | " .. spans(check), "Status | comment 0-0, sig 60-61, body 0-0")
+  same_or_fail("KINDS_NAMES's spans", spans(item_named(hi, "data", "KINDS_NAMES")), "comment 0-0, sig 63-63, body 64-65")
   checks = checks + 11
   local c = PLANTS .. "/kinds.c"
   local ci = c_items(c, {uses = true})
   accounted(c, ci)
-  same(c .. "'s map", join(map_lines(ci), "\n"), join({
+  same_or_fail(c .. "'s map", join(map_lines(ci), "\n"), join({
     "2-2 include test.h", "4-4 data kinds_hook", "6-11 function kinds_wrapped", "13-15 test kinds_test",
     "17-19 test_list TEST_MAIN", "21-23 function main"}, "\n"))
   checks = checks + 1
   local wrapped = item_named(ci, "function", "kinds_wrapped")
-  same("kinds_wrapped", spans(wrapped) .. " | " .. join(wrapped.uses, ","), "comment 0-0, sig 6-7, body 8-10 | a,b,kinds_add,other,p,sum")
-  same("kinds_test's uses", join(item_named(ci, "test", "kinds_test").uses, ","), "EXPECT,kinds_wrapped")
-  same("TEST_MAIN's uses", join(item_named(ci, "test_list", "TEST_MAIN").uses, ","), "TEST_MAIN,kinds_test")
-  same("main's spans", spans(item_named(ci, "function", "main")), "comment 0-0, sig 21-21, body 22-22")
+  same_or_fail("kinds_wrapped", spans(wrapped) .. " | " .. join(wrapped.uses, ","), "comment 0-0, sig 6-7, body 8-10 | a,b,kinds_add,other,p,sum")
+  same_or_fail("kinds_test's uses", join(item_named(ci, "test", "kinds_test").uses, ","), "EXPECT,kinds_wrapped")
+  same_or_fail("TEST_MAIN's uses", join(item_named(ci, "test_list", "TEST_MAIN").uses, ","), "TEST_MAIN,kinds_test")
+  same_or_fail("main's spans", spans(item_named(ci, "function", "main")), "comment 0-0, sig 21-21, body 22-22")
   checks = checks + 4
   -- Each break stops, naming its file, its line and why.
   local breaks = {

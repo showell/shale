@@ -86,7 +86,7 @@ function is_ident(c)
   return c ~= "" and contains(IDENT, c)
 end
 
-function is_name(s)
+function is_roc_name(s)
   if s == "" then return false end
   for i = 1, #s do
     if not is_ident(sub(s, i, i)) then return false end
@@ -477,12 +477,12 @@ function self_test()
 end
 
 function rename_tree()
-  if not is_name(FROM) or not is_name(TO) then fail("rename: from= and to= must each be an identifier, e.g. from=portion to=share") end
+  if not is_roc_name(FROM) or not is_roc_name(TO) then fail("rename: from= and to= must each be an identifier, e.g. from=portion to=share") end
   if not MOVE and arg("to", "") == "" then fail("rename: to= is missing, e.g. from=portion to=share") end
   if FROM == TO and not MOVE then fail("rename: from= and to= are the same") end
-  if MODULE ~= "" and not is_name(MODULE) then fail("rename: module= must be a module's name, e.g. module=Ride") end
+  if MODULE ~= "" and not is_roc_name(MODULE) then fail("rename: module= must be a module's name, e.g. module=Ride") end
   if MOVE then
-    if MODULE == "" or not is_name(TO_MODULE) then fail("rename: to_module= moves a name from module= to another module, e.g. module=Geom to_module=RiderView") end
+    if MODULE == "" or not is_roc_name(TO_MODULE) then fail("rename: to_module= moves a name from module= to another module, e.g. module=Geom to_module=RiderView") end
     if MODULE == TO_MODULE then fail("rename: module= and to_module= are the same") end
     if FIELDS then fail("rename: fields=1 and to_module= don't go together: a move takes `Mod.name` alone") end
   end

@@ -104,7 +104,7 @@ function list_long(measured, over)
 end
 
 -- `got` equal to `want`, or the self-test fails, naming `what`.
-function same(what, got, want)
+function same_or_fail(what, got, want)
   if got ~= want then fail("list_long_functions self-test: " .. what .. " is\n" .. got .. "\nit should be\n" .. want) end
   return nil
 end
@@ -113,15 +113,15 @@ function self_test()
   local P = PLANTS .. "/lengths.c"
   local fns = measure(PLANTS, false)
   local d = list_long(fns, nil)
-  same("the distribution", d.summary, "4 functions: median 2, p75 4, p90 6, p95 6, p99 6, max 6 code lines")
-  same("the default threshold", "" .. d.threshold, "6")
-  same("the list past the 95th percentile", join(d.lines, "\n"), "")
-  same("the list past 3", join(list_long(fns, 3).lines, "\n"), join({
+  same_or_fail("the distribution", d.summary, "4 functions: median 2, p75 4, p90 6, p95 6, p99 6, max 6 code lines")
+  same_or_fail("the default threshold", "" .. d.threshold, "6")
+  same_or_fail("the list past the 95th percentile", join(d.lines, "\n"), "")
+  same_or_fail("the list past 3", join(list_long(fns, 3).lines, "\n"), join({
     P .. ":25: long: six_lines: 6 code lines (1 comment, 0 blank)",
     P .. ":13: long: four_with_comments: 4 code lines (3 comment, 2 blank)"}, "\n"))
   -- Nine lines of body, four of them code: not past 4.
-  same("the list past 4", join(list_long(fns, 4).lines, "\n"), P .. ":25: long: six_lines: 6 code lines (1 comment, 0 blank)")
-  same("the list past 6 with the tests", join(list_long(measure(PLANTS, true), 6).lines, "\n"), P .. ":35: long: a_long_test: 8 code lines (0 comment, 0 blank)")
+  same_or_fail("the list past 4", join(list_long(fns, 4).lines, "\n"), P .. ":25: long: six_lines: 6 code lines (1 comment, 0 blank)")
+  same_or_fail("the list past 6 with the tests", join(list_long(measure(PLANTS, true), 6).lines, "\n"), P .. ":35: long: a_long_test: 8 code lines (0 comment, 0 blank)")
   print("PASS list_long_functions self-test: 6 checks, the distribution, the default threshold and three lists over the plants")
   return nil
 end

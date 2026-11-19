@@ -419,14 +419,44 @@ static inline STATUS_MUST_USE Status parse_function_body(Parser *p, uint32_t ind
     return OK;
 }
 
+// Whether a function's name is already another's, so no function may take it:
+// a builtin's (`*owner` "a builtin"), or, for the script's own function, a
+// prelude's (`*owner` its name, "the Linux prelude", `*owned` "'s function").
+// One name means one thing in a run: a script's own `line_at` was its function
+// in the script and the builtin in a library it used. A library's names are
+// held at its `use` (parse_library_name_was), a later prelude's against an
+// earlier's by parse_check_prelude.
+static inline bool parse_function_name_taken(const Parser *p, Str name, Str *owner, Str *owned) {
+    Builtin b = {0};
+    *owner = S("");
+    *owned = S("");
+    if (ast_builtin_named(name, &b)) {
+        *owner = S("a builtin");
+        return true;
+    }
+    if (p->in_prelude != PARSE_SCRIPT) return false;
+    *owned = S("'s function");
+    if (parse_index_at(p->core_index, name) >= 0) {
+        *owner = parse_prelude_name(p, 0);
+        return true;
+    }
+    for (size_t k = 0; k < p->extra.len; k++) {
+        const ParseExtra *x = &at(p->extra, k);
+        if (x->is_library) continue; // skip: a library's names are held at its `use`
+        if (parse_index_at(x->index, name) < 0) continue; // skip: not this prelude's
+        *owner = x->prelude.name;
+        return true;
+    }
+    *owned = S("");
+    return false;
+}
+
 static inline STATUS_MUST_USE Status parse_function(Parser *p, Pos pos) {
     TRY(parse_advance(p));
     Token name_tok = {0};
     TRY(parse_expect(p, TAG_NAME, S("the function's name"), &name_tok));
     Str name = name_tok.text;
     if (p->tok.tag == TAG_DOT) return parse_fail(p, parse_here(p), CLASS_REFUSED, S("functions in tables are not in this language: functions are not values"));
-    // A builtin's name is allowed: the script's calls by it are then to this
-    // function.
     if (str_eq(name, S("attempt"))) return parse_fail(p, pos, CLASS_NAME, S("`attempt` is the language's own: name the function otherwise"));
     if (str_eq(name, S("use"))) return parse_fail(p, pos, CLASS_NAME, S("`use` is the language's own: name the function otherwise"));
     // A name a library brought is the script's from its `use` on, and is not
@@ -442,8 +472,10 @@ static inline STATUS_MUST_USE Status parse_function(Parser *p, Pos pos) {
         }
     }
     if (parse_lua_name(name).len > 0) return parse_fail_cat(p, pos, CLASS_NAME, 3, S("`"), name, S("` is a name of Lua's library, kept to say what to write instead: name the function otherwise"));
-    // A prelude function's name is allowed too: from this line on the script's
-    // calls by it are to this function.
+    Str owner = {0};
+    Str owned = {0};
+    if (parse_function_name_taken(p, name, &owner, &owned))
+        return parse_fail_cat(p, pos, CLASS_NAME, 6, S("`"), name, S("` is "), owner, owned, S(" already: a function by its name would be it in this file alone, while a library or prelude calling it still gets the other, so name the function otherwise"));
     uint32_t seen = 0;
     if (p->in_prelude == PARSE_SCRIPT && ParseFunctionNames_get(&p->function_names, name, &seen))
         return parse_fail_cat(p, pos, CLASS_NAME, 3, S("a function `"), name, S("` is already declared"));
