@@ -122,6 +122,7 @@ both
 bow
 bowl
 box
+boxy
 boy
 brag
 bud
