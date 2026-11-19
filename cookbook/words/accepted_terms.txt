@@ -14,6 +14,7 @@ ast     -- computing's word for a syntax tree
 atx     -- CommonMark's name for a `#` heading
 br      -- HTML's element
 cc      -- email's own word for a copy's recipients
+cols    -- a grid's columns, beside `rows` (Steve, 2026-11-19: "it conveniently matches rows as four letters")
 cos     -- the function's own name
 cr      -- ASCII's name for a carriage return
 css     -- the stylesheet language's own name
