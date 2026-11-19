@@ -29,8 +29,9 @@ case zig test command 4
 home dir
 input 104
 {"session_id":"s","tool_name":"Bash","tool_input":{"command":"/home/x/shale/zig-out/bin/shale a.shale"}}
-code 0
-out 0
+code 2
+out 505
+shale-gate: `/home/x/shale/zig-out/bin/shale` is not the shale installed beside this gate; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
 
 log 0
 
@@ -791,8 +792,9 @@ case command 24
 home dir
 input 73
 {"session_id":"s","tool_name":"Bash","tool_input":{"command":"/shale a"}}
-code 0
-out 0
+code 2
+out 480
+shale-gate: `/shale` is not the shale installed beside this gate; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
 
 log 0
 
@@ -800,8 +802,9 @@ case command 25
 home dir
 input 77
 {"session_id":"s","tool_name":"Bash","tool_input":{"command":"/a/b/shale a"}}
-code 0
-out 0
+code 2
+out 484
+shale-gate: `/a/b/shale` is not the shale installed beside this gate; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
 
 log 0
 

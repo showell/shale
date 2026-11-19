@@ -442,14 +442,79 @@ static void remove_under(Arena *a, Str home) {
     }
 }
 
+SLICE_TYPE(TestGateCStrs, const char *); // cstr: test literals
+
+// gate_run with no shale beside it: a launch by path refuses.
+static int gate_run_here(Arena *a, bool read_ok, Str input, bool has_home, Str home) {
+    return gate_run(a, read_ok, input, has_home, home, S("/nonexistent"));
+}
+
+// `<home>/<rel>` as a C string.
+static const char *under(Arena *a, Str home, const char *rel) { // cstr: a test's literal
+    Buf p = buf_make(a);
+    if (buf_str(&p, home) != OK || buf_str(&p, test_cs(rel)) != OK) abort();
+    return arena_cstr(a, os_str_own(buf_view(&p)));
+}
+
+// The hook's input for a Bash call of `cmd`, put in a JSON string as it is
+// (so a `\n` in it is JSON's).
+static Str bash_call(Arena *a, Str cmd) {
+    Buf b = buf_make(a);
+    if (buf_lit(&b, "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"") != OK || buf_str(&b, cmd) != OK || buf_lit(&b, "\"}}") != OK) abort();
+    return buf_view(&b);
+}
+
+// The gate passes `/any/folder/shale`, so a file of that name that is a link
+// to another program (a shell) would run a heredoc's body: a launch by path
+// passes only as the shale beside the gate, linked to or not.
+TEST(a_launch_by_path_is_the_shale_beside_the_gate) {
+    bool refused = false;
+    Arena a;
+    arena_init(&a, TEST_GATE_LIMIT, &refused);
+    Str home = fresh_home(&a);
+    EXPECT_EQ(mkdir(under(&a, home, "/bin"), 0700), 0);
+    EXPECT_EQ(mkdir(under(&a, home, "/link"), 0700), 0);
+    EXPECT_EQ(mkdir(under(&a, home, "/other"), 0700), 0);
+    int fd = open(under(&a, home, "/bin/shale"), O_WRONLY | O_CREAT | O_EXCL, 0700);
+    EXPECT(fd >= 0);
+    close(fd);
+    EXPECT_EQ(symlink(under(&a, home, "/bin/shale"), under(&a, home, "/link/shale")), 0);
+    // The decoy: a link named `shale` to another program, never run here.
+    EXPECT_EQ(symlink("/bin/true", under(&a, home, "/other/shale")), 0);
+    Str beside = test_cs(under(&a, home, "/bin"));
+    // Each refusal's line goes to stderr: kept out of the test's output.
+    int saved = dup(2);
+    int null = open("/dev/null", O_WRONLY);
+    EXPECT(saved >= 0 && null >= 0 && dup2(null, 2) == 2);
+    const char *ok_items[] = {"/bin/shale a.shale", "/link/shale a.shale"};
+    const char *no_items[] = {"/other/shale a.shale", "/other/shale <<'SHALE'\\nprint(1)\\nSHALE", "/none/shale a.shale"};
+    TestGateCStrs ok = {ok_items, sizeof ok_items / sizeof *ok_items};
+    TestGateCStrs no = {no_items, sizeof no_items / sizeof *no_items};
+    for (size_t i = 0; i < ok.len; i++) EXPECT_EQ(gate_run(&a, true, bash_call(&a, test_cs(under(&a, home, at(ok, i)))), false, S(""), beside), 0);
+    for (size_t i = 0; i < no.len; i++) EXPECT_EQ(gate_run(&a, true, bash_call(&a, test_cs(under(&a, home, at(no, i)))), false, S(""), beside), 2);
+    // A bare `shale` is PATH's, held to nothing here; `cd DIR && ` changes
+    // nothing.
+    EXPECT_EQ(gate_run(&a, true, bash_call(&a, S("shale a.shale")), false, S(""), beside), 0);
+    Buf cd = buf_make(&a);
+    EXPECT(buf_lit(&cd, "cd / && ") == OK && buf_str(&cd, home) == OK && buf_lit(&cd, "/other/shale a.shale") == OK);
+    EXPECT_EQ(gate_run(&a, true, bash_call(&a, buf_view(&cd)), false, S(""), beside), 2);
+    EXPECT(dup2(saved, 2) == 2);
+    close(saved);
+    close(null);
+    const char *made_items[] = {"/link/shale", "/other/shale", "/bin/shale", "/link", "/other", "/bin", ""};
+    TestGateCStrs made = {made_items, sizeof made_items / sizeof *made_items};
+    for (size_t i = 0; i < made.len; i++) (void)remove(under(&a, home, at(made, i))); // ignored: a test's clean-up
+    arena_deinit(&a);
+}
+
 TEST(an_escape_is_one_append_to_homes_wants_tsv_its_folders_made) {
     bool refused = false;
     Arena a;
     arena_init(&a, TEST_GATE_LIMIT, &refused);
     Str home = fresh_home(&a);
     Str want = S("{\"session_id\":\"s7\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"# want: sed-in-place: one edit\\nsed -i s/a/b/ x\"}}");
-    EXPECT_EQ(gate_run(&a, true, want, true, home), 0);
-    EXPECT_EQ(gate_run(&a, true, S("{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"shale a.shale\"}}"), true, home), 0);
+    EXPECT_EQ(gate_run_here(&a, true, want, true, home), 0);
+    EXPECT_EQ(gate_run_here(&a, true, S("{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"shale a.shale\"}}"), true, home), 0);
     Str log = read_under(&a, home, "/.local/state/shale/wants.tsv");
     size_t newlines = 0;
     for (size_t i = 0; i < log.len; i++) newlines += str_byte(log, i) == '\n';
@@ -458,7 +523,7 @@ TEST(an_escape_is_one_append_to_homes_wants_tsv_its_folders_made) {
     // The date: YYYY-MM-DDTHH:MM:SSZ, then the tab.
     EXPECT(log.len > 21 && str_byte(log, 4) == '-' && str_byte(log, 10) == 'T' && str_byte(log, 19) == 'Z' && str_byte(log, 20) == '\t');
     // A second escape appends; the first line stays.
-    EXPECT_EQ(gate_run(&a, true, S("{\"tool_name\":\"Monitor\",\"tool_input\":{\"command\":\"# out-of-scope: q: r\\nx\"}}"), true, home), 0);
+    EXPECT_EQ(gate_run_here(&a, true, S("{\"tool_name\":\"Monitor\",\"tool_input\":{\"command\":\"# out-of-scope: q: r\\nx\"}}"), true, home), 0);
     Str two = read_under(&a, home, "/.local/state/shale/wants.tsv");
     EXPECT(str_starts_with(two, log));
     EXPECT(gate_ends_with(two, S("\t\tout-of-scope\tq\tr\t# out-of-scope: q: r\\nx\n")));
@@ -492,5 +557,6 @@ TEST_MAIN(
     TEST_CASE(a_nesting_a_megabyte_deep_is_read_without_recursion),
     TEST_CASE(the_decision_each_way_the_gate_answers),
     TEST_CASE(an_escape_is_one_append_to_homes_wants_tsv_its_folders_made),
-    TEST_CASE(shale_secrets_is_refused_in_every_form_of_a_launch)
+    TEST_CASE(shale_secrets_is_refused_in_every_form_of_a_launch),
+    TEST_CASE(a_launch_by_path_is_the_shale_beside_the_gate)
 )

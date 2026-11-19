@@ -5,6 +5,7 @@
 // install the hook.
 #define _GNU_SOURCE
 #include <errno.h>
+#include <limits.h>
 #include <unistd.h>
 
 #include "gate/gate.c"
@@ -30,6 +31,21 @@ static bool gate_read_stdin(Buf *b) {
     }
 }
 
+// The folder this program's own file is in, every link followed (the
+// kernel's /proc/self/exe); empty when it cannot be read, so
+// no launch by path passes (`gate_ours`).
+static Str gate_beside(Arena *a) {
+    char *buf = arena_alloc(a, PATH_MAX, 1);
+    if (buf == NULL) return S("");
+    ssize_t n = readlink("/proc/self/exe", buf, PATH_MAX - 1);
+    if (n <= 0) return S("");
+    Str self = {buf, (size_t)n};
+    size_t cut = self.len;
+    while (cut > 0 && str_byte(self, cut - 1) != '/') cut--;
+    if (cut <= 1) return S("");
+    return str_sub(self, 0, cut - 1);
+}
+
 int main(void) {
     // The gate runs no script, so its arena's refusal is a local of its own.
     bool refused = false;
@@ -39,7 +55,7 @@ int main(void) {
     bool read_ok = gate_read_stdin(&input);
     Str home = {"", 0};
     bool has_home = gate_home(&home);
-    int code = gate_run(&a, read_ok, buf_view(&input), has_home, home);
+    int code = gate_run(&a, read_ok, buf_view(&input), has_home, home, gate_beside(&a));
     arena_deinit(&a);
     return code;
 }

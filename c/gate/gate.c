@@ -4,7 +4,8 @@
 // and passes (exit 0) exactly:
 //
 //   - the launch: optionally `cd WORD && `, then `shale` (or an absolute path
-//     ending `/shale`) and its words (`--verbose`, `--undo-on-stop`,
+//     ending `/shale` that is the shale installed beside the gate, every
+//     link followed: `gate_ours`) and its words (`--verbose`, `--undo-on-stop`,
 //     `--args-stdin`, `--budget N=V`, a FILE, `NAME=VALUE`), each plain (no
 //     quotes, `$`, backticks, `;|&<>()*?`, `\`), and optionally `<<'TAG'`
 //     ending the first line (TAG `[A-Z_]+`), a body, and a last line that is
@@ -58,6 +59,10 @@ typedef struct {
     Str text;
     // A refusal's line, `shale-gate: ...`.
     Str why;
+    // A launch's program, when it is named by its absolute path: the gate's
+    // run holds it to the shale installed beside the gate (`gate_ours`).
+    bool by_path;
+    Str program;
 } GateVerdict;
 
 SLICE_TYPE(GateStrs, Str);
@@ -294,6 +299,8 @@ static inline void gate_classify(Arena *a, Str cmd, GateVerdict *v) {
         return;
     }
     if (!gate_options_hold(a, words, shale_at + 1, n, v)) return;
+    v->by_path = by_path;
+    v->program = prog;
     if (!heredoc) {
         if (gate_trim(rest, S(" \t\r\n")).len != 0) {
             gate_refuse_plain(a, v, S("a launch is one line, or a heredoc's; "));
@@ -700,6 +707,9 @@ typedef struct {
     bool log;
     GateVerdict escape;
     GateHook hook;
+    // A launch by its absolute path, which the run holds to `gate_ours`.
+    bool by_path;
+    Str program;
 } GateDecision;
 
 // The decision for the hook's input `input`, as Zig's `main` makes it before
@@ -727,7 +737,32 @@ static inline void gate_decide(Arena *a, bool read_ok, Str input, GateDecision *
     } else if (v.kind == GATE_ESCAPE) {
         d->log = true;
         d->escape = v;
+    } else if (v.by_path) {
+        d->by_path = true;
+        d->program = v.program;
     }
+}
+
+// Whether `program`, a launch's absolute path, is the file `<beside>/shale`
+// is once every link is followed: the same device and inode.
+// DRAGON: a launch by path. The gate passes `/any/folder/shale <<'TAG'`, so
+// a file named `shale` that is a link to a shell, or a shell's copy, would
+// run the heredoc's body as a shell script, past every rule Shale holds.
+// REMEDY: a launch by path passes only when it names the shale installed
+// beside this gate (c/shale_gate.c gives the gate's own folder), however it
+// is linked there; any other file, or none, refuses. test_gate's
+// a_launch_by_path_is_the_shale_beside_the_gate plants a link to another
+// program.
+static inline bool gate_ours(Arena *a, Str program, Str beside) {
+    Buf mine = buf_make(a);
+    if (buf_str(&mine, beside) != OK || buf_lit(&mine, "/shale") != OK) return false;
+    const char *m = arena_cstr(a, os_str_own(buf_view(&mine)));
+    const char *p = arena_cstr(a, os_str_own(program));
+    if (m == NULL || p == NULL || strlen(p) != program.len) return false;
+    struct stat x;
+    struct stat y;
+    if (stat(m, &x) != 0 || stat(p, &y) != 0) return false;
+    return S_ISREG(y.st_mode) && x.st_dev == y.st_dev && x.st_ino == y.st_ino;
 }
 
 // The date as Zig's gate writes it, `2026-10-17T12:00:00Z`, in UTC.
@@ -809,14 +844,21 @@ static inline bool gate_home(Str *home) {
 }
 
 // The gate's whole run on `input` (`read_ok` false when it could not be
-// read): the decision, its line said, and an escape logged under `home`
-// (`has_home` false for none). Gives the exit code.
-static inline int gate_run(Arena *a, bool read_ok, Str input, bool has_home, Str home) {
+// read): the decision, its line said, a launch by path held to the shale in
+// `beside`, the gate's own folder (`gate_ours`), and an escape logged under
+// `home` (`has_home` false for none). Gives the exit code.
+static inline int gate_run(Arena *a, bool read_ok, Str input, bool has_home, Str home, Str beside) {
     GateDecision d;
     gate_decide(a, read_ok, input, &d);
     if (d.code != 0) {
         gate_say(d.say);
         return d.code;
+    }
+    if (d.by_path && !gate_ours(a, d.program, beside)) {
+        GateVerdict v;
+        gate_refuse(a, &v, S("`"), d.program, S("` is not the shale installed beside this gate; "));
+        gate_say(v.why);
+        return 2;
     }
     if (!d.log) return 0;
     if (!has_home) {
