@@ -210,10 +210,15 @@ const ROC_TAGS = {Ok = true, Err = true}
 
 -- The tag a node names, `""` for none: a tag in a union (`[NoRef, Ref(Str)]`,
 -- the bare one and the head of the one with a payload), in a pattern and in
--- an expression.
+-- an expression. A tag a module qualifies (`Bool.False`, which a pattern's
+-- tree gives as `.False`) is its last part alone: the module's name is
+-- judged in the module's own file, and a builtin's (`Bool`) is Roc's.
 function tag_named(tree, at)
   local n = tree[at]
-  if n.kind == "p-tag" or n.kind == "e-tag" then return get(n, "raw", "") end
+  if n.kind == "p-tag" or n.kind == "e-tag" then
+    local parts = split(get(n, "raw", ""), ".")
+    return parts[#parts]
+  end
   if n.kind ~= "ty" or n.parent == 0 then return "" end
   local holder = tree[n.parent]
   if holder.kind == "tags" then return get(n, "name", "") end
@@ -319,7 +324,7 @@ function self_test()
     {glob = at .. "quiet_long_abbreviations/*.roc"},
     {glob = at .. "common_words/*.roc", counts = {abbreviation = 2}, says = {"`Flw` abbreviates: flw", "`night_dmr` abbreviates: dmr"}},
     {glob = at .. "quiet_common_words/*.roc"},
-    {glob = at .. "tags.roc", counts = {abbreviation = 4}, says = {"tags.roc:3: abbreviation: `NoRef` abbreviates: ref", "tags.roc:3: abbreviation: `Ref` abbreviates: ref", "tags.roc:5: abbreviation: `TmplMissing` abbreviates: tmpl", "tags.roc:11: abbreviation: `BadAttr` abbreviates: attr"}},
+    {glob = at .. "tags.roc", counts = {abbreviation = 5}, says = {"tags.roc:14: abbreviation: `TmplGone` abbreviates: tmpl", "tags.roc:4: abbreviation: `NoRef` abbreviates: ref", "tags.roc:4: abbreviation: `Ref` abbreviates: ref", "tags.roc:6: abbreviation: `TmplMissing` abbreviates: tmpl", "tags.roc:12: abbreviation: `BadAttr` abbreviates: attr"}},
     {glob = at .. "quiet_tags.roc"},
     {glob = at .. "module_doc/*.roc", counts = {module_doc = 5}, says = {"`NoDoc` has no `##` doc", "`Hashless` has no `##` doc", "`Old`'s top comment says `originally`", "`Sky`'s top comment says `used to`", "Sun.roc:3: module_doc: `Sun`'s doc says `originally`"}},
     {glob = at .. "quiet_module_doc/*.roc"},
