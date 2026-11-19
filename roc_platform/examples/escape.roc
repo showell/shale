@@ -9,6 +9,11 @@
 ##   shale roc_platform/run.shale script=roc_platform/examples/escape.roc try=arena     past the arena's budget
 ##   shale roc_platform/run.shale script=roc_platform/examples/escape.roc try=missing   a missing file, a value
 ##   shale roc_platform/run.shale script=roc_platform/examples/escape.roc try=ok        a run Shale lets through
+##   shale roc_platform/run.shale script=roc_platform/examples/escape.roc try=loop      a pure loop that never ends
+##   shale roc_platform/run.shale script=roc_platform/examples/escape.roc try=spin      a pure loop inside its budget
+##
+## The Roc's CPU budget is small here, so `loop` stops soon.
+## budget: roc_cpu_ms=400
 app [main!] { pf: platform "../platform/main.roc" }
 
 import pf.Shale
@@ -38,6 +43,20 @@ main! = |{}| {
 		"arena" => {
 			big = Str.repeat("x", 100_000_000)
 			Shale.print!("made ${U64.to_str(Str.count_utf8_bytes(big))} bytes past the arena: the budget did NOT hold")
+		}
+		"loop" => {
+			var $n = 0
+			while $n >= 0 {
+				$n = $n + 1
+			}
+			Shale.print!("the loop ended: the budget did NOT hold")
+		}
+		"spin" => {
+			var $n = 0
+			while $n < 200_000 {
+				$n = $n + 1
+			}
+			Shale.print!("spun ${U64.to_str($n)} times, inside the budget")
 		}
 		"missing" =>
 			match Shale.read!("no/such/file.txt") {

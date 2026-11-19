@@ -1,7 +1,7 @@
 # The builtin table
 
 **`c/builtins.txt` is the one home of Shale's builtin surface.** Every
-builtin a script can call is an entry there: the 77 of the C
+builtin a script can call is an entry there: the 78 of the C
 (`c/script/ast.h`, `c/script/vm.c`) and every function of the three
 preludes (`c/preludes/core.shale`, `linux.shale`, `git.shale`), helpers
 included, since a helper's name is taken too. The C, the preludes and the
@@ -34,7 +34,7 @@ read(p: Path, offset?: Int, n?: Int) -> Str
 - **`kind`** is `effect` (it reaches past its arguments: the store, a
   program, the clock, the run's output, its arguments or budgets, or it
   stops the run), `pure` (its answer is its arguments' alone) or `internal`
-  (a prelude's helper). Today: 85 effects, 66 pure, 19 helpers.
+  (a prelude's helper). Today: 86 effects, 66 pure, 19 helpers.
 - **`stops`** are the classes it stops with beyond a wrong type or count,
   which every builtin has; `opts` an Opts argument's keys and types.
 - **`doc` and `anchor`**: one line, and the docs' section that names it.
@@ -44,7 +44,7 @@ read(p: Path, offset?: Int, n?: Int) -> Str
 overkill"). An exported effect adds `roc` (its declaration), `roc_params`
 (its arguments' names), `roc_doc`, `values` (the outcomes that are values:
 every other one is a stop) and its `driver` lines. Ten are exported now;
-the other 75 effects are candidates, each a table entry away.
+the other 76 effects are candidates, each a table entry away.
 
 ## Why a text file read by Shale
 
@@ -81,7 +81,7 @@ and fails the run. Both ways, each a finding:
   builtin, and every builtin in docs/SHALE.md's "Every builtin, at a
   glance" an entry;
 - **the Roc platform:** glue's header declares exactly the exported effects,
-  and the three generated files are what the table makes now.
+  and the four generated files are what the table makes now.
 
 `self_test=1` runs the checks on texts it changed (an entry renamed, a
 builtin added to ast.h, an arity changed, a prelude function added, a
@@ -94,9 +94,13 @@ that is pure) and holds each to its finding.
 `shale c/gen_builtins.shale` writes, from the exported entries:
 - `roc_platform/platform/Shale.roc` and `main.roc`;
 - `roc_platform/host/hosted.gen.c`: the driver (a Shale function an
-  effect, from its `driver` lines, and the loop), each shim, the request
-  (Roc's arguments as a Shale map, each by its `roc_params` name) and the
-  answer (Shale's value as Roc's).
+  effect, from its `driver` lines, and the loop), each shim (which keeps
+  its return address, the Roc's call site), the request (Roc's arguments as
+  a Shale map, each by its `roc_params` name), the answer (Shale's value as
+  Roc's) and each one's Roc name, which a stop at the Roc's line names;
+- `roc_platform/surface.gen.shale`: the Roc names the launcher finds in a
+  script's text (`arg`'s call, whose literals are the values the script
+  reads, and every hosted call).
 
 The marshalling follows the Roc type: `Str`, `U64`, `I64`, `Bool`, `{}`,
 `List(T)`, records and tag unions, nested. A tag union crosses as `{tag =

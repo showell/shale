@@ -31,6 +31,31 @@ component of Shale, and its surface is generated from Shale's builtin table.
 - **Roc's memory is an arena of Shale's** (`c/foundation/arena.h`), held to
   the run's `arena_bytes`: `roc_dealloc` frees nothing, and a refusal stops
   the run as `budget arena`. `roc_crashed` stops it with Roc's message.
+- **The Roc's own computation has a budget of CPU time**, `roc_cpu_ms`
+  (5000 unset; `## budget: roc_cpu_ms=N` in the script, or `--budget
+  roc_cpu_ms=N`). Steps count Shale's work, and the Roc's is no Shale step,
+  so it is timed: the thread's CPU clock is read as the Roc starts and as it
+  hands Shale each request, and a timer on that clock, armed while the Roc
+  runs, takes a loop that never calls Shale off its stack. A runaway stops
+  as `budget cpu`, at its own line, and the `── used:` line says the Roc's
+  part (`, 400 of 400 Roc CPU ms`). CPU time, not wall time, as `run`'s
+  `cpu_budget_ms` is: a busy box doubles a wall time.
+- **A stop made while the Roc waits names the Roc's line**: a hosted call
+  Shale refused, a `fail!`, a budget run out answering one, the CPU budget:
+  `` ── stopped at roc_platform/examples/escape.roc:25:8 (in `Shale.read!`):
+  argument: ... ``. Each shim keeps its return address; the launcher links
+  the program with a table of the script's lines (`app.sites`, from the
+  pinned Roc's DWARF line table, `objdump --dwarf=decodedline`), and the
+  address's line is the stop's. Roc's table gives the line; the column is
+  the call's own text on that line, found in the script, else the line's
+  first. An address outside the script's own lines (Roc's builtins: a
+  `crash`, which reaches the host through them, or an allocation inside
+  `Str.repeat`) leaves the stop at the driver's line.
+- **A value no `Shale.arg!` reads is refused**, before anything is built,
+  naming the ones the script reads, as Shale refuses a value no `arg` of a
+  script reads. The launcher names its values by value, so Shale's own check
+  cannot see them; it reads what it was given with `arg_names()`, and the
+  arg call's Roc name comes from the table (`surface.gen.shale`).
 
 ## Generated from the builtin table
 
@@ -39,9 +64,10 @@ An effect it exports says its Roc signature, which outcomes are values and
 its driver clause, and `c/gen_builtins.shale` writes from it:
 - `platform/Shale.roc`, and the hosted block of `platform/main.roc`;
 - `host/hosted.gen.c`: the driver, each shim (`shale_<name>`), its request
-  as a Shale map and its answer as Roc's value.
+  as a Shale map, its answer as Roc's value, and its Roc name;
+- `surface.gen.shale`: the Roc names the launcher finds in a script's text.
 
-Never edit those three: change the table and run `shale c/gen_builtins.shale`.
+Never edit those four: change the table and run `shale c/gen_builtins.shale`.
 The C types are `roc glue`'s (`host/roc_platform_abi.h`, written by
 `tools/glue.shale` with the pinned Roc), so a change to what is exported is
 three runs: `gen_builtins`, `tools/glue.shale`, `gen_builtins` again (glue
@@ -66,12 +92,14 @@ The examples:
 - `examples/check_module_size.roc` is `cookbook/roc/check_module_size.shale`
   in Roc, with the same output on the same input (`self_test` left out).
   `tools/compare.shale` holds the two to each other, line for line.
-- `examples/escape.roc` tries each guard (`try=climb|absolute|bash|write|crash|arena|missing|ok`).
+- `examples/escape.roc` tries each guard (`try=climb|absolute|bash|write|crash|arena|loop|spin|missing|ok`).
   Each reach stops with Shale's own refusal.
 
 **`shale roc_platform/self_test.shale`** is the policy proofs: each of
-escape.roc's tries held to Shale's own stop (or, for `missing` and `ok`, to
-its output), then count_lines.roc. It needs the pinned Roc and builds the
+escape.roc's tries held to Shale's own stop (or, for `spin`, `missing` and
+`ok`, to its output), then count_lines.roc given a misspelled value and a
+right one. `shale=c/out/tcc/shale` runs the launcher with a checkout's own
+build. It needs the pinned Roc and builds the
 host's object, so it runs when a Roc build is asked for, not in the tiers.
 
 `tools/measure.shale` times the builds and the runs.
@@ -112,13 +140,11 @@ value, a tag union with payloads as an argument and as an answer, and a
 
 ## What is left
 
-- **The Roc's own computation has no budget.** Steps count only the driver's
-  Shale, so a Roc loop that never ends is stopped only by the launcher's
-  `timeout_ms`.
-- **A stop names the driver's line** (`-e:26:10 (in hosted_read)`), not the
-  Roc's call site.
-- **Unknown arguments are dropped, not refused:** the launcher forwards only
-  the names it finds in the script's `Shale.arg!("...")` calls.
+- **A crash names the driver's line**: `roc_crashed` is called through
+  Roc's builtins, so its return address is theirs, not the script's.
+- A stop names the hosted call and its line, not the Roc function it is in
+  (Roc's DWARF names its functions by hash), nor the Roc calls that led
+  there.
 - The launcher's own `fail` adds a second stop line after the program's.
 - The Roc's arena has its own budget, set to the run's `arena_bytes`,
   beside the values' arena.

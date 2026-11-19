@@ -33,6 +33,20 @@ static const Str hosted_names[] = {
     S_ITEM("write"),
 };
 
+// Each kind's Roc name, as a stop at the Roc's line names the call.
+static const Str hosted_roc_names[] = {
+    S_ITEM("Shale.arg!"),
+    S_ITEM("Shale.exists!"),
+    S_ITEM("Shale.fail!"),
+    S_ITEM("Shale.glob!"),
+    S_ITEM("Shale.grep_all!"),
+    S_ITEM("Shale.list!"),
+    S_ITEM("Shale.print!"),
+    S_ITEM("Shale.read!"),
+    S_ITEM("Shale.run!"),
+    S_ITEM("Shale.write!"),
+};
+
 // The Shale that runs the app.
 static const char HOSTED_DRIVER[] =
     "-- the Roc platform's driver, written by c/gen_builtins.shale from c/builtins.txt\n"
@@ -147,61 +161,61 @@ static union {
 RocStr shale_arg(RocStr arg0, RocStr arg1) {
     hosted_arg_args.name = arg0;
     hosted_arg_args.fallback = arg1;
-    roc_ask(HOSTED_ARG);
+    roc_ask(HOSTED_ARG, __builtin_return_address(0));
     return hosted_answer.arg;
 }
 
 bool shale_exists(RocStr arg0) {
     hosted_exists_args.path = arg0;
-    roc_ask(HOSTED_EXISTS);
+    roc_ask(HOSTED_EXISTS, __builtin_return_address(0));
     return hosted_answer.exists;
 }
 
 void shale_fail(RocStr arg0) {
     hosted_fail_args.why = arg0;
-    roc_ask(HOSTED_FAIL);
+    roc_ask(HOSTED_FAIL, __builtin_return_address(0));
 }
 
 RocList shale_glob(RocStr arg0) {
     hosted_glob_args.pattern = arg0;
-    roc_ask(HOSTED_GLOB);
+    roc_ask(HOSTED_GLOB, __builtin_return_address(0));
     return hosted_answer.glob;
 }
 
 RocList shale_grep_all(RocStr arg0, RocStr arg1) {
     hosted_grep_all_args.path = arg0;
     hosted_grep_all_args.literal = arg1;
-    roc_ask(HOSTED_GREP_ALL);
+    roc_ask(HOSTED_GREP_ALL, __builtin_return_address(0));
     return hosted_answer.grep_all;
 }
 
 FoundOrMissingType7 shale_list(RocStr arg0) {
     hosted_list_args.path = arg0;
-    roc_ask(HOSTED_LIST);
+    roc_ask(HOSTED_LIST, __builtin_return_address(0));
     return hosted_answer.list;
 }
 
 void shale_print(RocStr arg0) {
     hosted_print_args.text = arg0;
-    roc_ask(HOSTED_PRINT);
+    roc_ask(HOSTED_PRINT, __builtin_return_address(0));
 }
 
 FoundOrMissingType8 shale_read(RocStr arg0) {
     hosted_read_args.path = arg0;
-    roc_ask(HOSTED_READ);
+    roc_ask(HOSTED_READ, __builtin_return_address(0));
     return hosted_answer.read;
 }
 
 AnonStruct1763995a077e9c1f shale_run(ShaleRunArgs arg0) {
     hosted_run_args.spec = arg0;
-    roc_ask(HOSTED_RUN);
+    roc_ask(HOSTED_RUN, __builtin_return_address(0));
     return hosted_answer.run;
 }
 
 void shale_write(RocStr arg0, RocStr arg1) {
     hosted_write_args.path = arg0;
     hosted_write_args.text = arg1;
-    roc_ask(HOSTED_WRITE);
+    roc_ask(HOSTED_WRITE, __builtin_return_address(0));
 }
 
 // ── Shale's side ──

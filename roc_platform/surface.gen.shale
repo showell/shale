@@ -1,0 +1,9 @@
+-- roc_platform/surface.gen.shale: written by c/gen_builtins.shale from
+-- c/builtins.txt; never edit it. The Roc names roc_platform/run.shale finds
+-- in a script's text: the call that reads a launch's `name=value` (each
+-- name it reads is the literal its call starts with, and a value given that
+-- none reads is refused), and every hosted call (its text on a line is the
+-- column a stop there names).
+
+const ROC_ARG_CALL = "Shale.arg!"
+const ROC_CALLS = {"Shale.arg!", "Shale.exists!", "Shale.fail!", "Shale.glob!", "Shale.grep_all!", "Shale.list!", "Shale.print!", "Shale.read!", "Shale.run!", "Shale.write!"}

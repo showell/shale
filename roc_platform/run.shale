@@ -11,15 +11,25 @@
 -- again unchanged is linked and built no more.
 --
 -- A `name=value` is handed to the script when it reads `name`
--- (`Shale.arg!("name", ...)`, found in its text): any other is dropped,
--- since this launcher names its arguments by value. A `## budget: NAME=N
--- ...` line in the script is its budgets, as `-- budget:` is a Shale
--- script's. `timing=1` says each phase's time.
+-- (`Shale.arg!("name", ...)`, found in its text, the call's name from
+-- surface.gen.shale): any other stops the launch before anything is built,
+-- naming the ones the script reads, as Shale refuses a value no `arg` of a
+-- script's reads. (This launcher names its values by value, so Shale's own
+-- check cannot see them: it reads them with `arg_names()`.) A `## budget:
+-- NAME=N ...` line in the script is its budgets, as `-- budget:` is a Shale
+-- script's, `roc_cpu_ms` among them (the Roc's own CPU time, the host's).
+-- `timing=1` says each phase's time.
+--
+-- With the program it links a table of the script's lines (`app.sites`,
+-- host.c's "where in the Roc a stop is"), from the Roc's DWARF line table,
+-- so a stop made while the Roc waits names the script's line.
 --
 -- The script is one file whose header names the platform by any path
 -- (`pf: platform "../platform/main.roc"`): it is copied into the cache with
 -- that path made this checkout's, relative (Roc refuses an absolute one).
--- budget: programs=20
+-- budget: programs=20 steps=50000000
+
+use("./surface.gen.shale")
 
 const DIR = "roc_platform"
 const OUT = DIR .. "/out"
@@ -56,6 +66,25 @@ end
 -- ── The script's archive and program ────────────────────────────────────
 
 local source = read(SCRIPT)
+
+-- ── The values: each one given, one the script reads ────────────────────
+
+-- The launcher's own values, never the script's.
+const OWN = {"script", "timing"}
+local names = {}
+local reads = {}
+for g in re_find_all(source, substitute(ROC_ARG_CALL, ".", "\\.") .. [=[\("([a-z_0-9]+)"]=]) do
+  if not has_key(names, g.group) then push(reads, g.group) end
+  names[g.group] = true
+end
+for given in arg_names() do
+  if not has_item(OWN, given) and not has_key(names, given) then
+    local what = "it reads none"
+    if #reads > 0 then what = "it reads " .. join(reads, ", ") end
+    fail("run: `" .. given .. "=` is given, and " .. SCRIPT .. " reads no `" .. ROC_ARG_CALL .. "(\"" .. given .. "\", ...)`: " .. what)
+  end
+end
+
 local m = re_find(source, [=[platform "([^"]*)"]=])
 if m == nil then fail("run: " .. SCRIPT .. " names no platform (`pf: platform \"...\"`)") end
 -- Roc takes no absolute platform path: the cache's folder is three below
@@ -73,9 +102,49 @@ if not exists(exe) then
   must(said("link", run({"gcc", "-z", "noexecstack", host_o, cache .. "/app.a", "-o", exe}, {timeout_ms = 120000, tail = 20, nice = 19})))
 end
 
+-- ── The script's lines, for a stop's place ──────────────────────────────
+
+-- `app.sites`: the program's rows of the script's lines (DWARF's file
+-- `main`, the cache's main.roc; every other file's row, and a sequence's
+-- end, are line 0), roc_main's address, and each line's calls and first
+-- column. host.c's "where in the Roc a stop is" reads it.
+function sites_of(exe_path, dir, text)
+  local out = {"script " .. SCRIPT}
+  local nm = said("nm", must(run({"nm", exe_path}, {timeout_ms = 20000, tail = 5, re = " T roc_main$"})))
+  local base = re_find(nm.out, "([0-9a-f]+) T roc_main")
+  if base == nil then fail("run: " .. exe_path .. " has no roc_main") end
+  push(out, "base " .. base.group)
+  -- The whole table goes to a file, read whole: a keep of its lines would
+  -- hold them in the arena twice.
+  local table_log = dir .. "/lines.txt"
+  said("line table", must(run({"objdump", "--dwarf=decodedline", exe_path}, {timeout_ms = 60000, tail = 1, log = table_log})))
+  for l in lines(read(table_log)) do
+    local w = words(l)
+    if #w >= 3 and starts_with(w[3], "0x") then
+      local line = "0"
+      if w[1] == "main" and w[2] ~= "-" then line = w[2] end
+      push(out, "row " .. sub(w[3], 3, #w[3]) .. " " .. line)
+    end
+  end
+  local n = 0
+  for l in lines(text) do
+    n = n + 1
+    local first = re_find(l, "[^ \t]")
+    if first ~= nil then push(out, "line " .. n .. " " .. first.at) end
+    for c in ROC_CALLS do
+      for at in find_all(l, c .. "(") do push(out, "call " .. n .. " " .. at .. " " .. c) end
+    end
+    for m in re_find_all(l, "\\bcrash\\b") do push(out, "call " .. n .. " " .. m.at .. " crash") end
+  end
+  return join(out, "\n") .. "\n"
+end
+
+const sites = cache .. "/app.sites"
+if not exists(sites) then replace(sites, sites_of(real(exe), cache, source)) end
+
 -- ── The run ─────────────────────────────────────────────────────────────
 
-local argv = {real(exe)}
+local argv = {real(exe), "--roc-sites", real(sites)}
 local budget = re_find(source, "## budget: ([^\n]*)")
 if budget ~= nil then
   for w in words(budget.group) do
@@ -83,9 +152,7 @@ if budget ~= nil then
     push(argv, w)
   end
 end
-local names = {}
-for g in re_find_all(source, [=[Shale\.arg!\("([a-z_0-9]+)"]=]) do names[g.group] = true end
-for name in keys(names) do
+for name in reads do
   local v = arg(name, nil)
   if v ~= nil then push(argv, name .. "=" .. v) end
 end

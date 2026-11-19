@@ -11,7 +11,11 @@
 --   - in roc_platform/host/hosted.gen.c: the driver's Shale function that
 --     answers it, the C shim Roc calls (`shale_<name>`), the request it
 --     hands the driver as a Shale map and the answer it hands back as Roc's
---     value.
+--     value, and each one's Roc name (`Shale.read!`), which a stop at the
+--     Roc's line names;
+--   - roc_platform/surface.gen.shale: the Roc names the launcher finds in a
+--     script (the call that reads a launch's `name=value`, and every hosted
+--     call, whose text on a line is a stop's column there).
 -- The C types are `roc glue`'s, read from roc_platform/host/roc_platform_abi.h:
 -- each shim's prototype, each record's fields and each tag union's payloads.
 -- So a Roc type crosses as glue lays it out, and a change to Shale.roc that
@@ -22,6 +26,9 @@ const BT_GLUE = "roc_platform/host/roc_platform_abi.h"
 const BT_SHALE_ROC = "roc_platform/platform/Shale.roc"
 const BT_MAIN_ROC = "roc_platform/platform/main.roc"
 const BT_HOSTED_C = "roc_platform/host/hosted.gen.c"
+const BT_SURFACE = "roc_platform/surface.gen.shale"
+-- The Roc module the platform's effects are in (Shale.roc).
+const BT_ROC_MODULE = "Shale"
 
 -- ── Text at depth zero ──────────────────────────────────────────────────
 
@@ -623,6 +630,9 @@ function bt_render_hosted_c(exports, glue)
   out = out .. "// Each kind's `fn` in the request.\nstatic const Str hosted_names[] = {\n"
   for x in exports do out = out .. "    S_ITEM(\"" .. x.bare .. "\"),\n" end
   out = out .. "};\n\n"
+  out = out .. "// Each kind's Roc name, as a stop at the Roc's line names the call.\nstatic const Str hosted_roc_names[] = {\n"
+  for x in exports do out = out .. "    S_ITEM(\"" .. BT_ROC_MODULE .. "." .. x.name .. "\"),\n" end
+  out = out .. "};\n\n"
   -- The driver.
   out = out .. "// The Shale that runs the app.\nstatic const char HOSTED_DRIVER[] =\n"
   for l in bt_driver(exports) do out = out .. bt_c_literal(l) end
@@ -666,7 +676,7 @@ function bt_render_hosted_c(exports, glue)
       out = out .. "    hosted_" .. x.bare .. "_args." .. a.name .. " = arg" .. k .. ";\n"
       k = k + 1
     end
-    out = out .. "    roc_ask(HOSTED_" .. upper(x.bare) .. ");\n"
+    out = out .. "    roc_ask(HOSTED_" .. upper(x.bare) .. ", __builtin_return_address(0));\n"
     if p.ret ~= "void" then out = out .. "    return hosted_answer." .. x.bare .. ";\n" end
     out = out .. "}\n"
   end
@@ -705,6 +715,23 @@ function bt_render_hosted_c(exports, glue)
   return out
 end
 
+const BT_SURFACE_HEAD = "-- roc_platform/surface.gen.shale: written by c/gen_builtins.shale from\n-- c/builtins.txt; never edit it. The Roc names roc_platform/run.shale finds\n-- in a script's text: the call that reads a launch's `name=value` (each\n-- name it reads is the literal its call starts with, and a value given that\n-- none reads is refused), and every hosted call (its text on a line is the\n-- column a stop there names).\n\n"
+
+-- The launcher's library: the Roc names it finds in a script's text.
+function bt_render_surface(exports)
+  local arg_call = ""
+  local calls = {}
+  for x in exports do
+    push(calls, "\"" .. BT_ROC_MODULE .. "." .. x.name .. "\"")
+    if x.entry.name == "arg" then arg_call = BT_ROC_MODULE .. "." .. x.name end
+  end
+  if arg_call == "" then fail(BT_TABLE .. ": `arg` is not exported, and the launcher reads a script's values by its call") end
+  local out = BT_SURFACE_HEAD
+  out = out .. "const ROC_ARG_CALL = \"" .. arg_call .. "\"\n"
+  out = out .. "const ROC_CALLS = {" .. join(calls, ", ") .. "}\n"
+  return out
+end
+
 -- Every generated file: `{path, text}`.
 function bt_generated(entries)
   local exports = bt_exports(entries)
@@ -713,5 +740,6 @@ function bt_generated(entries)
     {path = BT_SHALE_ROC, text = bt_render_shale_roc(exports)},
     {path = BT_MAIN_ROC, text = bt_render_main_roc(exports)},
     {path = BT_HOSTED_C, text = bt_render_hosted_c(exports, glue)},
+    {path = BT_SURFACE, text = bt_render_surface(exports)},
   }
 end
