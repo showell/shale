@@ -33,7 +33,7 @@ const HOST_BUILTINS_PLANTS = {
    old = "if (j + o.len > *end) *end = j + o.len;", new = "(void)end;"},
   {name = "a want lets `grep` run", file = "host_refusals.c", dir = "host", caught_by = "host_builtins/test_host_run",
    aim = "run_refuses_each_bad_call_with_its_message",
-   old = "    HostRefusedGroups never = {HOST_NEVER, sizeof HOST_NEVER / sizeof *HOST_NEVER};\n    for", new = "    HostRefusedGroups never = {HOST_NEVER, sizeof HOST_NEVER / sizeof *HOST_NEVER};\n    if (has_want) return OK;\n    for"},
+   old = "    HostRefusedGroups refused = {HOST_REFUSED, sizeof HOST_REFUSED / sizeof *HOST_REFUSED};\n    for (int pass", new = "    HostRefusedGroups refused = {HOST_REFUSED, sizeof HOST_REFUSED / sizeof *HOST_REFUSED};\n    if (has_want) return OK;\n    for (int pass"},
   {name = "a version suffix is kept on argv[0]", file = "host_refusals.c", dir = "host", caught_by = "host_builtins/test_host_run",
    aim = "run_refuses_each_bad_call_with_its_message",
    old = "        b = str_sub(b, 0, dot - 1);", new = "        break;"},
