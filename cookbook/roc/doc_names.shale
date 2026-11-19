@@ -4,7 +4,7 @@
 -- leaves them), so a doc that names a function by its old name is stale.
 --
 --   use("./doc_names.shale")
---   doc_names_in(src)                  each backticked name in a comment line
+--   doc_names_in(src, sources)         each backticked name in a comment line
 --   names_in_tree(nodes)               every name a file's tree holds
 --   imports_in_tree(nodes)             the modules a file imports, by name
 --   stale_doc_findings(path, src, nodes, seen)
@@ -14,7 +14,11 @@
 -- reader can't take for a prose word: one of two words or more joined by
 -- `_` (`two_opt`, `read_line!`), or a module's member
 -- (`Route.two_opt`). A one-word name (`for`, `fold`) is often the
--- language's or the prose's, and is not judged.
+-- language's or the prose's, and is not judged. Nor is a name another
+-- language's or library's API holds: one whose sentence names a source of
+-- cookbook/words/cited_sources.txt before it ("Rust's `is_ascii_digit`",
+-- "Zig `isDigit`, Rust `is_ascii_digit`"), the sentence read back across the
+-- comment's lines to its last `.`, `?` or `!` or the comment's start.
 
 -- A backticked doc name, a call's parentheses allowed after it:
 -- `two_opt`, `read_line!`, `Route.two_opt(stops)`.
@@ -23,12 +27,40 @@ const DOC_NAME = "^(?:([A-Z][A-Za-z0-9]*)\\.)?([a-z][a-z0-9]*(?:_[a-z0-9]+)*!?)(
 -- A file's extensions, so `Screen.roc` is a file's name, not a member's.
 const FILE_EXTENSIONS = {"roc", "md", "txt", "zig", "ts", "js", "mjs", "json", "shale", "html", "tsv"}
 
+-- The text of the sentence before byte `at` of comment line `k` of `src`:
+-- back across the comment lines above (their `#`s gone) until a `.`, `?` or
+-- `!` that ends a sentence, a blank comment line, or the comment's start.
+function sentence_before(src, k, at)
+  local text = trim(re_replace(sub(trim(src[k]), 1, at - 1), "^#+", ""))
+  local up = k - 1
+  while re_find(text, "[.?!](\\s|$)") == nil and up >= 1 and starts_with(trim(src[up]), "#") do
+    local above = trim(re_replace(trim(src[up]), "^#+", ""))
+    if above == "" then break end
+    text = above .. " " .. text
+    up = up - 1
+  end
+  local ends = re_find_all(text, "[.?!](\\s|$)")
+  if #ends == 0 then return text end
+  return sub(text, ends[#ends].at + 1)
+end
+
+-- Whether a sentence names a source of `sources` (cited_sources.txt), as a
+-- whole word or a possessive (`Rust`, `Rust's`, `Zig,`).
+function cites_source(sentence, sources)
+  for w in words(sentence) do
+    local bare = re_replace(re_replace(w, "'s$|s'$", ""), "[,;:()\"]+", "")
+    if has_key(sources, bare) then return true end
+  end
+  return false
+end
+
 -- Each backticked name in the comment lines of `src` (a file's lines), as
 -- `{line, module, name, others}`, `module` "" for a bare name. A bare name of
 -- one word is left out, as the header says, and so is a file's name. `others`
 -- says a possessive stands before it (`Pipeline's`, `roc-ray's`, `the
--- rules' own`): it is another's name, which this file need not hold.
-function doc_names_in(src)
+-- rules' own`), or a source of `sources` before it in its sentence
+-- (`cites_source`): it is another's name, which this file need not hold.
+function doc_names_in(src, sources)
   local out = {}
   for k = 1, #src do
     local l = trim(src[k])
@@ -42,7 +74,7 @@ function doc_names_in(src)
           -- opens its line.
           local before = trim(re_replace(sub(l, 1, m.at - 1), "^#+", ""))
           if before == "" and k > 1 then before = trim(src[k - 1]) end
-          local others = re_find(before .. " ", "(?:'s|s')(?: own)? $") ~= nil
+          local others = re_find(before .. " ", "(?:'s|s')(?: own)? $") ~= nil or cites_source(sentence_before(src, k, m.at), sources)
           local is_file = module ~= "" and has_item(FILE_EXTENSIONS, name)
           if (module ~= "" or contains(name, "_")) and not is_file then push(out, {line = k, module = module, name = name, others = others}) end
         end
@@ -110,7 +142,7 @@ end
 -- file's own names, those of `seen.known` (a set the caller adds, such as the
 -- self-test's check names), and those of every module it imports
 -- (`module_names`), and is left when an import's names can't be known or a
--- possessive names its owner; `Module.name` against that module's. The
+-- possessive or a cited source (`seen.sources`) names its owner; `Module.name` against that module's. The
 -- file's own module may be named either way. A platform module's bare
 -- `roc_` name is the host's (`roc_crashed`, `roc_alloc`: the symbols Roc's
 -- host ABI has the host define, in Zig or C), which no Roc file holds, so
@@ -132,7 +164,7 @@ function stale_doc_findings(path, src, nodes, seen)
     if names == nil then all_imports_known = false else push(imported, names) end
   end
   local said = {}
-  for d in doc_names_in(src) do
+  for d in doc_names_in(src, seen.sources) do
     local plain = ends_with(d.name, "!") and sub(d.name, 1, #d.name - 1) or d.name
     local names_something = false
     local host_symbol = is_platform and starts_with(plain, "roc_")

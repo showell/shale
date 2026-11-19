@@ -276,7 +276,10 @@
 --                 none, as for `List.map` (cookbook/roc/doc_names.shale).
 --                 An import is read the same way, and one whose names can't
 --                 be read leaves the file's bare names unjudged, as does a
---                 possessive before one (`roc-ray's`): it is another's. A
+--                 possessive before one (`roc-ray's`), or a language or
+--                 library of cookbook/words/cited_sources.txt before it in
+--                 its sentence ("Rust's `is_ascii_digit`", "Zig `isDigit`,
+--                 Rust `is_ascii_digit`"): it is another's. A
 --                 platform's `provides` symbols (`roc_plan`) are its names,
 --                 and its bare `roc_` names (`roc_crashed`) the host's.
 --
@@ -662,7 +665,7 @@ function plant_doc_names()
   known.hunt_names = true
   return known
 end
-const DOC_NAMES_SEEN = {known = SELF_TEST and plant_doc_names() or {}, by_module = {}, by_path = {}}
+const DOC_NAMES_SEEN = {known = SELF_TEST and plant_doc_names() or {}, by_module = {}, by_path = {}, sources = word_set("cookbook:words/cited_sources.txt")}
 -- Each file read is known by its path too, so `module_names` parses only
 -- a module beside one that the run didn't read.
 for file in parsed.files do
