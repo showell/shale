@@ -18,7 +18,8 @@
 -- check cannot see them: it reads them with `arg_names()`.) A `## budget:
 -- NAME=N ...` line in the script is its budgets, as `-- budget:` is a Shale
 -- script's, `roc_cpu_ms` among them (the Roc's own CPU time, the host's).
--- `timing=1` says each phase's time.
+-- `timing=1` says each phase's time. `opt=speed` builds with Roc's
+-- `--opt=speed` (`dev` unset): slower to build, faster to run.
 --
 -- With the program it links a table of the script's lines (`app.sites`,
 -- host.c's "where in the Roc a stop is"), from the Roc's DWARF line table,
@@ -35,6 +36,8 @@ const DIR = "roc_platform"
 const OUT = DIR .. "/out"
 const SCRIPT = arg("script", "")
 const TIMING = arg("timing", 0) == 1
+const OPT = arg("opt", "dev")
+if OPT ~= "dev" and OPT ~= "speed" then fail("run: opt=dev (the default) or opt=speed, not " .. OPT) end
 if SCRIPT == "" then fail("run: script=<file.roc>") end
 if not exists(SCRIPT) then fail("run: no script " .. SCRIPT) end
 
@@ -70,7 +73,7 @@ local source = read(SCRIPT)
 -- ── The values: each one given, one the script reads ────────────────────
 
 -- The launcher's own values, never the script's.
-const OWN = {"script", "timing"}
+const OWN = {"script", "timing", "opt"}
 local names = {}
 local reads = {}
 for g in re_find_all(source, substitute(ROC_ARG_CALL, ".", "\\.") .. [=[\("([a-z_0-9]+)"]=]) do
@@ -92,14 +95,18 @@ if m == nil then fail("run: " .. SCRIPT .. " names no platform (`pf: platform \"
 local made = substitute(source, m.text, "platform \"../../../platform/main.roc\"")
 local platform = ""
 for p in glob(DIR .. "/platform/*.roc") do platform = platform .. read(p) end
-const key = hash_of("script key", made .. platform .. pin .. host_key)
+const key = hash_of("script key", made .. platform .. pin .. host_key .. OPT)
 const cache = OUT .. "/cache/" .. key
 const exe = cache .. "/app"
 if not exists(exe) then
   mkdir(cache)
   replace(cache .. "/main.roc", made)
-  must(said("roc build", run({roc, "build", real(cache .. "/main.roc"), "--target=x64musl", "--opt=dev", "--output=" .. real(cache) .. "/app.a"}, {timeout_ms = 300000, tail = 30, nice = 19})))
-  must(said("link", run({"gcc", "-z", "noexecstack", host_o, cache .. "/app.a", "-o", exe}, {timeout_ms = 120000, tail = 20, nice = 19})))
+  must(said("roc build", run({roc, "build", real(cache .. "/main.roc"), "--target=x64musl", "--opt=" .. OPT, "--output=" .. real(cache) .. "/app.a"}, {timeout_ms = 300000, tail = 30, nice = 19})))
+  -- A speed archive is not PIE (README, "What the spike measured").
+  local link = {"gcc", "-z", "noexecstack"}
+  if OPT == "speed" then push(link, "-no-pie") end
+  for a in {host_o, cache .. "/app.a", "-o", exe} do push(link, a) end
+  must(said("link", run(link, {timeout_ms = 120000, tail = 20, nice = 19})))
 end
 
 -- ── The script's lines, for a stop's place ──────────────────────────────

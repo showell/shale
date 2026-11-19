@@ -109,7 +109,10 @@ that is pure) and holds each to its finding.
 
 The marshalling follows the Roc type: `Str`, `U64`, `I64`, `Bool`, `{}`,
 `List(T)`, records and tag unions, nested. A tag union crosses as `{tag =
-"Name", value = payload}`. The C types are glue's (`roc_platform/host/
+"Name", value = payload}`. **A record's rest:** a field `attrs : List({ name
+: Str, value : Str })` takes every entry of the Shale map that the record's
+other fields don't name, in the map's order (`roc_tree!`'s nodes, whose
+attributes vary by node), so the C marshals them and no driver loop does. The C types are glue's (`roc_platform/host/
 roc_platform_abi.h`): a shim's prototype, a record's fields, a tag union's
 payloads, and a list's record by its fields. A Roc type the emitters do not
 carry yet (a list of tag unions) stops the generator, naming the function

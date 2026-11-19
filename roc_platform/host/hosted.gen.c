@@ -115,19 +115,7 @@ static const char HOSTED_DRIVER[] =
     "  return {tag = \"Found\", value = read(q.path)}\n"
     "end\n"
     "function hosted_roc_tree(q)\n"
-    "  local out = {}\n"
-    "  for f in roc_tree(q.paths) do\n"
-    "    local nodes = {}\n"
-    "    for n in f.nodes do\n"
-    "      local attrs = {}\n"
-    "      for k in keys(n) do\n"
-    "        if not has_item({\"kind\", \"depth\", \"parent\", \"kids\", \"line\", \"col\", \"end_line\", \"end_col\"}, k) then push(attrs, {name = k, value = tostring(n[k])}) end\n"
-    "      end\n"
-    "      push(nodes, {kind = n.kind, depth = n.depth, parent = n.parent, kids = n.kids, line = n.line, col = n.col, end_line = n.end_line, end_col = n.end_col, attrs = attrs})\n"
-    "    end\n"
-    "    push(out, {path = f.path, err = f.err, nodes = nodes})\n"
-    "  end\n"
-    "  return out\n"
+    "  return roc_tree(q.paths)\n"
     "end\n"
     "function hosted_run(q)\n"
     "  local opts = {timeout_ms = q.spec.timeout_ms}\n"
@@ -893,26 +881,26 @@ static STATUS_MUST_USE Status hosted_answer_from(Run *r, Pos pos, int kind, cons
                                     }
                                 }
                                 {
-                                    Value attrs_127;
-                                    TRY(hosted_get(r, pos, &at(items104, k107), S("attrs"), &attrs_127));
-                                    {
-                                        Values items128;
-                                        TRY(hosted_items(r, pos, &attrs_127, &items128));
-                                        void *elems129 = NULL;
-                                        TRY(hosted_list(r, pos, items128.len, sizeof(AnonStruct82a96c5d55d63488), &((made106[k107]).attrs), &elems129));
-                                        AnonStruct82a96c5d55d63488 *made130 = elems129;
-                                        for (size_t k131 = 0; k131 < items128.len; k131++) {
-                                            {
-                                                Value name_132;
-                                                TRY(hosted_get(r, pos, &at(items128, k131), S("name"), &name_132));
-                                                TRY(hosted_str(r, pos, &name_132, &((made130[k131]).name)));
-                                            }
-                                            {
-                                                Value value_133;
-                                                TRY(hosted_get(r, pos, &at(items128, k131), S("value"), &value_133));
-                                                TRY(hosted_str(r, pos, &value_133, &((made130[k131]).value)));
-                                            }
-                                        }
+                                    if ((&at(items104, k107))->tag != VALUE_TABLE || (&at(items104, k107))->as.table->kind != TABLE_MAP) return hosted_wrong(r, pos, S("a map"));
+                                    const ValueMap *map127 = &(&at(items104, k107))->as.table->map;
+                                    size_t n128 = 0;
+                                    for (size_t k = 0; k < ValueMap_len(map127); k++) {
+                                        Str key = ValueMap_key_at(map127, k);
+                                        if (!(str_eq(key, S("kind")) || str_eq(key, S("depth")) || str_eq(key, S("parent")) || str_eq(key, S("kids")) || str_eq(key, S("line")) || str_eq(key, S("col")) || str_eq(key, S("end_line")) || str_eq(key, S("end_col")))) n128++;
+                                    }
+                                    void *elems129 = NULL;
+                                    TRY(hosted_list(r, pos, n128, sizeof(AnonStruct82a96c5d55d63488), &((made106[k107]).attrs), &elems129));
+                                    AnonStruct82a96c5d55d63488 *made130 = elems129;
+                                    size_t j = 0;
+                                    for (size_t k = 0; k < ValueMap_len(map127); k++) {
+                                        Str key = ValueMap_key_at(map127, k);
+                                        if (str_eq(key, S("kind")) || str_eq(key, S("depth")) || str_eq(key, S("parent")) || str_eq(key, S("kids")) || str_eq(key, S("line")) || str_eq(key, S("col")) || str_eq(key, S("end_line")) || str_eq(key, S("end_col"))) continue;
+                                        Value name_v;
+                                        value_string(&name_v, key);
+                                        Value value_v = ValueMap_value_at(map127, k);
+                                        TRY(hosted_str(r, pos, &name_v, &made130[j].name));
+                                        TRY(hosted_str(r, pos, &value_v, &made130[j].value));
+                                        j++;
                                     }
                                 }
                             }
@@ -925,18 +913,18 @@ static STATUS_MUST_USE Status hosted_answer_from(Run *r, Pos pos, int kind, cons
     case HOSTED_RUN:
         {
             {
-                Value code_134;
-                TRY(hosted_get(r, pos, v, S("code"), &code_134));
+                Value code_131;
+                TRY(hosted_get(r, pos, v, S("code"), &code_131));
                 {
-                    int64_t n135 = 0;
-                    TRY(hosted_int(r, pos, &code_134, &n135));
-                    (hosted_answer.run).code = (int64_t)n135;
+                    int64_t n132 = 0;
+                    TRY(hosted_int(r, pos, &code_131, &n132));
+                    (hosted_answer.run).code = (int64_t)n132;
                 }
             }
             {
-                Value out_136;
-                TRY(hosted_get(r, pos, v, S("out"), &out_136));
-                TRY(hosted_str(r, pos, &out_136, &((hosted_answer.run).out)));
+                Value out_133;
+                TRY(hosted_get(r, pos, v, S("out"), &out_133));
+                TRY(hosted_str(r, pos, &out_133, &((hosted_answer.run).out)));
             }
         }
         return OK;

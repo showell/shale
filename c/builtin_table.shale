@@ -425,6 +425,57 @@ function bt_to_shale(g, t, src, ctype, dst, ind)
   return out
 end
 
+-- Whether a record's field is its map's rest: `attrs : List({ name : Str,
+-- value : Str })` takes every entry of the Shale map that the record's other
+-- fields don't name, in the map's order, each value a string (a roc_tree
+-- node's attributes, whose names vary by node).
+function bt_is_rest(f)
+  if f.name ~= "attrs" or f.t.k ~= "list" or f.t.of.k ~= "rec" or #f.t.of.fields ~= 2 then return false end
+  local a = f.t.of.fields[1]
+  local b = f.t.of.fields[2]
+  return a.name == "name" and a.t.k == "str" and b.name == "value" and b.t.k == "str"
+end
+
+-- C lines that fill the rest field `f` (bt_is_rest) of `dst` from the map at
+-- `val`, every entry the record `t`'s other fields don't name.
+function bt_rest_from_shale(g, t, f, val, dst, ctype, ind)
+  local item = bt_item_ctype(g.glue, f.t.of)
+  local named = {}
+  for o in t.fields do
+    if o.name ~= f.name then push(named, "str_eq(" .. "key, S(\"" .. o.name .. "\"))") end
+  end
+  local is_named = join(named, " || ")
+  local m = bt_fresh(g, "map")
+  local n = bt_fresh(g, "n")
+  local ev = bt_fresh(g, "elems")
+  local e = bt_fresh(g, "made")
+  local out = {}
+  push(out, ind .. "{")
+  push(out, ind .. "    if ((" .. val .. ")->tag != VALUE_TABLE || (" .. val .. ")->as.table->kind != TABLE_MAP) return hosted_wrong(r, pos, S(\"a map\"));")
+  push(out, ind .. "    const ValueMap *" .. m .. " = &(" .. val .. ")->as.table->map;")
+  push(out, ind .. "    size_t " .. n .. " = 0;")
+  push(out, ind .. "    for (size_t k = 0; k < ValueMap_len(" .. m .. "); k++) {")
+  push(out, ind .. "        Str key = ValueMap_key_at(" .. m .. ", k);")
+  push(out, ind .. "        if (!(" .. is_named .. ")) " .. n .. "++;")
+  push(out, ind .. "    }")
+  push(out, ind .. "    void *" .. ev .. " = NULL;")
+  push(out, ind .. "    TRY(hosted_list(r, pos, " .. n .. ", sizeof(" .. item .. "), &((" .. dst .. ")." .. f.name .. "), &" .. ev .. "));")
+  push(out, ind .. "    " .. item .. " *" .. e .. " = " .. ev .. ";")
+  push(out, ind .. "    size_t j = 0;")
+  push(out, ind .. "    for (size_t k = 0; k < ValueMap_len(" .. m .. "); k++) {")
+  push(out, ind .. "        Str key = ValueMap_key_at(" .. m .. ", k);")
+  push(out, ind .. "        if (" .. is_named .. ") continue;")
+  push(out, ind .. "        Value name_v;")
+  push(out, ind .. "        value_string(&name_v, key);")
+  push(out, ind .. "        Value value_v = ValueMap_value_at(" .. m .. ", k);")
+  push(out, ind .. "        TRY(hosted_str(r, pos, &name_v, &" .. e .. "[j].name));")
+  push(out, ind .. "        TRY(hosted_str(r, pos, &value_v, &" .. e .. "[j].value));")
+  push(out, ind .. "        j++;")
+  push(out, ind .. "    }")
+  push(out, ind .. "}")
+  return out
+end
+
 -- C lines that set `dst` (an lvalue of C type `ctype`, Roc type `t`) to the
 -- Shale value at `val` (a `const Value *`), or stop naming what is wrong.
 function bt_from_shale(g, t, val, dst, ctype, ind)
@@ -462,12 +513,16 @@ function bt_from_shale(g, t, val, dst, ctype, ind)
     push(out, ind .. "}")
   elseif t.k == "rec" then
     for f in t.fields do
-      local x = bt_fresh(g, f.name .. "_")
-      push(out, ind .. "{")
-      push(out, ind .. "    Value " .. x .. ";")
-      push(out, ind .. "    TRY(hosted_get(r, pos, " .. val .. ", S(\"" .. f.name .. "\"), &" .. x .. "));")
-      for c in bt_from_shale(g, f.t, "&" .. x, "(" .. dst .. ")." .. f.name, bt_field_ctype(g.glue, ctype, f.name), ind .. "    ") do push(out, c) end
-      push(out, ind .. "}")
+      if bt_is_rest(f) then
+        for c in bt_rest_from_shale(g, t, f, val, dst, ctype, ind) do push(out, c) end
+      else
+        local x = bt_fresh(g, f.name .. "_")
+        push(out, ind .. "{")
+        push(out, ind .. "    Value " .. x .. ";")
+        push(out, ind .. "    TRY(hosted_get(r, pos, " .. val .. ", S(\"" .. f.name .. "\"), &" .. x .. "));")
+        for c in bt_from_shale(g, f.t, "&" .. x, "(" .. dst .. ")." .. f.name, bt_field_ctype(g.glue, ctype, f.name), ind .. "    ") do push(out, c) end
+        push(out, ind .. "}")
+      end
     end
   elseif t.k == "tags" then
     local tv = bt_fresh(g, "tag")

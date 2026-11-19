@@ -68,7 +68,8 @@ Shale := [].{
 	## file` for a missing one), `""` for a file read. A node's `parent` and
 	## `kids` are places in `nodes` counted from 1, `parent` 0 for the root;
 	## `line` is 0 for a node with no span. `attrs` are the attributes Roc's tree
-	## gives it (`raw`, `name`, `method`, `op`, ...), each by its name.
+	## gives it (`raw`, `name`, `method`, `op`, ...), each by its name, in the
+	## tree's order.
 	roc_tree! : List(Str) => List({ path : Str, err : Str, nodes : List({ kind : Str, depth : U64, parent : U64, kids : List(U64), line : U64, col : U64, end_line : U64, end_col : U64, attrs : List({ name : Str, value : Str }) }) })
 
 	## A program run to its end, or stopped at its timeout: its exit code (`-1`

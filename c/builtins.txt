@@ -1049,21 +1049,9 @@ roc_tree(paths: List(Path)) -> List(Tree)
   anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
   roc: roc_tree! : List(Str) => List({ path : Str, err : Str, nodes : List({ kind : Str, depth : U64, parent : U64, kids : List(U64), line : U64, col : U64, end_line : U64, end_col : U64, attrs : List({ name : Str, value : Str }) }) })
   roc_params: paths
-  roc_doc: Roc's own parser's tree of each file, in order (Shale's `roc_tree`, through roc-ast): its nodes, or `err`, why roc-ast refused it (`no such file` for a missing one), `""` for a file read. A node's `parent` and `kids` are places in `nodes` counted from 1, `parent` 0 for the root; `line` is 0 for a node with no span. `attrs` are the attributes Roc's tree gives it (`raw`, `name`, `method`, `op`, ...), each by its name.
+  roc_doc: Roc's own parser's tree of each file, in order (Shale's `roc_tree`, through roc-ast): its nodes, or `err`, why roc-ast refused it (`no such file` for a missing one), `""` for a file read. A node's `parent` and `kids` are places in `nodes` counted from 1, `parent` 0 for the root; `line` is 0 for a node with no span. `attrs` are the attributes Roc's tree gives it (`raw`, `name`, `method`, `op`, ...), each by its name, in the tree's order.
   values: each file's tree, or why roc-ast refused it
-  driver: local out = {}
-  driver: for f in roc_tree(q.paths) do
-  driver:   local nodes = {}
-  driver:   for n in f.nodes do
-  driver:     local attrs = {}
-  driver:     for k in keys(n) do
-  driver:       if not has_item({"kind", "depth", "parent", "kids", "line", "col", "end_line", "end_col"}, k) then push(attrs, {name = k, value = tostring(n[k])}) end
-  driver:     end
-  driver:     push(nodes, {kind = n.kind, depth = n.depth, parent = n.parent, kids = n.kids, line = n.line, col = n.col, end_line = n.end_line, end_col = n.end_col, attrs = attrs})
-  driver:   end
-  driver:   push(out, {path = f.path, err = f.err, nodes = nodes})
-  driver: end
-  driver: return out
+  driver: return roc_tree(q.paths)
 
 go_tree(paths: List(Path)) -> List(Tree)
   impl: prelude linux
