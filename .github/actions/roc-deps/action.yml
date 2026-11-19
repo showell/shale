@@ -1,0 +1,39 @@
+# The Roc the cookbook's Roc self-tests are judged by, for test.yml and
+# c-full.yml alike: the Roc nightly at cookbook/roc/pinned.shale's
+# SELF_TEST_PIN and roc-types built for that pin, both under ~/tools, each
+# download's checksum checked.
+name: roc-deps
+description: the pinned Roc nightly and roc-types under ~/tools
+
+runs:
+  using: composite
+  steps:
+    # rewrite_method_calls.shale's typed plant reads Roc's checker's types from
+    # ~/tools/roc-types/bin/roc-types: the asset showell/roc-types publishes
+    # for the pin below (SELF_TEST_PIN), its URL and sha256 those of that
+    # repo's `release` file, the checksum checked. It is pinned here, as
+    # Roc is, so a new roc-types pin there moves Shale's only with Shale's.
+    - name: Install roc-types
+      shell: bash
+      run: |
+        url=https://github.com/showell/roc-apps/releases/download/roc-types-2026-11-16/roc-types-3-34bd006-linux-x86_64.tar.gz
+        sha=cd845659c8f6e167d0dff543f7a342fe41c361f7d5f1f4fdb8597a2e35a2f527
+        curl -fsSL -o /tmp/roc-types.tar.gz "$url"
+        echo "$sha  /tmp/roc-types.tar.gz" | sha256sum -c -
+        mkdir -p ~/tools/roc-types
+        tar -xzf /tmp/roc-types.tar.gz -C ~/tools/roc-types
+        test -x ~/tools/roc-types/bin/roc-types
+
+    # The Roc rewrites' self-tests (cookbook/roc/rewrite_method_calls.shale and
+    # check_stacking.shale) are judged by the compiler itself, at
+    # tools:roc-nightly-2026-11-03-34bd006/roc (cookbook/roc/pinned.shale's
+    # SELF_TEST_PIN, roc-types' pin): Roc's own nightly release, its checksum
+    # checked. The runner's CPU has the SHA extension the stock build needs.
+    - name: Install Roc
+      shell: bash
+      run: |
+        curl -fsSL -o /tmp/roc.tar.gz https://github.com/roc-lang/nightlies/releases/download/nightly-2026-11-03-34bd006/roc_nightly-linux_x86_64-2026-11-03-34bd006.tar.gz
+        echo "d5c769579edd8e26114b5a89c16e7e074295649a6721a620c98a090eb2bb62c7  /tmp/roc.tar.gz" | sha256sum -c -
+        mkdir -p ~/tools/roc-nightly-2026-11-03-34bd006
+        tar -xzf /tmp/roc.tar.gz -C ~/tools/roc-nightly-2026-11-03-34bd006 --strip-components=1
+        test -x ~/tools/roc-nightly-2026-11-03-34bd006/roc

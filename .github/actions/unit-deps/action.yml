@@ -1,5 +1,7 @@
 # What Zig Shale's unit tests (legacy_zig/, deprecated and frozen) need
-# beside the checkout, for test.yml and coverage.yml alike: zig-webbox beside it (build.zig.zon's `webbox`, and
+# beside the checkout, for test.yml and coverage.yml alike (and c-full.yml,
+# C Shale's full tier, for the Zig that builds zig-ast and for the two
+# parsers): zig-webbox beside it (build.zig.zon's `webbox`, and
 # the Zig tools' tests replay its history), the patched Zig that
 # shale/legacy_zig/zig-version pins, on PATH, and the parsers the roc_tree and go_tree
 # tests run (~/tools/roc-ast, ~/tools/go-ast). The caller has checked out
