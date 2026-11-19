@@ -388,14 +388,15 @@ TEST(a_program_writes_and_reads_only_where_the_mounts_allow) {
                           "print(host(\"job_wait\", j, {timeout_ms = 10000}).code)\n"
                           "print(c({\"cp\", \"D/tools/t.txt\", \"D/out/t.txt\"}).code)\n"
                           "print(c({\"mkdir\", \"sub\"}).code)\n"
-                          "print(c({\"mv\", \"a.txt\", \"sub/a.txt\"}).code)\n"),
+                          "print(c({\"mv\", \"a.txt\", \"sub/a.txt\"}).code)\n"
+                          "print(c({\"ln\", \"sub/a.txt\", \"b.txt\"}).code)\n"),
            ran_budgets());
     EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), ran_d(&x, "cp: cannot create regular file 'D/tools/new.txt': Permission denied\n\n"
                                              "1\n1\n"
                                              "cp: cannot open 'D/decoy/keep.txt' for reading: Permission denied\n\n"
                                              "1\n1\n1\n1\n"
-                                             "0\n0\n0\n"));
+                                             "0\n0\n0\n0\n"));
     // Every decoy is as it was; what the mounts allow was done.
     EXPECT_STR(guards_decoy(&x, "tools/new.txt"), S("absent"));
     EXPECT_STR(guards_decoy(&x, "decoy/new.txt"), S("absent"));
@@ -405,6 +406,9 @@ TEST(a_program_writes_and_reads_only_where_the_mounts_allow) {
     EXPECT_STR(guards_decoy(&x, "root/copy.txt"), S("absent"));
     EXPECT_STR(guards_decoy(&x, "out/t.txt"), S("t\n"));
     EXPECT_STR(guards_decoy(&x, "root/sub/a.txt"), S("a\n"));
+    // A hard link into another folder, which no program falls back from as
+    // `mv` and git do (to a copy), needs Landlock's REFER.
+    EXPECT_STR(guards_decoy(&x, "root/b.txt"), S("a\n"));
     ran_free(&x);
 }
 

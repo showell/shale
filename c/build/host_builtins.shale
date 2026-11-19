@@ -32,7 +32,7 @@ const HOST_BUILTINS_PLANTS = {
    aim = "a_program_by_a_secret_s_path_is_the_secrets_guard_s_before_git_is_asked",
    old = "    if (leaks) {\n", new = "    if (0) {\n"},
   {name = "a confined program cannot move a file between folders", file = "landlock.c", dir = "host", caught_by = "host_builtins/test_run_guards",
-   aim = "git_commits_in_a_mount_and_a_build_writes_its_out_folder_confined",
+   aim = "a_program_writes_and_reads_only_where_the_mounts_allow",
    old = "    if (abi >= 2) all |= LANDLOCK_REFER;\n", new = ""},
   {name = "a script's NUL is made an OS string", file = "host.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "a_nul_in_an_argument_an_env_a_secrets_name_or_a_secret_is_refused_before_any_guard",
