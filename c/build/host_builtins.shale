@@ -3,7 +3,9 @@
 -- host_write_gate.c, host_run_secrets.c, host_run.c, jobs.c, host_jobs.c).
 -- c/build.shale runs it, with the `build` mount that `use` below reads; see
 -- that file for the tiers and the blocks.
--- budget: steps=40000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
+-- (steps: 100M since 2026-11-19: its plants, 26 with the Landlock lane's
+-- and the unconfined gate's, each copy c/, about 1.75M steps a copy.)
+-- budget: steps=100000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
 
 use("build:lib.shale")
 
