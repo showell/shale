@@ -588,6 +588,10 @@ and a near-copy that fits its repo is fine. A repository that isn't
 Shale's keeps its custom scripts, with a short README in their folder
 naming them and the cookbook recipes it relies on.
 
+**A long-lived recipe may be written in Roc**, on Shale's Roc platform,
+typed and confined as a Shale script is: [`roc_platform/README.md`](../roc_platform/README.md).
+One-offs stay in Shale.
+
 **A recipe over a whole tree** keeps each file's work in a function and
 calls `yield()` after each file, as `cookbook/check_seals.shale` and the name
 hunts do: what a file's call made (its tokens, its lines) is let go there,
