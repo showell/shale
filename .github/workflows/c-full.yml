@@ -85,7 +85,9 @@ jobs:
 
       # The runner's own mounts file, made here: the tools, the writable
       # `build` and `scratch` folders the golden tests and recipes use, the
-      # checkouts' folder as `repos`, this checkout's cookbook, and the
+      # checkouts' folder as `repos` (writable: a root inside a read-only
+      # mount is read-only too, and the tier writes c/out), this checkout's
+      # cookbook, and the
       # `localbin` c/install.shale links `shale` in. Git commits as a
       # placeholder identity (the goldens pin their own).
       - name: Mounts and git
@@ -96,7 +98,7 @@ jobs:
           localbin = $HOME/.local/bin
           build = $HOME/build
           scratch = $HOME/scratch
-          repos = $GITHUB_WORKSPACE ro
+          repos = $GITHUB_WORKSPACE
           cookbook = $GITHUB_WORKSPACE/shale/cookbook ro
           EOF
           cat ~/.config/shale/mounts
