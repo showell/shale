@@ -1,0 +1,2 @@
+-- A plant for `accepted=`: a project's term, added to the cookbook's.
+trk     -- the plant's own word for a track

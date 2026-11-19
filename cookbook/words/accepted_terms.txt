@@ -1,7 +1,8 @@
 -- Short terms a Roc name may hold though no word list has them, one a line,
 -- each with its reason after `--`. Read by find_unclear_names.shale, whose
 -- `abbreviation` check passes these, and a plural of one (`ids`). A line with
--- no reason fails the run. A project's own go in its own file, `accepted=`.
+-- no reason fails the run. A project's own go in its own file, `accepted=`,
+-- which adds to these.
 abs     -- Roc's own `Num.abs`
 ai      -- computing's word for a program's own player
 alt     -- HTML's attribute
@@ -12,6 +13,7 @@ argb    -- a colour's channels, by their letters
 ast     -- computing's word for a syntax tree
 atx     -- CommonMark's name for a `#` heading
 br      -- HTML's element
+cc      -- email's own word for a copy's recipients
 cos     -- the function's own name
 cr      -- ASCII's name for a carriage return
 css     -- the stylesheet language's own name
@@ -19,7 +21,9 @@ dec     -- Roc's own `Dec`
 del     -- HTML's element
 div     -- HTML's element
 doc     -- Roc's word for a `##` comment
+dm      -- the chat's own word for a direct message (`dms` its plural)
 dom     -- the browser's document model, by its own name
+dt      -- a game loop's own name for its delta time
 ecma    -- the standard's own name
 em      -- HTML's element
 eq      -- Roc's own `is_eq`
@@ -62,6 +66,7 @@ ppm     -- the image format's own name
 pre     -- HTML's element
 px      -- a unit, pixels
 quot    -- HTML's entity
+rect    -- 2D graphics' own word for a rectangle
 rem     -- Roc's own `Num.rem`
 repo    -- git's own word for a repository
 rgb     -- a colour's channels, by their letters

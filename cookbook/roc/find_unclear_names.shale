@@ -12,8 +12,8 @@
 --                  words of its own to add;
 --   words          the English words of two to four letters a name may hold,
 --                  by default cookbook/words/short_words.txt;
---   accepted       the short terms a name may hold though they are no
---                  English word, each with its reason, by default
+--   accepted       a project's file of the short terms a name may hold though
+--                  they are no English word, each with its reason, added to
 --                  cookbook/words/accepted_terms.txt (`html`, `url`, `utf8`);
 --   terms          a project's file of fixed terms that open a name and only
 --                  look like a verb, one a line, such as `set_cookie` for
@@ -67,7 +67,8 @@ const SELF_TEST = arg("self_test", "") == "1"
 const GLOB = arg("glob", "**/*.roc")
 const ABBREVIATIONS_FILE = arg("abbreviations", "cookbook:words/abbreviations.txt")
 const SHORT_WORDS_FILE = arg("words", "cookbook:words/short_words.txt")
-const ACCEPTED_FILE = arg("accepted", "cookbook:words/accepted_terms.txt")
+const ACCEPTED_FILE = "cookbook:words/accepted_terms.txt"
+const PROJECT_ACCEPTED_FILE = arg("accepted", "")
 const TERMS_FILE = arg("terms", "")
 use("./declared.shale")
 use("cookbook:findings.shale")
@@ -241,6 +242,8 @@ function self_test()
     {glob = at .. "abbreviation.roc", args = {"abbreviations=" .. at .. "project_words.txt"}, counts = {abbreviation = 4}, says = {"`max_vis_cats` abbreviates: vis, cats"}},
     {glob = at .. "short_words/*.roc", counts = {abbreviation = 5}, says = {"Tbl.roc:1: abbreviation: `Tbl` abbreviates: tbl", "Tbl.roc:4: abbreviation: `Trk` abbreviates: trk", "Tbl.roc:7: abbreviation: `trk` abbreviates: trk", "`pts` abbreviates: pts", "Tbl.roc:9: abbreviation: `hgt` abbreviates: hgt"}},
     {glob = at .. "quiet_short_words/*.roc"},
+    {glob = at .. "short_words/*.roc", args = {"accepted=" .. at .. "project_terms.txt"}, counts = {abbreviation = 3}, says = {"`Tbl` abbreviates: tbl", "`pts` abbreviates: pts", "`hgt` abbreviates: hgt"}},
+    {glob = at .. "quiet_short_words/*.roc", args = {"accepted=" .. at .. "project_terms.txt"}},
     {glob = at .. "quiet_short_words/*.roc", args = {"accepted=" .. at .. "no_reason.txt"}, stops = true, says = {"`qty` has no reason"}},
     {glob = at .. "quiet_abbreviation.roc", args = {"abbreviations=" .. at .. "no_such.txt"}, stops = true, says = {"no word list"}},
     {glob = at .. "module_doc/*.roc", counts = {module_doc = 5}, says = {"`NoDoc` has no `##` doc", "`Hashless` has no `##` doc", "`Old`'s top comment says `originally`", "`Sky`'s top comment says `used to`", "Sun.roc:3: module_doc: `Sun`'s doc says `originally`"}},
@@ -253,6 +256,9 @@ end
 
 function run_check()
   local lists = {abbreviations = word_set(ABBREVIATIONS_FILE), words = word_set(SHORT_WORDS_FILE), accepted = accepted_terms(ACCEPTED_FILE)}
+  if PROJECT_ACCEPTED_FILE ~= "" then
+    for term in keys(accepted_terms(PROJECT_ACCEPTED_FILE)) do lists.accepted[term] = true end
+  end
   local terms = TERMS_FILE == "" and {} or word_set(TERMS_FILE)
   local paths = glob(GLOB)
   local parsed = parse_roc_files(paths)

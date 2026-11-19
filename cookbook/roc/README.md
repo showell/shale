@@ -139,7 +139,8 @@ finding. A project's own words stay with the project and are passed in.
   local's included (`abbreviation`: a word of `cookbook/words/abbreviations.txt`,
   or a word of two to four letters, `st` or `Inl`, that neither
   `cookbook/words/short_words.txt` nor the reasoned table
-  `cookbook/words/accepted_terms.txt` holds), and a module
+  `cookbook/words/accepted_terms.txt` holds, nor a project's own `accepted=`
+  file beside it), and a module
   with no doc or with history in its top comment (`module_doc`). `terms=`
   names a project's file of fixed terms that open a name and only look like a
   verb, as `set_cookie` does.
