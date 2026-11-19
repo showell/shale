@@ -80,7 +80,8 @@ jobs:
         run: |
           test "$(tr -d '[:space:]' < zig-version)" = "$(zig version)"
           zig build --prefix ~/tools/zig-ast
-          ~/tools/zig-ast/bin/zig-ast --serve < /dev/null | head -1 | grep '^zig-ast serve '
+          said=$(~/tools/zig-ast/bin/zig-ast --serve < /dev/null)
+          case "$said" in "zig-ast serve "*) echo "$said" ;; *) echo "zig-ast said: $said"; exit 1 ;; esac
 
       # The runner's own mounts file, made here: the tools, the writable
       # `build` and `scratch` folders the golden tests and recipes use, the
