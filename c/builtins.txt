@@ -1,0 +1,1274 @@
+# c/builtins.txt: Shale's builtins, every one, typed: the one home of the
+# builtin surface (c/docs/builtin-table.md). c/check_builtins.shale holds the
+# C (c/script/ast.h, c/script/vm.c), the preludes (c/preludes/*.shale) and
+# the docs to it in the fast tier, and c/gen_builtins.shale writes the Roc
+# platform's surface from it (roc_platform/platform/Shale.roc, main.roc and
+# roc_platform/host/hosted.gen.c).
+#
+# A builtin is a stanza, blank lines between: its signature on a line of its
+# own, from the line's start, then `key: value` lines indented two spaces.
+# A `#` line is a comment.
+#
+#   name(arg: Type, arg?: Type, rest...: Type) -> Type
+#
+# An argument with `?` may be left out (and those after it); `...` takes any
+# number. The types are Shale's values, named for what they hold: Str, Int,
+# Bool, Nil, Any, Path (a Shale path: the root's, or `mount:rest`), List(T),
+# Map (string keys), Map(T), Table (a list or a map), Scalar, Opts (a map of
+# options, keyed as `opts:` says), `{field: T, ...}` (a map of those fields),
+# `A | B` (either), Never (the call does not return), and a record named
+# for its builtin's docs (Entry, Match, RunResult, Job, Hit, Decl, Token,
+# Tree, HttpResponse, MoveReport, JobEnd, Proc, Import, Edit).
+#
+# The keys:
+#   impl:    where it is: `c <function>` (vm.c's builtin_specs()), `vm OP_PRINT`
+#            (the VM's own op), or `prelude core|linux|git` (c/preludes/).
+#   kind:    `effect` (it reaches outside its arguments: the store, programs,
+#            the clock, the run's output, arguments and budgets, or it stops the
+#            run), `pure` (its answer is its arguments' alone: Roc does these
+#            itself), or `internal` (a prelude's helper, no part of the surface;
+#            its name is taken all the same).
+#   stops:   the classes it stops with, beyond a wrong type (`type`) or count
+#            of arguments (`argument`), which every builtin has.
+#   opts:    an Opts argument's keys and their types.
+#   doc:     one line: what it gives.
+#   anchor:  where its docs are, `file#heading`; that section names it.
+#
+# An effect exported to Roc (only effects are: Roc does pure work itself)
+# says how, in five more keys:
+#   roc:        its declaration in Shale.roc, `name! : Arg, ... => Answer`;
+#   roc_params: each argument's name, the request's fields in the driver;
+#   roc_doc:    its doc comment in Shale.roc;
+#   values:     the outcomes that are values (a `Missing`, an exit code):
+#               every other outcome, a refusal or a budget, is a stop;
+#   driver:     the driver's Shale for it, a line a key: `q` is the request,
+#               and what it returns is the answer, a tag union's as
+#               `{tag = "Name", value = payload}`.
+
+ls(p: Path) -> List(Str)
+  impl: c builtin_ls
+  kind: effect
+  stops: file_system
+  doc: a folder's names, sorted
+  anchor: docs/SHALE.md#the-store
+  roc: list! : Str => [Found(List(Str)), Missing]
+  roc_params: path
+  roc_doc: A folder's names, sorted, or `Missing` when nothing is at the path (Shale's `ls`).
+  values: Found(names); Missing, when nothing is at the path
+  driver: if not exists(q.path) then return {tag = "Missing"} end
+  driver: return {tag = "Found", value = ls(q.path)}
+
+stat(p: Path) -> {size: Int, kind: Str, modified: Int}
+  impl: c builtin_stat
+  kind: effect
+  stops: file_system
+  doc: a path's `{size, kind, modified}`, `kind` being file, directory or other
+  anchor: docs/SHALE.md#the-store
+
+exists(p: Path) -> Bool
+  impl: c builtin_exists
+  kind: effect
+  stops: file_system (never for absence)
+  doc: whether anything is at the path
+  anchor: docs/SHALE.md#the-store
+  roc: exists! : Str => Bool
+  roc_params: path
+  roc_doc: Whether anything is at the path.
+  values: the answer
+  driver: return exists(q.path)
+
+is_dir(p: Path) -> Bool
+  impl: c builtin_is_dir
+  kind: effect
+  stops: file_system (never for absence)
+  doc: whether the path is a folder
+  anchor: docs/SHALE.md#the-store
+
+read(p: Path, offset?: Int, n?: Int) -> Str
+  impl: c builtin_read
+  kind: effect
+  stops: argument, budget read_bytes, file_system
+  doc: a file's text, or its part from `offset`, `n` bytes
+  anchor: docs/SHALE.md#the-store
+  roc: read! : Str => [Found(Str), Missing]
+  roc_params: path
+  roc_doc: The file's text, or `Missing` when nothing is at the path.
+  values: Found(text); Missing, when nothing is at the path
+  driver: if not exists(q.path) then return {tag = "Missing"} end
+  driver: return {tag = "Found", value = read(q.path)}
+
+read_or(p: Path, default: Any) -> Str | Any
+  impl: c builtin_read_or
+  kind: effect
+  stops: file_system
+  doc: a file, or `default` when nothing is there
+  anchor: docs/SHALE.md#the-store
+
+read_lines(p: Path, offset?: Int, n?: Int) -> {lines: List(Str), next: Int, done: Bool}
+  impl: c builtin_read_lines
+  kind: effect
+  stops: argument, file_system
+  doc: `{lines, next, done}`: whole lines from `offset`
+  anchor: docs/SHALE.md#the-store
+
+line_at(p: Path, offset: Int) -> Str | Nil
+  impl: c builtin_line_at
+  kind: effect
+  stops: argument, file_system
+  doc: the line holding `offset`, or nil past the end
+  anchor: docs/SHALE.md#the-store
+
+grep(p: Path, s: Str) -> List({line: Int, text: Str})
+  impl: c builtin_grep
+  kind: effect
+  stops: argument, file_system
+  doc: the lines holding `s`, as `{line, text}`
+  anchor: docs/SHALE.md#the-store
+
+count_lines(p: Path, offset?: Int, n?: Int) -> Int
+  impl: c builtin_count_lines
+  kind: effect
+  stops: argument, file_system
+  doc: the lines in a file or a range
+  anchor: docs/SHALE.md#the-store
+
+count_in(p: Path, s: Str, offset?: Int, n?: Int) -> Int
+  impl: c builtin_count_in
+  kind: effect
+  stops: argument, file_system
+  doc: `s`'s occurrences in a file or a range
+  anchor: docs/SHALE.md#the-store
+
+find_in(p: Path, s: Str, offset?: Int, n?: Int) -> Int | Nil
+  impl: c builtin_find_in
+  kind: effect
+  stops: -
+  doc: the first `s`'s 0-based offset, or nil
+  anchor: docs/SHALE.md#the-store
+
+replace(p: Path, s: Str) -> Nil
+  impl: c builtin_replace
+  kind: effect
+  stops: file_system, argument
+  doc: a file written whole, or added to
+  anchor: docs/SHALE.md#the-store
+  roc: write! : Str, Str => {}
+  roc_params: path, text
+  roc_doc: The file made or replaced, whole, with `text` (Shale's `replace`).
+  values: none
+  driver: replace(q.path, q.text)
+  driver: return {}
+
+append(p: Path, s: Str) -> Nil
+  impl: c builtin_append
+  kind: effect
+  stops: file_system, argument
+  doc: a file written whole, or added to
+  anchor: docs/SHALE.md#the-store
+
+mkdir(p: Path) -> Nil
+  impl: c builtin_mkdir
+  kind: effect
+  stops: file_system, argument
+  doc: a folder made, with its parents; a file or a tree removed
+  anchor: docs/SHALE.md#the-store
+
+remove(p: Path) -> Nil
+  impl: c builtin_remove
+  kind: effect
+  stops: file_system, argument
+  doc: a folder made, with its parents; a file or a tree removed
+  anchor: docs/SHALE.md#the-store
+
+remove_tree(p: Path) -> Nil
+  impl: c builtin_remove_tree
+  kind: effect
+  stops: file_system, argument
+  doc: a folder made, with its parents; a file or a tree removed
+  anchor: docs/SHALE.md#the-store
+
+walk(p: Path, opts?: Opts) -> List(Entry)
+  impl: c builtin_walk
+  kind: effect
+  stops: argument, file_system
+  opts: after: Str, kind: Str, like: Str, skip: Str, keep_reads: Int
+  doc: the entries under `p`, a part at a time
+  anchor: docs/SHALE.md#the-store
+
+edit(p: Path, old: Str | List(Edit), new?: Str, opts?: Opts) -> Int
+  impl: c builtin_edit
+  kind: effect
+  stops: argument
+  opts: all: Bool, word: Bool
+  doc: the number replaced, the diff printed first
+  anchor: docs/SHALE.md#the-store
+
+split(s: Str, sep: Str) -> List(Str)
+  impl: c builtin_split
+  kind: pure
+  stops: argument
+  doc: `s` split at each `sep`
+  anchor: docs/SHALE.md#text
+
+join(l: List(Str | Int), sep: Str) -> Str
+  impl: c builtin_join
+  kind: pure
+  stops: type
+  doc: the items joined with `sep`
+  anchor: docs/SHALE.md#text
+
+starts_with(s: Str, t: Str) -> Bool
+  impl: c builtin_starts_with
+  kind: pure
+  stops: -
+  doc: whether `s` starts with `t`
+  anchor: docs/SHALE.md#text
+
+ends_with(s: Str, t: Str) -> Bool
+  impl: c builtin_ends_with
+  kind: pure
+  stops: -
+  doc: whether `s` ends with `t`
+  anchor: docs/SHALE.md#text
+
+contains(s: Str, t: Str) -> Bool
+  impl: c builtin_contains
+  kind: pure
+  stops: -
+  doc: whether `s` holds `t`
+  anchor: docs/SHALE.md#text
+
+find(s: Str, t: Str, from?: Int) -> Int | Nil
+  impl: c builtin_find
+  kind: pure
+  stops: argument
+  doc: `t`'s 1-based position, or nil
+  anchor: docs/SHALE.md#text
+
+sub(s: Str, i: Int, j?: Int) -> Str
+  impl: c builtin_sub
+  kind: pure
+  stops: -
+  doc: a part of `s`
+  anchor: docs/SHALE.md#text
+
+bad_utf8(s: Str) -> Int | Nil
+  impl: c builtin_bad_utf8
+  kind: pure
+  stops: -
+  doc: nil, or the first bad byte's 1-based position
+  anchor: docs/SHALE.md#text
+
+trim(s: Str) -> Str
+  impl: c builtin_trim
+  kind: pure
+  stops: -
+  doc: `s` without the spaces at its ends
+  anchor: docs/SHALE.md#text
+
+trim_start(s: Str) -> Str
+  impl: c builtin_trim_start
+  kind: pure
+  stops: -
+  doc: `s` without the spaces at its start
+  anchor: docs/SHALE.md#text
+
+trim_end(s: Str) -> Str
+  impl: c builtin_trim_end
+  kind: pure
+  stops: -
+  doc: `s` without the spaces at its end
+  anchor: docs/SHALE.md#text
+
+upper(s: Str) -> Str
+  impl: c builtin_upper
+  kind: pure
+  stops: -
+  doc: `s` in upper case (ASCII)
+  anchor: docs/SHALE.md#text
+
+lower(s: Str) -> Str
+  impl: c builtin_lower
+  kind: pure
+  stops: -
+  doc: `s` in lower case (ASCII)
+  anchor: docs/SHALE.md#text
+
+tostring(v: Scalar) -> Str
+  impl: c builtin_tostring
+  kind: pure
+  stops: type
+  doc: a scalar's text
+  anchor: docs/SHALE.md#text
+
+tonumber(s: Str) -> Int
+  impl: c builtin_tonumber
+  kind: pure
+  stops: argument
+  doc: the integer `s` spells; anything but digits is a stop
+  anchor: docs/SHALE.md#text
+
+parse_int(s: Str) -> Int | Nil
+  impl: c builtin_parse_int
+  kind: pure
+  stops: -
+  doc: an integer, or nil
+  anchor: docs/SHALE.md#text
+
+lines(s: Str) -> List(Str)
+  impl: c builtin_lines
+  kind: pure
+  stops: argument
+  doc: `s`'s lines, without their ends
+  anchor: docs/SHALE.md#the-store
+
+words(s: Str) -> List(Str)
+  impl: c builtin_words
+  kind: pure
+  stops: argument
+  doc: `s`'s words, split at runs of space
+  anchor: docs/SHALE.md#text
+
+like(s: Str, pattern: Str) -> Bool
+  impl: c builtin_like
+  kind: pure
+  stops: -
+  doc: whether `s` matches a `*` and `?` pattern
+  anchor: docs/SHALE.md#the-store
+
+rep(s: Str, n: Int) -> Str
+  impl: c builtin_rep
+  kind: pure
+  stops: argument
+  doc: `s`, `n` times
+  anchor: docs/SHALE.md#text
+
+substitute(s: Str, old: Str, new: Str, opts?: Opts) -> Str
+  impl: c builtin_substitute
+  kind: pure
+  stops: argument
+  opts: missing_ok: Bool
+  doc: `s` with each `old` replaced
+  anchor: docs/SHALE.md#text
+
+path(a: Str, b?: Str, c?: Str, d?: Str) -> Str
+  impl: c builtin_path
+  kind: pure
+  stops: -
+  doc: the parts joined with `/`
+  anchor: docs/SHALE.md#the-store
+
+match_path(path: Str, pattern: Str) -> Bool
+  impl: c builtin_match_path
+  kind: pure
+  stops: argument
+  doc: whether a path matches a glob (`**`, `*`, `?`)
+  anchor: docs/SHALE.md#text
+
+basename(p: Str) -> Str
+  impl: c builtin_basename
+  kind: pure
+  stops: -
+  doc: the part after a path's last `/`
+  anchor: docs/SHALE.md#text
+
+is_name(s: Str) -> Bool
+  impl: c builtin_is_name
+  kind: pure
+  stops: -
+  doc: whether `s` is a name the store can hold
+  anchor: docs/SHALE.md#text
+
+strip_suffix(s: Str, t: Str) -> Str
+  impl: c builtin_strip_suffix
+  kind: pure
+  stops: -
+  doc: `s` without `t` at its end, or `s` when it has none
+  anchor: docs/SHALE.md#text
+
+between(s: Str, a: Str, b: Str) -> Str | Nil
+  impl: c builtin_between
+  kind: pure
+  stops: -
+  doc: the text between, or nil
+  anchor: docs/SHALE.md#text
+
+re_find(s: Str, pattern: Str, opts?: Opts) -> Match | Nil
+  impl: c builtin_re_find
+  kind: pure
+  stops: argument
+  opts: nocase: Bool, from: Int
+  doc: the leftmost match at or after `from`, `{at, text[, groups, group]}`, or nil
+  anchor: docs/SHALE.md#text
+
+re_match(s: Str, pattern: Str, opts?: Opts) -> Bool
+  impl: c builtin_re_match
+  kind: pure
+  stops: -
+  opts: nocase: Bool
+  doc: a boolean: whether `s` holds a match
+  anchor: docs/SHALE.md#regular-expressions
+
+re_replace(s: Str, pattern: Str, replacement: Str, opts?: Opts) -> Str
+  impl: c builtin_re_replace
+  kind: pure
+  stops: argument
+  opts: nocase: Bool
+  doc: `s` with every match replaced
+  anchor: docs/SHALE.md#regular-expressions
+
+re_find_all(s: Str, pattern: Str, opts?: Opts) -> List(Match)
+  impl: c builtin_re_find_all
+  kind: pure
+  stops: -
+  opts: nocase: Bool
+  doc: every match, as `re_find` gives each
+  anchor: docs/SHALE.md#regular-expressions
+
+min(a: Int, b: Int, c?: Int, d?: Int) -> Int
+  impl: c builtin_min
+  kind: pure
+  stops: argument
+  doc: the least of two to four integers
+  anchor: docs/SHALE.md#numbers
+
+max(a: Int, b: Int, c?: Int, d?: Int) -> Int
+  impl: c builtin_max
+  kind: pure
+  stops: argument
+  doc: the greatest of two to four integers
+  anchor: docs/SHALE.md#numbers
+
+abs(n: Int) -> Int
+  impl: c builtin_abs
+  kind: pure
+  stops: arithmetic
+  doc: `n` without its sign
+  anchor: docs/SHALE.md#numbers
+
+date(seconds: Int) -> Str
+  impl: c builtin_date
+  kind: pure
+  stops: argument
+  doc: the date and time of seconds since 1970
+  anchor: docs/SHALE.md#dates-and-formatting
+
+seconds(text: Str) -> Int
+  impl: c builtin_seconds
+  kind: pure
+  stops: argument
+  doc: seconds since 1970 of a date's text
+  anchor: docs/SHALE.md#dates-and-formatting
+
+human(bytes: Int) -> Str
+  impl: c builtin_human
+  kind: pure
+  stops: index
+  doc: a byte count as a person reads it (`1.2 MiB`)
+  anchor: docs/SHALE.md#dates-and-formatting
+
+pad(v: Scalar, width: Int) -> Str
+  impl: c builtin_pad
+  kind: pure
+  stops: index
+  doc: `v`'s text padded to `width`
+  anchor: docs/SHALE.md#text
+
+table(rows: List(Map), columns: List(Str)) -> Str
+  impl: c builtin_table
+  kind: pure
+  stops: index
+  doc: rows as a text table of the columns named
+  anchor: docs/SHALE.md#dates-and-formatting
+
+push(l: List(Any), x: Any) -> Nil
+  impl: c builtin_push
+  kind: pure
+  stops: type
+  doc: nothing: `x` added at the list's end
+  anchor: docs/SHALE.md#lists-and-maps
+
+pop(l: List(Any)) -> Any
+  impl: c builtin_pop
+  kind: pure
+  stops: argument
+  doc: the last item, removed
+  anchor: docs/SHALE.md#lists-and-maps
+
+sort(l: List(Any), keys?: Str | List(Str), order?: Str) -> List(Any)
+  impl: c builtin_sort
+  kind: pure
+  stops: type, index, argument
+  doc: `l` (`rows`), sorted in place
+  anchor: docs/SHALE.md#lists-and-maps
+
+keys(m: Map) -> List(Str)
+  impl: c builtin_keys
+  kind: pure
+  stops: -
+  doc: a map's keys
+  anchor: docs/SHALE.md#lists-and-maps
+
+has_key(m: Map, k: Str | Int) -> Bool
+  impl: c builtin_has_key
+  kind: pure
+  stops: -
+  doc: whether the map has the key
+  anchor: docs/SHALE.md#lists-and-maps
+
+get(t: Table, k: Str | Int, default?: Any) -> Any
+  impl: c builtin_get
+  kind: pure
+  stops: type
+  doc: `t[k]`, or `default` where there is none
+  anchor: docs/SHALE.md#text
+
+count(t: Table) -> Int
+  impl: c builtin_count
+  kind: pure
+  stops: -
+  doc: the items or keys in a table
+  anchor: docs/SHALE.md#lists-and-maps
+
+reverse(l: List(Any)) -> Nil
+  impl: c builtin_reverse
+  kind: pure
+  stops: -
+  doc: nil: in place
+  anchor: docs/SHALE.md#lists-and-maps
+
+take(l: List(Any), n: Int) -> List(Any)
+  impl: c builtin_take
+  kind: pure
+  stops: argument
+  doc: a new list of the first `n`
+  anchor: docs/SHALE.md#lists-and-maps
+
+last(l: List(Any), n: Int) -> List(Any)
+  impl: c builtin_last
+  kind: pure
+  stops: argument
+  doc: a new list of the last `n`
+  anchor: docs/SHALE.md#lists-and-maps
+
+same(a: Any, b: Any) -> Bool
+  impl: c builtin_same
+  kind: pure
+  stops: argument
+  doc: a boolean: whether `a` and `b` are the same all the way down
+  anchor: docs/SHALE.md#lists-and-maps
+
+now() -> Int
+  impl: c builtin_now
+  kind: effect
+  stops: -
+  doc: when the run started, in seconds since 1970
+  anchor: docs/SHALE.md#the-host-and-output
+
+arg(name: Str, default?: Str | Int | Bool) -> Str | Int | Bool
+  impl: c builtin_arg
+  kind: effect
+  stops: argument
+  doc: the run's value by that name, or `default`
+  anchor: docs/SHALE.md#the-host-and-output
+  roc: arg! : Str, Str => Str
+  roc_params: name, fallback
+  roc_doc: The launch's `name=value`, or the fallback when it was not given.
+  values: the value, or the fallback
+  driver: return arg(q.name, q.fallback)
+
+fail(msg: Str) -> Never
+  impl: c builtin_fail
+  kind: effect
+  stops: fail
+  doc: never returns: the run stops
+  anchor: docs/SHALE.md#regular-expressions
+  roc: fail! : Str => {}
+  roc_params: why
+  roc_doc: The run stopped, saying why (Shale's `fail`): never returns.
+  values: none: it stops
+  driver: fail(q.why)
+
+host(name: Str, a?: Any, b?: Any, c?: Any) -> Any
+  impl: c builtin_host
+  kind: effect
+  stops: host
+  doc: what the host's call gives (Linux's calls; metal has none)
+  anchor: docs/SHALE.md#every-builtin-at-a-glance
+
+budget() -> Map(Int)
+  impl: c builtin_budget
+  kind: effect
+  stops: -
+  doc: what is left of each budget, by name
+  anchor: docs/SHALE.md#the-host-and-output
+
+call_bytes() -> Int
+  impl: c builtin_call_bytes
+  kind: effect
+  stops: -
+  doc: the bytes one call may bring (the call-bytes cap)
+  anchor: docs/SHALE.md#the-host-and-output
+
+yield() -> Nil
+  impl: c builtin_yield
+  kind: pure
+  stops: -
+  doc: nothing: a collection point, letting go what the run no longer holds
+  anchor: docs/SHALE.md#the-host-and-output
+
+print(v...: Any) -> Nil
+  impl: vm OP_PRINT
+  kind: effect
+  stops: type
+  doc: nothing: its arguments printed on the run's output, tab-separated
+  anchor: docs/SHALE.md#text
+  roc: print! : Str => {}
+  roc_params: text
+  roc_doc: The text and a newline on the run's output (Shale's `print`).
+  values: none
+  driver: print(q.text)
+  driver: return {}
+
+walk_all(path: Path, opts?: Opts) -> List(Entry)
+  impl: prelude core
+  kind: effect
+  stops: -
+  opts: after: Str, kind: Str, like: Str, skip: Str
+  doc: every entry `walk` gives, across all its parts
+  anchor: docs/SHALE.md#the-store
+
+walk_upto(path: Path, opts: Opts, keep: Int) -> {entries: List(Entry), more: Str, done: Bool}
+  impl: prelude core
+  kind: effect
+  stops: -
+  opts: after: Str, kind: Str, like: Str, skip: Str
+  doc: every entry from `opts.after` on, until the reads would leave fewer than `keep`
+  anchor: docs/SHALE.md#the-store
+
+room_for(need: Map(Int)) -> Bool
+  impl: prelude core
+  kind: effect
+  stops: -
+  doc: whether the budgets hold `need`
+  anchor: docs/SHALE.md#the-prelude
+
+glob(pattern: Str, opts?: Opts) -> List(Str)
+  impl: prelude core
+  kind: effect
+  stops: argument (a `[` or a `{`)
+  opts: hidden: Bool
+  doc: every file whose path matches the pattern, in the walk's order
+  anchor: docs/SHALE.md#the-store
+  roc: glob! : Str => List(Str)
+  roc_params: pattern
+  roc_doc: The files a glob names, in the walk's order (Shale's `glob`).
+  values: the paths, none for no match
+  driver: return glob(q.pattern)
+
+count_all(path: Path, s: Str) -> Int
+  impl: prelude core
+  kind: effect
+  stops: -
+  doc: `s`'s occurrences in the whole file
+  anchor: docs/SHALE.md#the-prelude
+
+find_next(path: Path, s: Str, at: Int) -> Int | Nil
+  impl: prelude core
+  kind: effect
+  stops: -
+  doc: the 0-based offset of the first `s` at or after `at`, or nil
+  anchor: docs/SHALE.md#the-prelude
+
+drop(l: List(Any), n: Int) -> List(Any)
+  impl: prelude core
+  kind: pure
+  stops: fail
+  doc: a new list of all but the first `n` items
+  anchor: docs/SHALE.md#the-prelude
+
+assert(ok: Bool, why: Str) -> Nil
+  impl: prelude core
+  kind: effect
+  stops: fail
+  doc: nothing when `ok` is true; else a stop naming `why`
+  anchor: docs/SHALE.md#the-prelude
+
+opts_only(opts: Opts | Nil, names: List(Str), who: Str) -> Nil
+  impl: prelude core
+  kind: pure
+  stops: fail
+  doc: nothing when every key of `opts` is in `names`; else a stop naming the key
+  anchor: docs/SHALE.md#the-prelude
+
+slice(l: List(Any), from: Int, to: Int) -> List(Any)
+  impl: prelude core
+  kind: pure
+  stops: fail
+  doc: a new list of items `from` to `to`
+  anchor: docs/SHALE.md#the-prelude
+
+push_at(m: Map, k: Str, v: Any) -> Nil
+  impl: prelude core
+  kind: pure
+  stops: -
+  doc: nothing (a map of lists grown)
+  anchor: docs/SHALE.md#the-prelude
+
+incr(m: Map, k: Str, n?: Int) -> Int
+  impl: prelude core
+  kind: pure
+  stops: -
+  doc: the new count
+  anchor: docs/SHALE.md#the-prelude
+
+set_of(list: List(Str)) -> Map(Bool)
+  impl: prelude core
+  kind: pure
+  stops: fail
+  doc: a map of each item to true
+  anchor: docs/SHALE.md#the-prelude
+
+has_item(list: List(Any), x: Any) -> Bool
+  impl: prelude core
+  kind: pure
+  stops: -
+  doc: whether it is there
+  anchor: docs/SHALE.md#the-prelude
+
+find_all(s: Str, t: Str) -> List(Int)
+  impl: prelude core
+  kind: pure
+  stops: fail
+  doc: every 1-based position where `t` starts in `s`
+  anchor: docs/SHALE.md#the-prelude
+
+dirname(p: Str) -> Str
+  impl: prelude core
+  kind: pure
+  stops: -
+  doc: what precedes the path's last `/`, "" for none
+  anchor: docs/SHALE.md#the-prelude
+
+path_normal(p: Str) -> Str | Nil
+  impl: prelude core
+  kind: pure
+  stops: fail
+  doc: the path with `.` and `..` taken out, or nil when it climbs above its start
+  anchor: docs/SHALE.md#the-prelude
+
+run(argv: List(Str), opts: Opts) -> RunResult
+  impl: prelude linux
+  kind: effect
+  stops: argument (a refused program, an option it does not take, no keep or timeout), budget programs, budget cpu
+  opts: timeout_ms: Int, head: Int, tail: Int, whole: Int, cwd: Path, stdin: Str, env: Map(Str), secrets: Map(Path), stdout_secret: Bool, secret_replace: Map(Str), log: Path, want: Str, cpu_budget_ms: Int, stage: Str, nice: Int, re: Str, not_re: Str, nocase: Bool, before: Int, after: Int, width: Int
+  doc: a program run to its end or its timeout: `{argv, code, ended, ms, cpu_ms, out, ...}`
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+  roc: run! : { argv : List(Str), keep : [Head(U64), Tail(U64), Whole(U64)], timeout_ms : U64, want : Str } => { code : I64, out : Str }
+  roc_params: spec
+  roc_doc: A program run to its end, or stopped at its timeout: its exit code (`-1` when it did not exit) and what the keep kept of its output. `want` is `run`'s `want`, `""` for none.
+  values: the exit code, -1 when it did not exit; the kept output
+  driver: local opts = {timeout_ms = q.spec.timeout_ms}
+  driver: opts[lower(q.spec.keep.tag)] = q.spec.keep.value
+  driver: if q.spec.want ~= "" then opts.want = q.spec.want end
+  driver: local r = run(q.spec.argv, opts)
+  driver: return {code = get(r, "code", -1), out = r.out}
+
+option_text(x: Any) -> Str
+  impl: prelude linux
+  kind: internal
+
+not_option(who: Str, name: Str, v: Any) -> Never
+  impl: prelude linux
+  kind: internal
+
+sleep(ms: Int) -> Nil
+  impl: prelude linux
+  kind: effect
+  stops: -
+  doc: nothing, after `ms` milliseconds
+  anchor: docs/SHALE-AGENTS.md#if-you-write-lua
+
+real(path: Path) -> Str
+  impl: prelude linux
+  kind: effect
+  stops: argument (outside the root and the mounts)
+  doc: a Shale path's OS path, for an argv
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+job_start(argv: List(Str), opts: Opts) -> Job
+  impl: prelude linux
+  kind: effect
+  stops: argument (a refused program, a log in use)
+  opts: log: Path, cwd: Path, env: Map(Str), want: Str, keep_on_stop: Bool
+  doc: a program started under a detached reaper, outliving the call
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+job_alive(job: Job | Str) -> Bool
+  impl: prelude linux
+  kind: effect
+  stops: -
+  doc: whether the job still runs
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+job_stop(job: Job | Str) -> Nil
+  impl: prelude linux
+  kind: effect
+  stops: -
+  doc: nothing: the job ended (TERM, 2 seconds, then KILL)
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+procs() -> List(Proc)
+  impl: prelude linux
+  kind: effect
+  stops: -
+  doc: every process but this run and those above it, `{pid, ppid, uid, name, args, start}`
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+proc_stop(p: Proc) -> Bool
+  impl: prelude linux
+  kind: effect
+  stops: host (a signal refused, or it outlives KILL)
+  doc: the process ended, or false when its pid is another's now
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+job_wait(job: Job | Str, opts: Opts) -> JobEnd
+  impl: prelude linux
+  kind: effect
+  stops: file_system (a `file` it cannot read)
+  opts: timeout_ms: Int, file: Path, contains: Str
+  doc: `{ended = exited, found, timeout or lost[, code or signal]}`
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+must(r: RunResult) -> RunResult
+  impl: prelude linux
+  kind: effect
+  stops: fail
+  doc: `r` when it exited 0; else its output printed and a stop naming the program
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+curl_http(who: Str, method: Str, url: Str, opts?: Opts) -> HttpResponse
+  impl: prelude linux
+  kind: internal
+
+http(method: Str, url: Str, opts?: Opts) -> HttpResponse
+  impl: prelude linux
+  kind: effect
+  stops: fail (curl's failure)
+  opts: body: Str, headers: List(Str), timeout_ms: Int
+  doc: `{status, headers, body}` of an HTTP request, by curl
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+http_get(url: Str, opts?: Opts) -> HttpResponse
+  impl: prelude linux
+  kind: effect
+  stops: fail (curl's failure)
+  opts: headers: List(Str), timeout_ms: Int
+  doc: an HTTP GET's `{status, headers, body}`
+  anchor: docs/SHALE-AGENTS.md#if-you-write-lua
+
+re_lines(s: Str, pattern: Str, opts?: Opts) -> List({line: Int, text: Str})
+  impl: prelude linux
+  kind: pure
+  stops: -
+  opts: invert: Bool, nocase: Bool
+  doc: the lines of `s` holding a match, `{line, text}`
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+head_lines(p: Path, n: Int) -> List(Str) | Nil
+  impl: prelude linux
+  kind: effect
+  stops: -
+  doc: a file's first `n` lines, of any size of file, or nil for a missing one
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+tail_lines(p: Path, n: Int) -> List(Str) | Nil
+  impl: prelude linux
+  kind: effect
+  stops: -
+  doc: a file's last `n` lines, of any size of file, or nil for a missing one
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+unique(list: List(Any)) -> List(Any)
+  impl: prelude linux
+  kind: pure
+  stops: -
+  doc: each item once, in its first place
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+grep_all(p: Path, lit: Str) -> List({line: Int, text: Str})
+  impl: prelude linux
+  kind: effect
+  stops: file_system
+  doc: every line of a file of any size holding the literal, `{line, text}`
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+  roc: grep_all! : Str, Str => List({ line : U64, text : Str })
+  roc_params: path, literal
+  roc_doc: Every line of the file holding the literal, numbered from 1 (Shale's `grep_all`, any size of file).
+  values: the hits, none for no line
+  driver: return grep_all(q.path, q.literal)
+
+grep_tree_file(p: Path, size: Int, needle: Str | List(Str), regex: Bool, nocase: Bool) -> List(Hit)
+  impl: prelude linux
+  kind: internal
+
+grep_tree_skip(e: Entry, rest: Str, exts: List(Str), name_like: Str) -> Bool
+  impl: prelude linux
+  kind: internal
+
+grep_tree(place: Path, needle: Str | List(Str), opts?: Opts) -> {hits: List(Hit), files: Int, passed: List(Str), cut: Bool}
+  impl: prelude linux
+  kind: effect
+  stops: argument (an option it does not take, a bad `skip`)
+  opts: regex: Bool, nocase: Bool, ext: List(Str), context: Int, most: Int, skip: List(Path)
+  doc: `grep -rn`: the hits under a place, `{hits, files, passed, cut}`
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+path_under(dir: Str, name: Str) -> Str
+  impl: prelude linux
+  kind: pure
+  stops: -
+  doc: a name below a folder, spelled as every call takes it
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+fresh_dir(parent: Path, prefix: Str) -> Str
+  impl: prelude linux
+  kind: effect
+  stops: -
+  doc: a new folder of the run's own below `parent` (`mktemp -d`)
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+newest(p: Path, n: Int) -> List(Str)
+  impl: prelude linux
+  kind: effect
+  stops: -
+  doc: the `n` names under `p` that changed last
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+zig_rename(path: Path, from: Str, to: Str, opts?: Opts) -> {renamed: Int, left_in_comments: Int}
+  impl: prelude linux
+  kind: effect
+  stops: argument (a `to` with a `.` where the name is declared)
+  opts: lines: List(Int), container: Str, via: List(Str)
+  doc: a Zig identifier renamed as Zig's tokenizer sees it
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+zig_renames(path: Path, names: Map(Str), opts?: Opts) -> {renamed: Int, left_in_comments: Int}
+  impl: prelude linux
+  kind: effect
+  stops: argument
+  opts: lines: List(Int)
+  doc: many Zig names renamed in one pass, one write
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+zig_decls(path: Path, opts?: Opts) -> List(Decl)
+  impl: prelude linux
+  kind: effect
+  stops: argument (a file that does not parse)
+  opts: container: Str
+  doc: a Zig file's top-level declarations, from Zig's parser
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+zig_move(from: Path, to: Path, names: List(Str | Map), opts?: Opts) -> MoveReport
+  impl: prelude linux
+  kind: effect
+  stops: -
+  opts: comment: Str, after: Str, from_as: Str
+  doc: Zig declarations moved to another file, and what the move broke
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+zig_tokens(path: Path, opts?: Opts) -> List(Token)
+  impl: prelude linux
+  kind: effect
+  stops: -
+  opts: tag: Str
+  doc: a Zig file's tokens, `{tag, text, line}`
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+shale_tokens(path: Path, opts?: Opts) -> List(Token)
+  impl: prelude linux
+  kind: effect
+  stops: argument (a file that does not lex)
+  opts: tag: Str
+  doc: a Shale file's tokens, comments among them
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+zig_imports(path: Path) -> List(Import)
+  impl: prelude linux
+  kind: effect
+  stops: -
+  doc: a Zig file's `@import`s and `@embedFile`s
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+flat_tool_trees(tool: Str, paths: List(Path)) -> List(Tree)
+  impl: prelude linux
+  kind: internal
+
+roc_tree(paths: List(Path)) -> List(Tree)
+  impl: prelude linux
+  kind: effect
+  stops: -
+  doc: Roc's own parser's tree of each file, `{path, nodes, err}`
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+go_tree(paths: List(Path)) -> List(Tree)
+  impl: prelude linux
+  kind: effect
+  stops: -
+  doc: Go's own parser's tree of each file, `{path, nodes, err}`
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+json_read(s: Str, opts?: Opts) -> Any
+  impl: prelude linux
+  kind: pure
+  stops: argument (malformed, a key twice, a null unless `null` stands in)
+  opts: null: Any, depth: Int, size: Int
+  doc: JSON's value as Shale's (an object a map, an array a list)
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+json_write(v: Any) -> Str
+  impl: prelude linux
+  kind: pure
+  stops: -
+  doc: a value as compact JSON
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+edit_marker_shown(s: Str) -> Str
+  impl: prelude linux
+  kind: internal
+
+edit_between(p: Path, from: Str, to: Str | Nil, new: Str) -> Int
+  impl: prelude linux
+  kind: effect
+  stops: argument (a marker missing or found twice)
+  doc: the text between two markers replaced, both kept
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+create(p: Path, text: Str) -> Nil
+  impl: prelude linux
+  kind: effect
+  stops: file_system
+  doc: a new file with `text`; one already there is refused
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+edit_word_byte(c: Str) -> Bool
+  impl: prelude linux
+  kind: internal
+
+edit_list_len(x: Any) -> Int
+  impl: prelude linux
+  kind: internal
+
+edit_keys(x: Any) -> List(Str)
+  impl: prelude linux
+  kind: internal
+
+edit_shape(p: Path, j: Int, e: Edit) -> Nil
+  impl: prelude linux
+  kind: internal
+
+edit_words(text: Str, old: Str, new: Str) -> Str
+  impl: prelude linux
+  kind: internal
+
+edits_all(list: List({p: Path, edits: List(Edit)})) -> Int
+  impl: prelude linux
+  kind: effect
+  stops: -
+  doc: every file's edits checked, then written as one
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+report_run_line(l: Str) -> Nil
+  impl: prelude linux
+  kind: internal
+
+report_run_kept(path: Path) -> Str
+  impl: prelude linux
+  kind: internal
+
+report_run(argv: List(Str), opts?: Opts) -> RunResult
+  impl: prelude linux
+  kind: effect
+  stops: -
+  opts: grep: List(Str), tail: Int, keep_going: Bool
+  doc: a program's verdict as cookbook/run.shale says it, with no child run
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+copy(from: Path, to: Path) -> Int
+  impl: prelude linux
+  kind: effect
+  stops: file_system (a path already there, a link in the tree)
+  doc: a file or a tree copied, across mounts; the files copied
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+git_text(x: Any) -> Str
+  impl: prelude git
+  kind: internal
+
+git_opts(name: Str, opts: Opts | Nil, allowed: List(Str)) -> Nil
+  impl: prelude git
+  kind: internal
+
+git_value(call: Str, name: Str, v: Any) -> Never
+  impl: prelude git
+  kind: internal
+
+git_real(repo: Path, shown: Str) -> Str
+  impl: prelude git
+  kind: internal
+
+git_call(repo: Path, args: List(Str), opts: Opts | Nil, reading: Bool, stdin: Str | Nil) -> RunResult
+  impl: prelude git
+  kind: internal
+
+git_status(repo: Path) -> List({code: Str, path: Str, from?: Str})
+  impl: prelude git
+  kind: effect
+  stops: fail (git's error, named)
+  doc: the work tree's changes, `{code, path[, from]}`
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+git_log(repo: Path, opts?: Opts) -> List({hash: Str, subject: Str, date: Str, author: Str})
+  impl: prelude git
+  kind: effect
+  stops: fail (git's error, named)
+  opts: n: Int, range: Str, ref: Str, fields: List(Str), paths: List(Str), timeout_ms: Int
+  doc: the commits, `{hash, subject, date, author}`
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+git_diff(repo: Path, opts?: Opts) -> Str
+  impl: prelude git
+  kind: effect
+  stops: fail (git's error, named)
+  opts: range: Str, paths: List(Str), stat: Bool, timeout_ms: Int
+  doc: a diff's text
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+git_show(repo: Path, what: Str) -> Str
+  impl: prelude git
+  kind: effect
+  stops: fail (git's error, named)
+  doc: `git show rev:path`'s text
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+git_ls_files(repo: Path) -> List(Str)
+  impl: prelude git
+  kind: effect
+  stops: fail (git's error, named)
+  doc: the tracked paths
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+git_is_clean(repo: Path) -> Bool
+  impl: prelude git
+  kind: effect
+  stops: fail (git's error, named)
+  doc: whether the work tree has no changes
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+git_head(repo: Path) -> Str
+  impl: prelude git
+  kind: effect
+  stops: fail (git's error, named)
+  doc: the head's short hash
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+git_upstream(repo: Path) -> {name: Str, ahead: Int, behind: Int} | Nil
+  impl: prelude git
+  kind: effect
+  stops: fail (git's error, named)
+  doc: `{name, ahead, behind}` as the last fetch saw it, or nil
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+git_commit(repo: Path, msg: Str, opts?: Opts) -> Str
+  impl: prelude git
+  kind: effect
+  stops: fail (git's error, named)
+  opts: add: Str | List(Str), amend: Bool, timeout_ms: Int
+  doc: a commit, its message on stdin; the new head
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+git_push(repo: Path, opts?: Opts) -> Nil
+  impl: prelude git
+  kind: effect
+  stops: fail (no upstream, or one of another name)
+  opts: remote: Str, branch: Str, tag: Str, timeout_ms: Int
+  doc: the branch pushed to its namesake upstream, or a tag alone
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+git_fetch(repo: Path, opts?: Opts) -> Nil
+  impl: prelude git
+  kind: effect
+  stops: fail (git's error, named)
+  opts: all: Bool, timeout_ms: Int
+  doc: nothing: the remote fetched
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+git_tag(repo: Path, name: Str, opts?: Opts) -> Nil
+  impl: prelude git
+  kind: effect
+  stops: fail (git's error, named)
+  opts: rev: Str, msg: Str, timeout_ms: Int
+  doc: a tag made, annotated with `msg`
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+git_restore(repo: Path, paths: List(Str), opts?: Opts) -> Nil
+  impl: prelude git
+  kind: effect
+  stops: fail (git's error, named)
+  opts: from: Str, timeout_ms: Int
+  doc: paths put back as HEAD (or `from`) has them
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+git_mv(repo: Path, from: Str, to: Str, opts?: Opts) -> Nil
+  impl: prelude git
+  kind: effect
+  stops: fail (git's error, named)
+  opts: timeout_ms: Int
+  doc: a path moved, as git sees it
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+git_pull_ff(repo: Path) -> Str
+  impl: prelude git
+  kind: effect
+  stops: fail (git's error, named)
+  doc: the branch fast-forwarded from its upstream
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+git_merge_ff(repo: Path, ref: Str) -> Str
+  impl: prelude git
+  kind: effect
+  stops: fail (git's error, named)
+  doc: the branch fast-forwarded to `ref`
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+git_merge(repo: Path, ref: Str, opts?: Opts) -> Str
+  impl: prelude git
+  kind: effect
+  stops: fail (a conflict, undone and named)
+  opts: timeout_ms: Int
+  doc: a merge, a commit when one is needed; the new head
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+git_worktree_add(repo: Path, dir: Path, opts?: Opts) -> Nil
+  impl: prelude git
+  kind: effect
+  stops: fail (git's error, named)
+  opts: branch: Str, new: Bool, rev: Str, timeout_ms: Int
+  doc: a worktree made at `dir`
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+git_worktree_remove(repo: Path, dir: Path, opts?: Opts) -> Nil
+  impl: prelude git
+  kind: effect
+  stops: fail (git's error, named)
+  opts: force: Bool, timeout_ms: Int
+  doc: a worktree removed
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
+git_branch_delete(repo: Path, name: Str, opts?: Opts) -> Nil
+  impl: prelude git
+  kind: effect
+  stops: fail (git's error, named)
+  opts: force: Bool, timeout_ms: Int
+  doc: a branch deleted
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell

@@ -1,0 +1,342 @@
+-- c/check_builtins.shale: holds Shale's builtins to c/builtins.txt, their
+-- one home (c/docs/builtin-table.md). c/build/builtin_table.shale runs it in
+-- the fast tier, then `self_test=1`. Each finding is a line; any fails the
+-- run.
+--
+-- What it holds to the table, both ways (a builtin missing from the table
+-- is a finding, and so is an entry nothing implements):
+--   - c/script/ast.h's `Builtin` names and c/script/vm.c's `builtin_specs()`:
+--     the same names in the same order, each spec's C function the entry's
+--     `impl`, and its arity the entry's arguments (`?` the ones a call may
+--     leave out, `...` any number);
+--   - every top-level function of c/preludes/core.shale, linux.shale and
+--     git.shale: an entry with that prelude as its `impl`, its parameters by
+--     name, the optional ones marked `?`; a git call's `git_opts` keys are
+--     its entry's `opts:`;
+--   - the docs: each entry's `anchor` is a heading of its file whose section
+--     names it (`` `name( `` or `` `name` ``), and every builtin in
+--     docs/SHALE.md's "Every builtin, at a glance" table is an entry;
+--   - roc_platform: glue's header (roc_platform/host/roc_platform_abi.h)
+--     declares exactly the exported effects, and Shale.roc, main.roc and
+--     hosted.gen.c are what c/gen_builtins.shale writes from the table now.
+--
+-- `self_test=1` runs the checks on texts it has changed (an entry taken out,
+-- a builtin added to ast.h, a prelude function added, a parameter renamed,
+-- an anchor moved, a git option added) and holds each to its finding.
+--
+-- Run from the repository's root: shale c/check_builtins.shale [self_test=1]
+-- budget: steps=200000000 read_bytes=100000000 arena_bytes=1000000000
+
+use("./builtin_table.shale")
+
+const PRELUDES = {"core", "linux", "git"}
+const ROC_GEN = "shale c/gen_builtins.shale"
+
+-- ── The inputs, as texts, so the self-test can change them ──────────────
+
+function inputs()
+  local p = {}
+  for name in PRELUDES do p[name] = read("c/preludes/" .. name .. ".shale") end
+  local docs = {}
+  for f in {"docs/SHALE.md", "docs/SHALE-AGENTS.md"} do docs[f] = read(f) end
+  return {table = read(BT_TABLE), ast = read("c/script/ast.h"), vm = read("c/script/vm.c"), preludes = p, docs = docs}
+end
+
+-- The entries of a table's text.
+function entries_of(text)
+  replace("c/out/check_builtins.txt", text)
+  return bt_read("c/out/check_builtins.txt")
+end
+
+-- ── The C ───────────────────────────────────────────────────────────────
+
+-- ast.h's builtin names, in order.
+function ast_names(ast)
+  local body = between(ast, "static const Str names[] = {", "};")
+  if body == nil then fail("c/script/ast.h: no `names[]` in ast_builtin_names") end
+  local out = {}
+  for m in re_find_all(body, "S_ITEM\\(\"([a-z_0-9]+)\"\\)") do push(out, m.group) end
+  return out
+end
+
+-- vm.c's specs, in order: `{least, most, impl, name}`.
+function vm_specs(vm)
+  local body = between(vm, "static const BuiltinSpec specs[] = {", "};")
+  if body == nil then fail("c/script/vm.c: no `specs[]` in builtin_specs") end
+  local out = {}
+  for m in re_find_all(body, "\\{([0-9]+), ([0-9]+), ([A-Za-z_0-9]+)\\}, +// ([a-z_0-9]+)") do
+    push(out, {least = parse_int(m.groups[1]), most = parse_int(m.groups[2]), impl = m.groups[3], name = m.groups[4]})
+  end
+  return out
+end
+
+function check_c(entries, ast, vm, bad)
+  local names = ast_names(ast)
+  local specs = vm_specs(vm)
+  local table_c = {}
+  for e in entries do
+    if starts_with(e.impl, "c ") or starts_with(e.impl, "vm ") then push(table_c, e) end
+  end
+  local by = {}
+  for e in table_c do by[e.name] = e end
+  local in_ast = set_of(names)
+  for n in names do
+    if not has_key(by, n) then push(bad, "c/script/ast.h: the builtin `" .. n .. "` has no entry in " .. BT_TABLE) end
+  end
+  for e in table_c do
+    if not has_key(in_ast, e.name) then push(bad, BT_TABLE .. ":" .. e.line .. ": `" .. e.name .. "` says `" .. e.impl .. "`, and c/script/ast.h has no such builtin") end
+  end
+  if #bad == 0 then
+    local k = 0
+    for e in table_c do
+      k = k + 1
+      if names[k] ~= e.name then
+        push(bad, BT_TABLE .. ":" .. e.line .. ": `" .. e.name .. "` is C builtin " .. k .. " in the table, and ast.h's " .. k .. " is `" .. names[k] .. "`: keep ast.h's order")
+        break
+      end
+    end
+  end
+  if #specs ~= #names then push(bad, "c/script/vm.c: " .. #specs .. " specs in builtin_specs(), and ast.h names " .. #names) end
+  for s in specs do
+    if has_key(by, s.name) then
+      local e = by[s.name]
+      local want = "c " .. s.impl
+      if s.impl == "NULL" then want = "vm OP_PRINT" end
+      if e.impl ~= want then push(bad, BT_TABLE .. ":" .. e.line .. ": `" .. e.name .. "`'s impl is `" .. e.impl .. "`, and vm.c's spec says `" .. want .. "`") end
+      local a = bt_arity(e)
+      if a.least ~= s.least or a.most ~= s.most then push(bad, BT_TABLE .. ":" .. e.line .. ": `" .. e.name .. "` takes " .. a.least .. " to " .. a.most .. " arguments, and vm.c's spec " .. s.least .. " to " .. s.most) end
+    end
+  end
+  return nil
+end
+
+-- ── The preludes ────────────────────────────────────────────────────────
+
+-- A prelude's top-level functions: `{name, params = {{name, optional}}}`.
+function prelude_functions(text)
+  local out = {}
+  for m in re_lines(text, "^function ") do
+    local r = re_find(m.text, "^function ([a-z_0-9]+)\\(([^)]*)\\)")
+    if r == nil then fail("a prelude's `" .. m.text .. "` is no `function name(params)` line") end
+    local params = {}
+    if trim(get(r.groups, 2, "")) ~= "" then
+      for p in split(r.groups[2], ",") do
+        local q = trim(p)
+        push(params, {name = strip_suffix(q, "?"), optional = ends_with(q, "?")})
+      end
+    end
+    push(out, {name = r.groups[1], params = params, line = m.line})
+  end
+  return out
+end
+
+function check_preludes(entries, preludes, bad)
+  local by = {}
+  for e in entries do by[e.name] = e end
+  local seen = {}
+  for which in PRELUDES do
+    local file = "c/preludes/" .. which .. ".shale"
+    for f in prelude_functions(preludes[which]) do
+      seen[f.name] = true
+      if not has_key(by, f.name) then
+        push(bad, file .. ":" .. f.line .. ": the function `" .. f.name .. "` has no entry in " .. BT_TABLE)
+      else
+        local e = by[f.name]
+        local who = BT_TABLE .. ":" .. e.line .. ": `" .. e.name .. "`"
+        if e.impl ~= "prelude " .. which then push(bad, who .. "'s impl is `" .. e.impl .. "`, and it is " .. file .. "'s") end
+        local said = {}
+        for a in e.args do
+          local s = a.name
+          if a.optional then s = s .. "?" end
+          push(said, s)
+        end
+        local got = {}
+        for p in f.params do
+          local s = p.name
+          if p.optional then s = s .. "?" end
+          push(got, s)
+        end
+        if join(said, ", ") ~= join(got, ", ") then push(bad, who .. " takes (" .. join(said, ", ") .. "), and " .. file .. ":" .. f.line .. " (" .. join(got, ", ") .. ")") end
+      end
+    end
+  end
+  for e in entries do
+    if starts_with(e.impl, "prelude ") and not has_key(seen, e.name) then push(bad, BT_TABLE .. ":" .. e.line .. ": `" .. e.name .. "` says `" .. e.impl .. "`, and no prelude has such a function") end
+  end
+  -- The git prelude's options, which `git_opts` names for each call.
+  for m in re_find_all(preludes.git, "git_opts\\(\"([a-z_]+)\", opts, \\{([^}]*)\\}\\)") do
+    local name = m.groups[1]
+    local keys_said = {}
+    for k in re_find_all(m.groups[2], "\"([a-z_]+)\"") do push(keys_said, k.group) end
+    if has_key(by, name) then
+      local e = by[name]
+      local mine = bt_opt_keys(e)
+      if join(sort(mine), ",") ~= join(sort(keys_said), ",") then push(bad, BT_TABLE .. ":" .. e.line .. ": `" .. name .. "`'s opts are " .. join(mine, ", ") .. ", and c/preludes/git.shale's git_opts " .. join(keys_said, ", ")) end
+    end
+  end
+  return nil
+end
+
+-- ── The docs ────────────────────────────────────────────────────────────
+
+-- A heading's anchor, as GitHub makes it.
+function heading_slug(h)
+  local s = lower(re_replace(h, "^#+ ", ""))
+  s = re_replace(s, "[^a-z0-9 _-]", "")
+  return re_replace(s, " ", "-")
+end
+
+-- A doc's sections, by anchor: the text under each `##` or `###` heading.
+function doc_sections(text)
+  local out = {}
+  local cur = ""
+  for l in lines(text) do
+    if re_find(l, "^#{2,3} ") ~= nil then
+      -- A heading twice is `-1` the second time, as GitHub makes it.
+      local s = heading_slug(l)
+      cur = s
+      local k = 0
+      while has_key(out, cur) do
+        k = k + 1
+        cur = s .. "-" .. k
+      end
+      out[cur] = ""
+    elseif cur ~= "" then
+      out[cur] = out[cur] .. l .. "\n"
+    end
+  end
+  return out
+end
+
+function check_docs(entries, docs, bad)
+  local sections = {}
+  for f in keys(docs) do sections[f] = doc_sections(docs[f]) end
+  for e in entries do
+    if e.anchor ~= "" then
+      local who = BT_TABLE .. ":" .. e.line .. ": `" .. e.name .. "`"
+      local r = re_find(e.anchor, "^([^#]+)#(.+)$")
+      if r == nil or not has_key(sections, r.groups[1]) then
+        push(bad, who .. "'s anchor `" .. e.anchor .. "` is not `docs/SHALE.md#heading` or `docs/SHALE-AGENTS.md#heading`")
+      elseif not has_key(sections[r.groups[1]], r.groups[2]) then
+        push(bad, who .. "'s anchor `" .. e.anchor .. "` is no heading of " .. r.groups[1])
+      else
+        local text = sections[r.groups[1]][r.groups[2]]
+        if not contains(text, "`" .. e.name .. "(") and not contains(text, "`" .. e.name .. "`") then push(bad, who .. ": the section " .. e.anchor .. " does not name it") end
+      end
+    end
+  end
+  -- The glance table's builtins, every one an entry (`attempt` is the
+  -- language's own).
+  local glance = get(sections["docs/SHALE.md"], "every-builtin-at-a-glance", nil)
+  if glance == nil then
+    push(bad, "docs/SHALE.md has no \"Every builtin, at a glance\"")
+    return nil
+  end
+  local by = {}
+  for e in entries do by[e.name] = true end
+  for row in re_lines(glance, "^\\| `") do
+    local first = split(row.text, " | ")[1]
+    for m in re_find_all(first, "`([a-z_0-9]+)") do
+      if m.group ~= "attempt" and not has_key(by, m.group) then push(bad, "docs/SHALE.md: \"Every builtin, at a glance\" names `" .. m.group .. "`, which has no entry in " .. BT_TABLE) end
+    end
+  end
+  return nil
+end
+
+-- ── The Roc platform ────────────────────────────────────────────────────
+
+function check_roc(entries, bad)
+  local glue = bt_glue(BT_GLUE)
+  local exports = bt_exports(entries)
+  local mine = {}
+  for x in exports do mine[x.bare] = true end
+  for name in sort(keys(glue.protos)) do
+    if not has_key(mine, name) then push(bad, BT_GLUE .. " declares `shale_" .. name .. "`, which the table does not export: run `" .. ROC_GEN .. "`, then `shale roc_platform/tools/glue.shale`") end
+  end
+  for x in exports do
+    if not has_key(glue.protos, x.bare) then push(bad, BT_TABLE .. ":" .. x.entry.line .. ": `" .. x.name .. "` is exported, and " .. BT_GLUE .. " has no `shale_" .. x.bare .. "`: run `" .. ROC_GEN .. "`, then `shale roc_platform/tools/glue.shale`") end
+  end
+  if #bad > 0 then return nil end
+  for f in bt_generated(entries) do
+    if not exists(f.path) or read(f.path) ~= f.text then push(bad, f.path .. " is not what " .. BT_TABLE .. " makes: run `" .. ROC_GEN .. "`") end
+  end
+  return nil
+end
+
+-- ── All of it ───────────────────────────────────────────────────────────
+
+-- Every finding over `inp`'s texts; `roc` says whether to check the
+-- platform's files too (the self-test's changed texts leave them be).
+function findings(inp, roc)
+  local entries = entries_of(inp.table)
+  local bad = bt_check_entries(entries)
+  check_c(entries, inp.ast, inp.vm, bad)
+  check_preludes(entries, inp.preludes, bad)
+  check_docs(entries, inp.docs, bad)
+  if roc and #bad == 0 then check_roc(entries, bad) end
+  return bad
+end
+
+-- ── The self-test ───────────────────────────────────────────────────────
+
+-- `inp` with one text changed: `which` is "table", "ast", "vm", a prelude's
+-- name or a doc's path.
+function changed(inp, which, old, new)
+  local out = {table = inp.table, ast = inp.ast, vm = inp.vm, preludes = {}, docs = {}}
+  for k in keys(inp.preludes) do out.preludes[k] = inp.preludes[k] end
+  for k in keys(inp.docs) do out.docs[k] = inp.docs[k] end
+  if which == "table" or which == "ast" or which == "vm" then
+    out[which] = substitute(out[which], old, new)
+  elseif has_key(out.preludes, which) then
+    out.preludes[which] = substitute(out.preludes[which], old, new)
+  else
+    out.docs[which] = substitute(out.docs[which], old, new)
+  end
+  return out
+end
+
+function holds(inp, name, which, old, new, want)
+  local got = findings(changed(inp, which, old, new), false)
+  for b in got do
+    if contains(b, want) then return nil end
+  end
+  fail("self-test: " .. name .. ": no finding holds `" .. want .. "`; the findings: " .. join(got, " / "))
+end
+
+function self_test(inp)
+  local base = findings(inp, false)
+  if #base > 0 then fail("self-test: the tree itself has findings: " .. join(base, " / ")) end
+  holds(inp, "an entry taken out", "table", "is_dir(p: Path) -> Bool\n", "is_dirx(p: Path) -> Bool\n", "`is_dir` has no entry")
+  holds(inp, "an entry nothing implements", "table", "is_dir(p: Path) -> Bool\n", "is_dirx(p: Path) -> Bool\n", "c/script/ast.h has no such builtin")
+  holds(inp, "a builtin added to ast.h", "ast", "S_ITEM(\"print\"),", "S_ITEM(\"print\"), S_ITEM(\"shout\"),", "`shout` has no entry")
+  holds(inp, "an arity changed", "vm", "{1, 3, builtin_read},", "{1, 2, builtin_read},", "and vm.c's spec 1 to 2")
+  holds(inp, "a prelude function added", "linux", "function sleep(ms)", "function nap(ms)\n  return nil\nend\n\nfunction sleep(ms)", "the function `nap` has no entry")
+  holds(inp, "a parameter renamed", "core", "function drop(l, n)", "function drop(list, n)", "(list, n)")
+  holds(inp, "an option made optional", "linux", "function run(argv, opts)", "function run(argv, opts?)", "(argv, opts?)")
+  holds(inp, "a git option added", "git", "{\"all\", \"timeout_ms\"}", "{\"all\", \"prune\", \"timeout_ms\"}", "`git_fetch`'s opts")
+  holds(inp, "a section that no longer names it", "docs/SHALE.md", "| `abs(n)` |", "| `absolute(n)` |", "names `absolute`")
+  holds(inp, "an anchor that is no heading", "table", "anchor: docs/SHALE.md#numbers", "anchor: docs/SHALE.md#numbrs", "is no heading")
+  holds(inp, "an export that is pure", "table", "  impl: c builtin_exists\n  kind: effect", "  impl: c builtin_exists\n  kind: pure", "only effects are")
+  print("check_builtins: self-test: 11 changes, each found")
+  return nil
+end
+
+-- ── The run ─────────────────────────────────────────────────────────────
+
+mkdir("c/out")
+local inp = inputs()
+if arg("self_test", 0) == 1 then
+  self_test(inp)
+  return nil
+end
+local bad = findings(inp, true)
+for b in bad do print(b) end
+if #bad > 0 then fail("check_builtins: " .. #bad .. " findings: each is a line above") end
+local entries = bt_read(BT_TABLE)
+local n = {effect = 0, pure = 0, internal = 0}
+local exported = 0
+for e in entries do
+  n[e.kind] = n[e.kind] + 1
+  if e.roc ~= "" then exported = exported + 1 end
+end
+print("check_builtins: " .. #entries .. " builtins held to " .. BT_TABLE .. ": " .. n.effect .. " effects (" .. exported .. " exported to Roc), " .. n.pure .. " pure, " .. n.internal .. " prelude helpers")

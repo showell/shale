@@ -1,0 +1,717 @@
+-- c/builtin_table.shale: the library that reads c/builtins.txt, the one home
+-- of Shale's builtin surface (c/docs/builtin-table.md), and writes what is
+-- made from it. c/check_builtins.shale holds the C, the preludes, the docs
+-- and the generated files to the table; c/gen_builtins.shale writes the
+-- generated files. Both `use` this.
+--
+-- What it makes, for each builtin exported to Roc (an effect with a `roc:`
+-- key):
+--   - its declaration in roc_platform/platform/Shale.roc and its line in
+--     main.roc's `hosted` block;
+--   - in roc_platform/host/hosted.gen.c: the driver's Shale function that
+--     answers it, the C shim Roc calls (`shale_<name>`), the request it
+--     hands the driver as a Shale map and the answer it hands back as Roc's
+--     value.
+-- The C types are `roc glue`'s, read from roc_platform/host/roc_platform_abi.h:
+-- each shim's prototype, each record's fields and each tag union's payloads.
+-- So a Roc type crosses as glue lays it out, and a change to Shale.roc that
+-- glue has not seen fails the check, which names tools/glue.shale.
+
+const BT_TABLE = "c/builtins.txt"
+const BT_GLUE = "roc_platform/host/roc_platform_abi.h"
+const BT_SHALE_ROC = "roc_platform/platform/Shale.roc"
+const BT_MAIN_ROC = "roc_platform/platform/main.roc"
+const BT_HOSTED_C = "roc_platform/host/hosted.gen.c"
+
+-- ── Text at depth zero ──────────────────────────────────────────────────
+
+-- `s` split at each `sep` outside (), {} and [], each part trimmed.
+function bt_split_top(s, sep)
+  local out = {}
+  local depth = 0
+  local start = 1
+  local i = 1
+  local n = #s
+  while i <= n do
+    local c = sub(s, i, i)
+    if c == "(" or c == "{" or c == "[" then
+      depth = depth + 1
+    elseif c == ")" or c == "}" or c == "]" then
+      depth = depth - 1
+    elseif depth == 0 and sub(s, i, i + #sep - 1) == sep then
+      push(out, trim(sub(s, start, i - 1)))
+      start = i + #sep
+      i = i + #sep - 1
+    end
+    i = i + 1
+  end
+  push(out, trim(sub(s, start, n)))
+  return out
+end
+
+-- The position of the `)` that closes the `(` at `open`.
+function bt_close_of(s, open, where)
+  local depth = 0
+  local i = open
+  while i <= #s do
+    local c = sub(s, i, i)
+    if c == "(" then depth = depth + 1 end
+    if c == ")" then
+      depth = depth - 1
+      if depth == 0 then return i end
+    end
+    i = i + 1
+  end
+  fail(where .. ": no `)` closes the `(`")
+end
+
+-- ── The table ───────────────────────────────────────────────────────────
+
+-- A signature line, `name(arg: T, arg?: T, rest...: T) -> T`.
+function bt_signature(e, line, where)
+  local m = re_find(line, "^([a-z_0-9]+)\\(")
+  if m == nil then fail(where .. ": a builtin's line is `name(args) -> Type`, not `" .. line .. "`") end
+  e.name = m.group
+  local close = bt_close_of(line, #m.text, where)
+  local inner = sub(line, #m.text + 1, close - 1)
+  local rest = sub(line, close + 1, #line)
+  if not starts_with(rest, " -> ") then fail(where .. ": `" .. e.name .. "` has no ` -> Type` after its arguments") end
+  e.gives = sub(rest, 5, #rest)
+  e.args = {}
+  if trim(inner) == "" then return nil end
+  for a in bt_split_top(inner, ",") do
+    local r = re_find(a, "^([a-z_0-9]+)(\\?|\\.\\.\\.)?: (.+)$")
+    if r == nil then fail(where .. ": `" .. e.name .. "`'s argument `" .. a .. "` is not `name: Type`, `name?: Type` or `name...: Type`") end
+    local how = get(r.groups, 2, "")
+    push(e.args, {name = r.groups[1], optional = how == "?", rest = how == "...", type = r.groups[3]})
+  end
+  return nil
+end
+
+const BT_KEYS = {"impl", "kind", "stops", "opts", "doc", "anchor", "roc", "roc_params", "roc_doc", "values", "driver"}
+
+-- Every entry of the table, in its order: `{name, line, args, gives, impl,
+-- kind, stops, opts, doc, anchor, roc, roc_params, roc_doc, values, driver}`,
+-- `driver` a list of lines and the rest strings ("" when absent).
+function bt_read(path)
+  local entries = {}
+  local cur = nil
+  local n = 0
+  for l in lines(read(path)) do
+    n = n + 1
+    local where = path .. ":" .. n
+    if l == "" or starts_with(l, "#") then
+      cur = cur
+    elseif not starts_with(l, " ") then
+      cur = {line = n, impl = "", kind = "", stops = "", opts = "", doc = "", anchor = "", roc = "", roc_params = "", roc_doc = "", values = "", driver = {}}
+      bt_signature(cur, l, where)
+      push(entries, cur)
+    else
+      if cur == nil then fail(where .. ": a key before any builtin") end
+      local r = re_find(l, "^  ([a-z_]+): (.*)$")
+      if r == nil then fail(where .. ": a key line is `  key: value`, not `" .. l .. "`") end
+      local k = r.groups[1]
+      if not has_item(BT_KEYS, k) then fail(where .. ": `" .. k .. "` is no key of the table's (" .. join(BT_KEYS, ", ") .. ")") end
+      if k == "driver" then
+        push(cur.driver, r.groups[2])
+      else
+        if cur[k] ~= "" then fail(where .. ": `" .. cur.name .. "` says `" .. k .. "` twice") end
+        cur[k] = r.groups[2]
+      end
+    end
+  end
+  return entries
+end
+
+-- The table's own rules: each key where it belongs, each name once.
+function bt_check_entries(entries)
+  local bad = {}
+  local seen = {}
+  for e in entries do
+    local who = BT_TABLE .. ":" .. e.line .. ": `" .. e.name .. "`"
+    if has_key(seen, e.name) then push(bad, who .. " is in the table twice") end
+    seen[e.name] = true
+    if not has_item({"effect", "pure", "internal"}, e.kind) then push(bad, who .. "'s kind is `" .. e.kind .. "`: effect, pure or internal") end
+    if e.impl == "" then push(bad, who .. " has no impl") end
+    if e.kind ~= "internal" then
+      for k in {"stops", "doc", "anchor"} do
+        if e[k] == "" then push(bad, who .. " has no `" .. k .. "`") end
+      end
+    end
+    local has_opts = false
+    for a in e.args do
+      if starts_with(a.type, "Opts") then has_opts = true end
+    end
+    if e.opts ~= "" and not has_opts then push(bad, who .. " says `opts:` with no Opts argument") end
+    if e.roc ~= "" then
+      if e.kind ~= "effect" then push(bad, who .. " is exported to Roc, and only effects are") end
+      for k in {"roc_params", "roc_doc", "values"} do
+        if e[k] == "" then push(bad, who .. " is exported to Roc with no `" .. k .. "`") end
+      end
+      if #e.driver == 0 then push(bad, who .. " is exported to Roc with no `driver:` line") end
+    else
+      for k in {"roc_params", "roc_doc", "values"} do
+        if e[k] ~= "" then push(bad, who .. " says `" .. k .. "` and is not exported (no `roc:`)") end
+      end
+      if #e.driver > 0 then push(bad, who .. " has a driver and is not exported (no `roc:`)") end
+    end
+  end
+  return bad
+end
+
+-- `opts:`'s keys, in order.
+function bt_opt_keys(e)
+  local out = {}
+  if e.opts == "" then return out end
+  for p in bt_split_top(e.opts, ",") do
+    local r = re_find(p, "^([a-z_]+): ")
+    if r == nil then fail(BT_TABLE .. ":" .. e.line .. ": `" .. e.name .. "`'s option `" .. p .. "` is not `key: Type`") end
+    push(out, r.group)
+  end
+  return out
+end
+
+-- The count of arguments a call must give, and may (255 for `...`).
+function bt_arity(e)
+  local least = 0
+  local most = 0
+  for a in e.args do
+    if a.rest then
+      most = 255
+    else
+      if not a.optional then least = least + 1 end
+      most = most + 1
+    end
+  end
+  return {least = least, most = most}
+end
+
+-- ── Roc's types ─────────────────────────────────────────────────────────
+
+-- A Roc type's text as a tree: `{k = "str" | "u64" | "i64" | "bool" |
+-- "unit"}`, `{k = "list", of}`, `{k = "rec", fields = {{name, t}}}` or
+-- `{k = "tags", tags = {{name, payload}}}` (`payload` `{k = "none"}` for none).
+function bt_roc_type(s, where)
+  s = trim(s)
+  if s == "Str" then return {k = "str"} end
+  if s == "U64" then return {k = "u64"} end
+  if s == "I64" then return {k = "i64"} end
+  if s == "Bool" then return {k = "bool"} end
+  if s == "{}" then return {k = "unit"} end
+  if starts_with(s, "List(") and ends_with(s, ")") then return {k = "list", of = bt_roc_type(sub(s, 6, #s - 1), where)} end
+  if starts_with(s, "{") and ends_with(s, "}") then
+    local fields = {}
+    for f in bt_split_top(sub(s, 2, #s - 1), ",") do
+      local r = re_find(f, "^([a-z_0-9]+) : (.+)$")
+      if r == nil then fail(where .. ": a record's field is `name : Type`, not `" .. f .. "`") end
+      push(fields, {name = r.groups[1], t = bt_roc_type(r.groups[2], where)})
+    end
+    return {k = "rec", fields = fields}
+  end
+  if starts_with(s, "[") and ends_with(s, "]") then
+    local tags = {}
+    for t in bt_split_top(sub(s, 2, #s - 1), ",") do
+      local r = re_find(t, "^([A-Z][A-Za-z0-9]*)(\\((.*)\\))?$")
+      if r == nil then fail(where .. ": a tag is `Name` or `Name(Type)`, not `" .. t .. "`") end
+      local payload = {k = "none"}
+      if get(r.groups, 3, "") ~= "" then payload = bt_roc_type(r.groups[3], where) end
+      push(tags, {name = r.groups[1], payload = payload})
+    end
+    return {k = "tags", tags = tags}
+  end
+  fail(where .. ": `" .. s .. "` is no type the platform carries (Str, U64, I64, Bool, {}, List(T), a record, a tag union)")
+end
+
+-- An exported entry's Roc side: `{name, bare, params = {{name, t}}, ret,
+-- decl}`; `bare` is the name without `!`, the shim's `shale_<bare>`.
+function bt_export(e)
+  local where = BT_TABLE .. ":" .. e.line
+  local r = re_find(e.roc, "^([a-z_0-9]+)! : (.+)$")
+  if r == nil then fail(where .. ": `roc:` is `name! : Arg, ... => Answer`, not `" .. e.roc .. "`") end
+  local sides = bt_split_top(r.groups[2], "=>")
+  if #sides ~= 2 then fail(where .. ": `roc:` has one `=>`") end
+  local names = bt_split_top(e.roc_params, ",")
+  local types = bt_split_top(sides[1], ",")
+  if #names ~= #types then fail(where .. ": `roc_params` names " .. #names .. " arguments, and `roc:` has " .. #types) end
+  local params = {}
+  local k = 0
+  for t in types do
+    k = k + 1
+    push(params, {name = names[k], t = bt_roc_type(t, where)})
+  end
+  return {name = r.groups[1] .. "!", bare = r.groups[1], params = params, ret = bt_roc_type(sides[2], where), decl = e.roc, entry = e}
+end
+
+-- Every exported entry's Roc side, sorted by its Roc name (glue's order).
+function bt_exports(entries)
+  local out = {}
+  for e in entries do
+    if e.roc ~= "" then push(out, bt_export(e)) end
+  end
+  sort(out, "bare")
+  return out
+end
+
+-- ── Glue's header ───────────────────────────────────────────────────────
+
+-- The header's hosted prototypes, structs and unions: `{protos = {bare =
+-- {ret, params = {ctype}}}, types = {name = {{name, ctype}}}}`; a type's
+-- first layout (the header gives one a word size) is the one kept.
+function bt_glue(path)
+  local protos = {}
+  local types = {}
+  local fields = nil
+  local named = ""
+  for l in lines(read(path)) do
+    local p = re_find(l, "^extern ([A-Za-z0-9_]+) shale_([a-z_0-9]+)\\((.*)\\);$")
+    if p ~= nil then
+      local params = {}
+      if p.groups[3] ~= "void" then
+        for a in split(p.groups[3], ", ") do push(params, re_find(a, "^([A-Za-z0-9_]+) ").group) end
+      end
+      protos[p.groups[2]] = {ret = p.groups[1], params = params}
+    end
+    if fields ~= nil then
+      local f = re_find(l, "^    ([A-Za-z0-9_]+) ([a-z_0-9]+);$")
+      if f ~= nil then push(fields, {name = f.groups[2], ctype = f.groups[1]}) end
+      local close = re_find(l, "^\\}( ([A-Za-z0-9_]+))?;$")
+      if close ~= nil then
+        local name = named
+        if get(close.groups, 2, "") ~= "" then name = close.groups[2] end
+        if not has_key(types, name) then types[name] = fields end
+        fields = nil
+      end
+    else
+      local open = re_find(l, "^(typedef (struct|union) \\{|struct ([A-Za-z0-9_]+) \\{)$")
+      if open ~= nil then
+        fields = {}
+        named = get(open.groups, 3, "")
+      end
+    end
+  end
+  return {protos = protos, types = types}
+end
+
+-- The C type of field `name` of glue's type `ctype`.
+function bt_field_ctype(glue, ctype, name)
+  if not has_key(glue.types, ctype) then fail(BT_GLUE .. " has no type `" .. ctype .. "`: run `shale roc_platform/tools/glue.shale`") end
+  for f in glue.types[ctype] do
+    if f.name == name then return f.ctype end
+  end
+  fail(BT_GLUE .. "'s `" .. ctype .. "` has no field `" .. name .. "`: run `shale roc_platform/tools/glue.shale`")
+end
+
+-- The glue type laid out for a record of exactly these fields, for a list's
+-- items, where no prototype names it.
+function bt_record_ctype(glue, t)
+  local want = {}
+  for f in t.fields do push(want, f.name) end
+  sort(want)
+  local found = {}
+  for name in keys(glue.types) do
+    local got = {}
+    for f in glue.types[name] do push(got, f.name) end
+    sort(got)
+    if join(got, ",") == join(want, ",") and starts_with(name, "AnonStruct") then push(found, name) end
+  end
+  sort(found)
+  if #found == 0 then fail(BT_GLUE .. " lays out no record of " .. join(want, ", ") .. ": run `shale roc_platform/tools/glue.shale`") end
+  return found[1]
+end
+
+-- The C type of a Roc type that a list holds.
+function bt_item_ctype(glue, t)
+  if t.k == "str" then return "RocStr" end
+  if t.k == "u64" then return "uint64_t" end
+  if t.k == "i64" then return "int64_t" end
+  if t.k == "bool" then return "bool" end
+  if t.k == "list" then return "RocList" end
+  if t.k == "rec" then return bt_record_ctype(glue, t) end
+  fail("the platform carries no list of " .. t.k .. " yet: c/builtin_table.shale, bt_item_ctype")
+end
+
+-- ── The C: Roc's values as Shale's, and back ────────────────────────────
+
+-- A fresh C name, `base` and a count: the emitters nest.
+function bt_fresh(g, base)
+  g.n = g.n + 1
+  return base .. g.n
+end
+
+-- C lines (at indent `ind`) that set the Value `dst` to the Roc value `src`
+-- (an lvalue of C type `ctype`, Roc type `t`).
+function bt_to_shale(g, t, src, ctype, dst, ind)
+  local out = {}
+  if t.k == "str" then
+    push(out, ind .. "TRY(hosted_put_str(r, pos, &(" .. src .. "), &" .. dst .. "));")
+  elseif t.k == "u64" or t.k == "i64" then
+    push(out, ind .. "value_int(&" .. dst .. ", (int64_t)(" .. src .. "));")
+  elseif t.k == "bool" then
+    push(out, ind .. "value_bool(&" .. dst .. ", " .. src .. ");")
+  elseif t.k == "list" then
+    local l = bt_fresh(g, "list")
+    local e = bt_fresh(g, "items")
+    local k = bt_fresh(g, "k")
+    local x = bt_fresh(g, "item")
+    local item = bt_item_ctype(g.glue, t.of)
+    push(out, ind .. "{")
+    push(out, ind .. "    Table *" .. l .. " = NULL;")
+    push(out, ind .. "    TRY(hosted_new_list(r, pos, (" .. src .. ").length, &" .. l .. "));")
+    push(out, ind .. "    const " .. item .. " *" .. e .. " = (" .. src .. ").elements;")
+    push(out, ind .. "    for (size_t " .. k .. " = 0; " .. k .. " < (" .. src .. ").length; " .. k .. "++) {")
+    push(out, ind .. "        Value " .. x .. ";")
+    for c in bt_to_shale(g, t.of, e .. "[" .. k .. "]", item, x, ind .. "        ") do push(out, c) end
+    push(out, ind .. "        TRY(run_list_push(r, pos, " .. l .. ", &" .. x .. "));")
+    push(out, ind .. "    }")
+    push(out, ind .. "    value_table(&" .. dst .. ", " .. l .. ");")
+    push(out, ind .. "}")
+  elseif t.k == "rec" then
+    local m = bt_fresh(g, "map")
+    push(out, ind .. "{")
+    push(out, ind .. "    Table *" .. m .. " = NULL;")
+    push(out, ind .. "    TRY(hosted_new_map(r, pos, &" .. m .. "));")
+    for f in t.fields do
+      local x = bt_fresh(g, f.name .. "_")
+      push(out, ind .. "    Value " .. x .. ";")
+      for c in bt_to_shale(g, f.t, "(" .. src .. ")." .. f.name, bt_field_ctype(g.glue, ctype, f.name), x, ind .. "    ") do push(out, c) end
+      push(out, ind .. "    TRY(run_map_put(r, pos, " .. m .. ", S(\"" .. f.name .. "\"), &" .. x .. "));")
+    end
+    push(out, ind .. "    value_table(&" .. dst .. ", " .. m .. ");")
+    push(out, ind .. "}")
+  elseif t.k == "tags" then
+    local m = bt_fresh(g, "map")
+    push(out, ind .. "{")
+    push(out, ind .. "    Table *" .. m .. " = NULL;")
+    push(out, ind .. "    TRY(hosted_new_map(r, pos, &" .. m .. "));")
+    push(out, ind .. "    switch ((" .. src .. ").tag) {")
+    for tg in t.tags do
+      local low = lower(tg.name)
+      push(out, ind .. "    case " .. ctype .. "Tag_" .. tg.name .. ": {")
+      push(out, ind .. "        TRY(run_map_put_str(r, pos, " .. m .. ", S(\"tag\"), S(\"" .. tg.name .. "\")));")
+      if tg.payload.k ~= "none" then
+        local p = bt_fresh(g, "payload")
+        local x = bt_fresh(g, "value")
+        local pt = bt_field_ctype(g.glue, ctype .. "TagPayloadStorage", low)
+        push(out, ind .. "        " .. pt .. " " .. p .. " = " .. ctype .. "_payload_" .. low .. "(&(" .. src .. "));")
+        push(out, ind .. "        Value " .. x .. ";")
+        for c in bt_to_shale(g, tg.payload, p, pt, x, ind .. "        ") do push(out, c) end
+        push(out, ind .. "        TRY(run_map_put(r, pos, " .. m .. ", S(\"value\"), &" .. x .. "));")
+      end
+      push(out, ind .. "        break;")
+      push(out, ind .. "    }")
+    end
+    push(out, ind .. "    default: return hosted_wrong(r, pos, S(\"a tag the platform declares\"));")
+    push(out, ind .. "    }")
+    push(out, ind .. "    value_table(&" .. dst .. ", " .. m .. ");")
+    push(out, ind .. "}")
+  else
+    fail("the platform carries no argument of " .. t.k .. ": c/builtin_table.shale, bt_to_shale")
+  end
+  return out
+end
+
+-- C lines that set `dst` (an lvalue of C type `ctype`, Roc type `t`) to the
+-- Shale value at `val` (a `const Value *`), or stop naming what is wrong.
+function bt_from_shale(g, t, val, dst, ctype, ind)
+  local out = {}
+  if t.k == "str" then
+    push(out, ind .. "TRY(hosted_str(r, pos, " .. val .. ", &(" .. dst .. ")));")
+  elseif t.k == "u64" or t.k == "i64" then
+    local i = bt_fresh(g, "n")
+    local cast = "(int64_t)"
+    if t.k == "u64" then cast = "(uint64_t)" end
+    push(out, ind .. "{")
+    push(out, ind .. "    int64_t " .. i .. " = 0;")
+    push(out, ind .. "    TRY(hosted_int(r, pos, " .. val .. ", &" .. i .. "));")
+    push(out, ind .. "    " .. dst .. " = " .. cast .. i .. ";")
+    push(out, ind .. "}")
+  elseif t.k == "bool" then
+    push(out, ind .. "TRY(hosted_bool(r, pos, " .. val .. ", &(" .. dst .. ")));")
+  elseif t.k == "unit" then
+    push(out, ind .. "(void)" .. val .. ";")
+  elseif t.k == "list" then
+    local its = bt_fresh(g, "items")
+    local ev = bt_fresh(g, "elems")
+    local e = bt_fresh(g, "made")
+    local k = bt_fresh(g, "k")
+    local item = bt_item_ctype(g.glue, t.of)
+    push(out, ind .. "{")
+    push(out, ind .. "    Values " .. its .. ";")
+    push(out, ind .. "    TRY(hosted_items(r, pos, " .. val .. ", &" .. its .. "));")
+    push(out, ind .. "    void *" .. ev .. " = NULL;")
+    push(out, ind .. "    TRY(hosted_list(r, pos, " .. its .. ".len, sizeof(" .. item .. "), &(" .. dst .. "), &" .. ev .. "));")
+    push(out, ind .. "    " .. item .. " *" .. e .. " = " .. ev .. ";")
+    push(out, ind .. "    for (size_t " .. k .. " = 0; " .. k .. " < " .. its .. ".len; " .. k .. "++) {")
+    for c in bt_from_shale(g, t.of, "&at(" .. its .. ", " .. k .. ")", e .. "[" .. k .. "]", item, ind .. "        ") do push(out, c) end
+    push(out, ind .. "    }")
+    push(out, ind .. "}")
+  elseif t.k == "rec" then
+    for f in t.fields do
+      local x = bt_fresh(g, f.name .. "_")
+      push(out, ind .. "{")
+      push(out, ind .. "    Value " .. x .. ";")
+      push(out, ind .. "    TRY(hosted_get(r, pos, " .. val .. ", S(\"" .. f.name .. "\"), &" .. x .. "));")
+      for c in bt_from_shale(g, f.t, "&" .. x, "(" .. dst .. ")." .. f.name, bt_field_ctype(g.glue, ctype, f.name), ind .. "    ") do push(out, c) end
+      push(out, ind .. "}")
+    end
+  elseif t.k == "tags" then
+    local tv = bt_fresh(g, "tag")
+    push(out, ind .. "{")
+    push(out, ind .. "    Value " .. tv .. ";")
+    push(out, ind .. "    TRY(hosted_get(r, pos, " .. val .. ", S(\"tag\"), &" .. tv .. "));")
+    push(out, ind .. "    if (" .. tv .. ".tag != VALUE_STRING) return hosted_wrong(r, pos, S(\"tag\"));")
+    local first = true
+    for tg in t.tags do
+      local low = lower(tg.name)
+      local kw = "} else if"
+      if first then kw = "if" end
+      first = false
+      push(out, ind .. "    " .. kw .. " (str_eq(" .. tv .. ".as.string, S(\"" .. tg.name .. "\"))) {")
+      if tg.payload.k ~= "none" then
+        local pv = bt_fresh(g, "value")
+        local p = bt_fresh(g, "payload")
+        local pt = bt_field_ctype(g.glue, ctype .. "TagPayloadStorage", low)
+        push(out, ind .. "        Value " .. pv .. ";")
+        push(out, ind .. "        TRY(hosted_get(r, pos, " .. val .. ", S(\"value\"), &" .. pv .. "));")
+        push(out, ind .. "        " .. pt .. " " .. p .. ";")
+        push(out, ind .. "        memset(&" .. p .. ", 0, sizeof " .. p .. ");")
+        for c in bt_from_shale(g, tg.payload, "&" .. pv, p, pt, ind .. "        ") do push(out, c) end
+        push(out, ind .. "        " .. dst .. " = " .. ctype .. "_make_" .. low .. "(" .. p .. ");")
+      else
+        push(out, ind .. "        " .. dst .. " = " .. ctype .. "_make_" .. low .. "();")
+      end
+    end
+    push(out, ind .. "    } else {")
+    push(out, ind .. "        return hosted_wrong(r, pos, S(\"tag\"));")
+    push(out, ind .. "    }")
+    push(out, ind .. "}")
+  else
+    fail("the platform carries no answer of " .. t.k .. ": c/builtin_table.shale, bt_from_shale")
+  end
+  return out
+end
+
+-- ── The generated files ─────────────────────────────────────────────────
+
+const BT_SHALE_ROC_HEAD = [=[## Shale.roc: written by c/gen_builtins.shale from c/builtins.txt; never
+## edit it. Shale's effects, as Roc's: each one is a thin shim in the host
+## (roc_platform/host/hosted.gen.c, `shale_<name>`) over a Shale builtin, run
+## by Shale's own VM, so the mounts, the guards, the refusals, the budgets and
+## the report are Shale's.
+##
+## **A REFUSAL IS A STOP, AN OUTCOME IS A VALUE**: a path that escapes the
+## root or a mount, a program `run` refuses, a budget run out: the run stops
+## with Shale's own words, and the Roc never sees an answer. A missing file
+## or a program's exit code is an answer.
+##
+## **EVERY PATH IS A SHALE PATH**: relative to the root the run starts in,
+## or `name:rest` through a mount.
+##
+## **ONLY EFFECTS ARE HERE**: what Roc can do itself (lines, sorting, text)
+## is Roc's, not Shale's.
+Shale := [].{
+]=]
+
+const BT_MAIN_ROC_HEAD = [=[## main.roc: written by c/gen_builtins.shale from c/builtins.txt; never edit
+## it. Shale's Roc platform (roc_platform/README.md). The host is C Shale's
+## runtime used as a library: it gives the app Shale's effects (Shale.roc),
+## and calls the app's `main!` once.
+##
+## Each hosted function's symbol is `shale_` and its name in Shale.roc,
+## without the `!`.
+platform ""
+	requires {
+		main! : {} => {}
+	}
+	exposes [
+		Shale,
+	]
+	packages {}
+	provides {
+		"roc_main": main_for_host!,
+	}
+	hosted {
+]=]
+
+const BT_MAIN_ROC_TAIL = [=[	}
+	targets: {
+		x64musl: {
+			inputs: [app],
+			output: Archive,
+		},
+	}
+
+import Shale
+
+main_for_host! : {} => {}
+main_for_host! = |{}| main!({})
+]=]
+
+-- `text` as `##` lines of at most 76 columns after the tab.
+function bt_roc_doc(text)
+  local out = ""
+  local line = "\t##"
+  for w in words(text) do
+    if #line + 1 + #w > 78 and line ~= "\t##" then
+      out = out .. line .. "\n"
+      line = "\t##"
+    end
+    line = line .. " " .. w
+  end
+  return out .. line .. "\n"
+end
+
+function bt_render_shale_roc(exports)
+  local out = BT_SHALE_ROC_HEAD
+  for x in exports do
+    out = out .. "\n" .. bt_roc_doc(x.entry.roc_doc) .. "\t" .. x.decl .. "\n"
+  end
+  return out .. "}\n"
+end
+
+function bt_render_main_roc(exports)
+  local out = BT_MAIN_ROC_HEAD
+  for x in exports do out = out .. "\t\t\"shale_" .. x.bare .. "\": Shale." .. x.name .. ",\n" end
+  return out .. BT_MAIN_ROC_TAIL
+end
+
+-- A line of Shale as a C string literal's line.
+function bt_c_literal(s)
+  local esc = substitute(s, "\\", "\\\\", {missing_ok = true})
+  esc = substitute(esc, "\"", "\\\"", {missing_ok = true})
+  return "    \"" .. esc .. "\\n\"\n"
+end
+
+-- The driver: a Shale function a hosted function, then the loop that asks
+-- the Roc for its next request and answers it.
+function bt_driver(exports)
+  local ls = {"-- the Roc platform's driver, written by c/gen_builtins.shale from c/builtins.txt"}
+  for x in exports do
+    push(ls, "function hosted_" .. x.bare .. "(q)")
+    for d in x.entry.driver do push(ls, "  " .. d) end
+    push(ls, "end")
+  end
+  push(ls, "function answer(q)")
+  push(ls, "  local f = q.fn")
+  for x in exports do push(ls, "  if f == \"" .. x.bare .. "\" then return hosted_" .. x.bare .. "(q) end") end
+  push(ls, "  if f == \"crash\" then fail(\"the Roc crashed: \" .. q.why) end")
+  push(ls, "  fail(\"the Roc platform has no hosted function `\" .. f .. \"`\")")
+  push(ls, "end")
+  push(ls, "local q = host(\"roc_step\")")
+  push(ls, "while q.fn ~= \"done\" do")
+  push(ls, "  q = host(\"roc_step\", answer(q))")
+  push(ls, "end")
+  return ls
+end
+
+const BT_HOSTED_HEAD = [=[// hosted.gen.c: written by c/gen_builtins.shale from c/builtins.txt; never
+// edit it. The hosted functions of Shale's Roc platform (roc_platform/
+// README.md): for each one, its kind, the driver's Shale that answers it, the
+// shim Roc calls, its request as a Shale map and its answer as Roc's value.
+// host.c includes it after the helpers it names (`roc_ask`, `hosted_*`); the
+// C types are roc glue's (roc_platform_abi.h).
+
+]=]
+
+function bt_render_hosted_c(exports, glue)
+  local g = {n = 0, glue = glue}
+  local out = BT_HOSTED_HEAD
+  -- The kinds.
+  out = out .. "typedef enum {\n"
+  for x in exports do out = out .. "    HOSTED_" .. upper(x.bare) .. ",\n" end
+  out = out .. "    HOSTED_COUNT,\n} Hosted;\n\n"
+  out = out .. "// Each kind's `fn` in the request.\nstatic const Str hosted_names[] = {\n"
+  for x in exports do out = out .. "    S_ITEM(\"" .. x.bare .. "\"),\n" end
+  out = out .. "};\n\n"
+  -- The driver.
+  out = out .. "// The Shale that runs the app.\nstatic const char HOSTED_DRIVER[] =\n"
+  for l in bt_driver(exports) do out = out .. bt_c_literal(l) end
+  out = out .. "    ;\n\n"
+  -- The arguments, the answers and the shims.
+  out = out .. "// What the Roc's last call passed, read on Shale's side while the Roc waits.\n"
+  for x in exports do
+    if not has_key(glue.protos, x.bare) then fail(BT_GLUE .. " declares no `shale_" .. x.bare .. "`: run `shale roc_platform/tools/glue.shale`") end
+    local p = glue.protos[x.bare]
+    if #p.params ~= #x.params then fail(BT_GLUE .. "'s `shale_" .. x.bare .. "` takes " .. #p.params .. " arguments, and the table's " .. #x.params .. ": run `shale roc_platform/tools/glue.shale`") end
+    if #x.params > 0 then
+      out = out .. "static struct {\n"
+      local k = 0
+      for a in x.params do
+        k = k + 1
+        out = out .. "    " .. p.params[k] .. " " .. a.name .. ";\n"
+      end
+      out = out .. "} hosted_" .. x.bare .. "_args;\n"
+    end
+  end
+  out = out .. "\n// The answer Shale gave the Roc's last call.\nstatic union {\n    uint8_t none;\n"
+  for x in exports do
+    local p = glue.protos[x.bare]
+    if p.ret ~= "void" then out = out .. "    " .. p.ret .. " " .. x.bare .. ";\n" end
+  end
+  out = out .. "} hosted_answer;\n\n"
+  out = out .. "// ── the shims: the Roc's side of each hosted function ──\n"
+  for x in exports do
+    local p = glue.protos[x.bare]
+    local params = {}
+    local k = 0
+    for a in x.params do
+      push(params, p.params[k + 1] .. " arg" .. k)
+      k = k + 1
+    end
+    local sig = join(params, ", ")
+    if sig == "" then sig = "void" end
+    out = out .. "\n" .. p.ret .. " shale_" .. x.bare .. "(" .. sig .. ") {\n"
+    k = 0
+    for a in x.params do
+      out = out .. "    hosted_" .. x.bare .. "_args." .. a.name .. " = arg" .. k .. ";\n"
+      k = k + 1
+    end
+    out = out .. "    roc_ask(HOSTED_" .. upper(x.bare) .. ");\n"
+    if p.ret ~= "void" then out = out .. "    return hosted_answer." .. x.bare .. ";\n" end
+    out = out .. "}\n"
+  end
+  -- The request.
+  out = out .. "\n// ── Shale's side ──\n\n// The Roc's request `kind` as the fields of the map `q`, each argument by\n// its name in the table's `roc_params`.\n"
+  out = out .. "static STATUS_MUST_USE Status hosted_request(Run *r, Pos pos, int kind, Table *q) {\n    switch (kind) {\n"
+  for x in exports do
+    local p = glue.protos[x.bare]
+    out = out .. "    case HOSTED_" .. upper(x.bare) .. ": {\n"
+    local k = 0
+    for a in x.params do
+      k = k + 1
+      local v = bt_fresh(g, a.name .. "_")
+      out = out .. "        Value " .. v .. ";\n"
+      for c in bt_to_shale(g, a.t, "hosted_" .. x.bare .. "_args." .. a.name, p.params[k], v, "        ") do out = out .. c .. "\n" end
+      out = out .. "        TRY(run_map_put(r, pos, q, S(\"" .. a.name .. "\"), &" .. v .. "));\n"
+    end
+    out = out .. "        return OK;\n    }\n"
+  end
+  out = out .. "    default: return OK;\n    }\n}\n\n"
+  -- The answer.
+  out = out .. "// Shale's answer `v` to the request `kind`, as the Roc's return value.\n"
+  out = out .. "static STATUS_MUST_USE Status hosted_answer_from(Run *r, Pos pos, int kind, const Value *v) {\n    memset(&hosted_answer, 0, sizeof hosted_answer);\n    switch (kind) {\n"
+  for x in exports do
+    local p = glue.protos[x.bare]
+    out = out .. "    case HOSTED_" .. upper(x.bare) .. ":\n"
+    if p.ret == "void" then
+      out = out .. "        (void)v;\n        return OK;\n"
+    else
+      out = out .. "        {\n"
+      for c in bt_from_shale(g, x.ret, "v", "hosted_answer." .. x.bare, p.ret, "            ") do out = out .. c .. "\n" end
+      out = out .. "        }\n        return OK;\n"
+    end
+  end
+  out = out .. "    default: break;\n    }\n    return hosted_wrong(r, pos, S(\"a request it asked\"));\n}\n"
+  return out
+end
+
+-- Every generated file: `{path, text}`.
+function bt_generated(entries)
+  local exports = bt_exports(entries)
+  local glue = bt_glue(BT_GLUE)
+  return {
+    {path = BT_SHALE_ROC, text = bt_render_shale_roc(exports)},
+    {path = BT_MAIN_ROC, text = bt_render_main_roc(exports)},
+    {path = BT_HOSTED_C, text = bt_render_hosted_c(exports, glue)},
+  }
+end

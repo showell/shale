@@ -1,0 +1,57 @@
+-- roc_platform/tools/compare.shale: cookbook/roc/check_module_size.shale and
+-- its Roc port (roc_platform/examples/check_module_size.roc), run on the
+-- same input, their outputs held to each other line for line, and each
+-- one's wall and CPU time said. From the checkout's root:
+--   shale roc_platform/tools/compare.shale glob=repos:roc-chat/**/*.roc limit=300 all=1
+-- (`glob` on stdin with --args-stdin: `*` is no plain word.) `runs=N` runs
+-- each N times and says the fastest.
+-- budget: programs=200
+
+const GLOB = arg("glob", "**/*.roc")
+const LIMIT = arg("limit", "500")
+const ALL = arg("all", "")
+const EXEMPT = arg("exempt", "")
+const RUNS = arg("runs", 3)
+
+function values_text()
+  return "glob=" .. GLOB .. "\nlimit=" .. LIMIT .. "\nall=" .. ALL .. "\nexempt=" .. EXEMPT .. "\n"
+end
+
+-- The output a launch gave, its first line (the budgets' header) and the
+-- stop's lines left out: those are each runner's own.
+function body(out)
+  local kept = {}
+  for l in lines(out) do
+    if not starts_with(l, "── ") and not starts_with(l, "   called from") then push(kept, l) end
+  end
+  return kept
+end
+
+function fastest(argv)
+  local best = nil
+  local out = ""
+  for k = 1, RUNS do
+    local r = run(argv, {stdin = values_text(), timeout_ms = 120000, whole = 4000000})
+    out = r.out
+    if best == nil or r.ms < best.ms then best = r end
+  end
+  return {ms = best.ms, cpu_ms = best.cpu_ms, code = best.code, out = out}
+end
+
+local shale_r = fastest({"shale", "cookbook/roc/check_module_size.shale", "--args-stdin"})
+local roc_r = fastest({"shale", "roc_platform/run.shale", "script=roc_platform/examples/check_module_size.roc", "--args-stdin"})
+local a = body(shale_r.out)
+local b = body(roc_r.out)
+local differ = 0
+local n = max(#a, #b)
+for k = 1, n do
+  local x = get(a, k, "<none>")
+  local y = get(b, k, "<none>")
+  if x ~= y then
+    differ = differ + 1
+    if differ <= 5 then print("line " .. k .. ":\n  shale: " .. x .. "\n  roc:   " .. y) end
+  end
+end
+print("shale: exit " .. shale_r.code .. ", " .. shale_r.ms .. " ms (cpu " .. shale_r.cpu_ms .. " ms), " .. #a .. " lines")
+print("roc:   exit " .. roc_r.code .. ", " .. roc_r.ms .. " ms (cpu " .. roc_r.cpu_ms .. " ms), " .. #b .. " lines")
+if differ == 0 then print("SAME: " .. n .. " lines") else fail(differ .. " lines differ") end

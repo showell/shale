@@ -1,0 +1,62 @@
+-- roc_platform/tools/measure.shale: the spike's timings, from the
+-- checkout's root (`shale roc_platform/tools/measure.shale`). For each
+-- example: its first build (the script's cache emptied, Roc's own cache a
+-- fresh folder), a run with everything cached, and a run after a one-line
+-- edit; then the peak memory of one `roc build`. The host's object (all of
+-- C Shale, compiled once) is built first if it is missing, and timed apart.
+-- Every launch is the launcher's whole wall time, from `shale` to its end.
+-- budget: programs=100
+
+const OUT = "roc_platform/out/measure"
+const ROC = real("tools:roc-" .. trim(read("roc_platform/roc-version")) .. "/roc")
+if exists(OUT) then remove_tree(OUT) end
+mkdir(OUT)
+if exists("roc_platform/out/cache") then remove_tree("roc_platform/out/cache") end
+if exists("roc_platform/out/host") then remove_tree("roc_platform/out/host") end
+
+function launch(script, extra, env)
+  local argv = {"shale", "roc_platform/run.shale", "script=" .. script, "timing=1"}
+  for x in extra do push(argv, x) end
+  local r = must(run(argv, {timeout_ms = 600000, whole = 200000, env = env, nice = 19}))
+  local phases = {}
+  for l in lines(r.out) do
+    if starts_with(l, "-- ") then push(phases, sub(l, 4)) end
+  end
+  return {ms = r.ms, cpu_ms = r.cpu_ms, phases = join(phases, "; ")}
+end
+
+const rows = {}
+function row(what, r)
+  push(rows, {what = what, wall_ms = r.ms, cpu_ms = r.cpu_ms, phases = r.phases})
+  return nil
+end
+
+-- The host's object, if a fresh checkout has none: the one-time cost.
+row("host object (first launch ever)", launch("roc_platform/examples/count_lines.roc", {"file=README.md"}, {ROC_CACHE_DIR = real(OUT) .. "/roc-cache-0"}))
+remove_tree("roc_platform/out/cache")
+
+const examples = {
+  {name = "count_lines", file = "roc_platform/examples/count_lines.roc", args = {"file=README.md"}, old = "lines\")", new = "lines, counted\")"},
+  {name = "check_module_size", file = "roc_platform/examples/check_module_size.roc", args = {"glob=repos:roc-chat/**/*.roc", "limit=600"}, old = "needs no exemption", new = "needs none"},
+}
+local k = 0
+for e in examples do
+  k = k + 1
+  local cold = {ROC_CACHE_DIR = real(OUT) .. "/roc-cache-" .. k}
+  row(e.name .. ": first build, Roc's cache cold", launch(e.file, e.args, cold))
+  remove_tree("roc_platform/out/cache")
+  row(e.name .. ": first build, Roc's cache warm", launch(e.file, e.args, cold))
+  row(e.name .. ": cached run", launch(e.file, e.args, cold))
+  local copy = OUT .. "/" .. e.name .. ".roc"
+  replace(copy, read(e.file))
+  row(e.name .. ": copy's first build", launch(copy, e.args, cold))
+  edit(copy, e.old, e.new)
+  row(e.name .. ": after a one-line edit", launch(copy, e.args, cold))
+end
+print(table(rows, {"what", "wall_ms", "cpu_ms", "phases"}))
+
+-- The peak memory of one cold `roc build`, from GNU time.
+local t = run({"/usr/bin/time", "-v", ROC, "build", real("roc_platform/examples/check_module_size.roc"), "--target=x64musl", "--opt=dev", "--output=" .. real(OUT) .. "/peak.a"}, {timeout_ms = 300000, whole = 100000, nice = 19, env = {ROC_CACHE_DIR = real(OUT) .. "/roc-cache-peak"}, want = "measure: GNU time's peak memory of a roc build"})
+for l in lines(t.out) do
+  if contains(l, "Maximum resident") or contains(l, "Elapsed (wall") then print("roc build (cold): " .. trim(l)) end
+end

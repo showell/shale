@@ -1,0 +1,48 @@
+-- roc_platform/self_test.shale: the platform's policy proofs, end to end,
+-- with the pinned Roc: examples/escape.roc tried each way, each reach held to
+-- Shale's own stop, and the two that pass (a missing file as a value, a
+-- program Shale lets through) held to their output; then count_lines.roc.
+-- It builds the host's object the first time (about 40 s of gcc), so it
+-- runs when a Roc build is asked for, never in the tiers (c/docs/
+-- builtin-table.md, "What runs where").
+--
+-- Run from the shale checkout's root: shale roc_platform/self_test.shale
+-- budget: programs=40
+
+-- Each try, and a literal its output must hold. A stop's is Shale's own
+-- class and words.
+const TRIES = {
+  {try = "climb", stops = true, holds = "argument: `exists`: \"../outside.txt\" climbs out of the root"},
+  {try = "absolute", stops = true, holds = "argument: `exists`: \"/etc/passwd\" is absolute"},
+  {try = "bash", stops = true, holds = "refused: `run` of `bash`: a shell or an interpreter"},
+  {try = "write", stops = true, holds = "argument: `replace`: \"../escaped.txt\" climbs out of the root"},
+  {try = "crash", stops = true, holds = "the Roc crashed: a promise the script broke"},
+  {try = "arena", stops = true, holds = "budget arena: the arena budget ran out"},
+  {try = "missing", stops = false, holds = "Missing, as a value: the script goes on"},
+  {try = "ok", stops = false, holds = "git ran, exit 0: git version"},
+}
+
+function launch(args)
+  local argv = {"shale", "roc_platform/run.shale"}
+  for a in args do push(argv, a) end
+  return run(argv, {timeout_ms = 600000, tail = 40})
+end
+
+local bad = {}
+for t in TRIES do
+  local r = launch({"script=roc_platform/examples/escape.roc", "try=" .. t.try})
+  local stopped = get(r, "code", -1) ~= 0
+  local said = trim(r.out)
+  if stopped ~= t.stops or not contains(said, t.holds) or contains(said, "did NOT hold") then
+    local wanted = "exit 0"
+    if t.stops then wanted = "a stop" end
+    push(bad, "try=" .. t.try .. ": exit " .. get(r, "code", -1) .. ", wanted " .. wanted .. " holding `" .. t.holds .. "`; it said:\n" .. said)
+  else
+    print("ok   try=" .. t.try .. ": " .. t.holds)
+  end
+end
+local c = launch({"script=roc_platform/examples/count_lines.roc", "file=roc_platform/README.md"})
+if get(c, "code", -1) ~= 0 then push(bad, "count_lines.roc: exit " .. get(c, "code", -1) .. ":\n" .. trim(c.out)) else print("ok   count_lines.roc: " .. last(lines(trim(c.out)), 1)[1]) end
+for b in bad do print("FAIL " .. b) end
+if #bad > 0 then fail("roc_platform self-test: " .. #bad .. " failed") end
+print("roc_platform self-test: " .. (#TRIES + 1) .. " runs held")

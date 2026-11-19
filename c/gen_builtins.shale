@@ -1,0 +1,25 @@
+-- c/gen_builtins.shale: writes the Roc platform's surface from
+-- c/builtins.txt, the one home of Shale's builtins (c/docs/builtin-table.md):
+-- roc_platform/platform/Shale.roc, main.roc and roc_platform/host/hosted.gen.c.
+-- The files are tracked, and c/check_builtins.shale holds them to the table
+-- in the fast tier. After a change to what is exported, run
+-- `shale roc_platform/tools/glue.shale` (it needs the pinned Roc), then this
+-- again: the C types are glue's.
+--
+-- Run from the repository's root: shale c/gen_builtins.shale
+-- budget: steps=200000000 arena_bytes=1000000000
+
+use("./builtin_table.shale")
+
+local entries = bt_read(BT_TABLE)
+local bad = bt_check_entries(entries)
+for b in bad do print(b) end
+if #bad > 0 then fail("gen_builtins: " .. BT_TABLE .. " breaks its own rules: each is a line above") end
+for f in bt_generated(entries) do
+  if exists(f.path) and read(f.path) == f.text then
+    print(f.path .. ": unchanged")
+  else
+    replace(f.path, f.text)
+    print(f.path .. ": written")
+  end
+end

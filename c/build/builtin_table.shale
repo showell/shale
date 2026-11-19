@@ -1,0 +1,32 @@
+-- c/build/builtin_table.shale: the builtin table's block (c/builtins.txt,
+-- c/docs/builtin-table.md). c/build.shale runs it, with the `build` mount that
+-- `use` below reads; see that file for the tiers and the blocks.
+-- budget: steps=40000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
+
+use("build:lib.shale")
+
+-- ── The builtin table: its own block ────────────────────────────────────
+-- In both tiers: c/check_builtins.shale holds the C, the preludes, the docs
+-- and the Roc platform's generated files to the table, then its self-test
+-- holds each check to a change it must find; then GCC reads the Roc
+-- platform's host (roc_platform/host/host.c, which includes the generated
+-- hosted.gen.c and all of C Shale) with -Werror, which takes about half a
+-- second: TCC cannot read glue's header (`__int128`), and the host's object,
+-- a 25 s `gcc -O2`, is built only when a Roc script is
+-- (roc_platform/run.shale, roc_platform/self_test.shale).
+
+function builtin_table_block(t)
+  print(trim(must(run_in(t, "builtin table", {"shale", "c/check_builtins.shale"}, {timeout_ms = 60000, tail = 30})).out))
+  print(trim(must(run_in(t, "builtin table", {"shale", "c/check_builtins.shale", "self_test=1"}, {timeout_ms = 60000, tail = 30})).out))
+  must(run_in(t, "builtin table", {"tcc", "-run", "c/gen_preludes.c"}, {timeout_ms = 60000, tail = 5}))
+  must(run_in(t, "builtin table", {"gcc", "-std=gnu11", "-fsyntax-only", "-Wall", "-Wextra", "-Werror", "-Ic/foundation", "-Ic/out/gen", "-Ic", "-Iroc_platform/host", "roc_platform/host/host.c"}, {timeout_ms = 60000, tail = 30}))
+  print("builtin table: roc_platform/host/host.c reads clean under gcc -Werror")
+  return nil
+end
+-- ── end of the builtin table's block ───────────────────────────────────
+
+-- ── The run ─────────────────────────────────────────────────────────────
+
+local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"))
+builtin_table_block(t)
+block_end(t, "builtin_table")

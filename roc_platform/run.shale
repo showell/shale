@@ -1,0 +1,97 @@
+-- roc_platform/run.shale: a Roc script run on Shale's Roc platform
+-- (roc_platform/README.md). From the shale checkout's root:
+--
+--   shale roc_platform/run.shale script=roc_platform/examples/count_lines.roc file=README.md
+--
+-- It builds the script with the pinned Roc (roc_platform/roc-version) to an
+-- archive, links it with the host's object (roc_platform/host/host.c,
+-- compiled once: it is the whole of C Shale), and runs the program in this
+-- root, so its paths are this run's. Each build is cached by the content
+-- hash of what goes into it, under roc_platform/out/cache: a script run
+-- again unchanged is linked and built no more.
+--
+-- A `name=value` is handed to the script when it reads `name`
+-- (`Shale.arg!("name", ...)`, found in its text): any other is dropped,
+-- since this launcher names its arguments by value. A `## budget: NAME=N
+-- ...` line in the script is its budgets, as `-- budget:` is a Shale
+-- script's. `timing=1` says each phase's time.
+--
+-- The script is one file whose header names the platform by any path
+-- (`pf: platform "../platform/main.roc"`): it is copied into the cache with
+-- that path made this checkout's, relative (Roc refuses an absolute one).
+-- budget: programs=20
+
+const DIR = "roc_platform"
+const OUT = DIR .. "/out"
+const SCRIPT = arg("script", "")
+const TIMING = arg("timing", 0) == 1
+if SCRIPT == "" then fail("run: script=<file.roc>") end
+if not exists(SCRIPT) then fail("run: no script " .. SCRIPT) end
+
+const pin = trim(read(DIR .. "/roc-version"))
+const roc = real("tools:roc-" .. pin .. "/roc")
+const phases = {}
+
+function said(phase, r)
+  push(phases, phase .. " " .. r.ms .. " ms (cpu " .. r.cpu_ms .. " ms)")
+  return r
+end
+
+-- The git hash of `text`: the cache's key.
+function hash_of(phase, text)
+  local r = said(phase, must(run({"git", "hash-object", "--stdin"}, {stdin = text, timeout_ms = 10000, whole = 100})))
+  return trim(r.out)
+end
+
+-- ── The host's object: the whole of C Shale, compiled once ──────────────
+
+local host_key = hash_of("host key", read(DIR .. "/host/host.c") .. read(DIR .. "/host/hosted.gen.c") .. read(DIR .. "/host/roc_platform_abi.h") .. must(run({"git", "rev-parse", "HEAD:c"}, {timeout_ms = 10000, whole = 100})).out)
+const host_o = OUT .. "/host/" .. host_key .. ".o"
+if not exists(host_o) then
+  mkdir(OUT .. "/host")
+  must(said("preludes", run({"tcc", "-run", "c/gen_preludes.c"}, {timeout_ms = 60000, tail = 5})))
+  must(said("host compile", run({"gcc", "-std=gnu11", "-O2", "-Wall", "-Wextra", "-Ic/foundation", "-Ic/out/gen", "-Ic", "-I" .. DIR .. "/host", "-c", DIR .. "/host/host.c", "-o", host_o}, {timeout_ms = 300000, tail = 40, nice = 19})))
+end
+
+-- ── The script's archive and program ────────────────────────────────────
+
+local source = read(SCRIPT)
+local m = re_find(source, [=[platform "([^"]*)"]=])
+if m == nil then fail("run: " .. SCRIPT .. " names no platform (`pf: platform \"...\"`)") end
+-- Roc takes no absolute platform path: the cache's folder is three below
+-- roc_platform/.
+local made = substitute(source, m.text, "platform \"../../../platform/main.roc\"")
+local platform = ""
+for p in glob(DIR .. "/platform/*.roc") do platform = platform .. read(p) end
+const key = hash_of("script key", made .. platform .. pin .. host_key)
+const cache = OUT .. "/cache/" .. key
+const exe = cache .. "/app"
+if not exists(exe) then
+  mkdir(cache)
+  replace(cache .. "/main.roc", made)
+  must(said("roc build", run({roc, "build", real(cache .. "/main.roc"), "--target=x64musl", "--opt=dev", "--output=" .. real(cache) .. "/app.a"}, {timeout_ms = 300000, tail = 30, nice = 19})))
+  must(said("link", run({"gcc", "-z", "noexecstack", host_o, cache .. "/app.a", "-o", exe}, {timeout_ms = 120000, tail = 20, nice = 19})))
+end
+
+-- ── The run ─────────────────────────────────────────────────────────────
+
+local argv = {real(exe)}
+local budget = re_find(source, "## budget: ([^\n]*)")
+if budget ~= nil then
+  for w in words(budget.group) do
+    push(argv, "--budget")
+    push(argv, w)
+  end
+end
+local names = {}
+for g in re_find_all(source, [=[Shale\.arg!\("([a-z_0-9]+)"]=]) do names[g.group] = true end
+for name in keys(names) do
+  local v = arg(name, nil)
+  if v ~= nil then push(argv, name .. "=" .. v) end
+end
+local r = said("run", run(argv, {timeout_ms = 600000, whole = 4000000, want = "roc: the launcher's own build of a Roc script"}))
+if TIMING then
+  for p in phases do print("-- " .. p) end
+end
+print(trim_end(r.out))
+if r.code ~= 0 then fail("run: " .. SCRIPT .. " stopped (exit " .. r.code .. ")") end

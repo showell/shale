@@ -1,0 +1,29 @@
+-- roc_platform/tools/glue.shale: `roc glue`'s C header of the platform,
+-- written over roc_platform/host/roc_platform_abi.h, which host/host.c
+-- includes, so the shims are compiled against Roc's own layout of every
+-- record and tag union. Run from the checkout's root after any change to
+-- roc_platform/platform/:
+--   shale roc_platform/tools/glue.shale
+-- The compiler is the pinned one (roc_platform/roc-version), the spec Roc's
+-- CGlue.roc at the same commit (tools:roc-<commit>, which the compiler does
+-- not ship). Modelled on roc-chat's tools/glue.shale.
+
+const out_dir = "roc_platform/out/glue"
+const snapshot = "roc_platform/host/roc_platform_abi.h"
+
+const pin = trim(read("roc_platform/roc-version"))
+const roc = real("tools:roc-" .. pin .. "/roc")
+local parts = split(pin, "-")
+const spec = "tools:roc-" .. parts[#parts] .. "/src/glue/src/CGlue.roc"
+if not exists(spec) then fail("glue: no glue spec at " .. spec) end
+
+if exists(out_dir) then remove_tree(out_dir) end
+mkdir(out_dir)
+must(run({roc, "glue", real(spec), real(out_dir), real("roc_platform/platform/main.roc")}, {timeout_ms = 120000, tail = 20, nice = 19}))
+local after = read(out_dir .. "/roc_platform_abi.h")
+if exists(snapshot) and read(snapshot) == after then
+  print("glue: " .. snapshot .. " unchanged (roc " .. pin .. ")")
+else
+  replace(snapshot, after)
+  print("glue: " .. snapshot .. " written (roc " .. pin .. ")")
+end
