@@ -325,12 +325,18 @@ run on their own.
   `union_shape` and `first_argument`. These sit here, not in a library of
   their own, because a library's functions can't call another library's and
   they need this one's. `hunt_names` judges a list's name here too
-  (`list_name_finding`), with a project's terms (`project_terms`). Used by
+  (`list_name_finding`), with a project's terms (`project_terms`), reads
+  each file's definitions (`file_definitions`), and asks whether a name
+  starting with a preposition makes its own type (`reads_as_maker`). Used by
   `check_families`, `hunt_names`, `check_name_types`, `find_unclear_names` and
   `check_vocabulary`.
 - [doc_names.shale](doc_names.shale): `hunt_names`' `stale_doc_name`, the
   backticked names in a file's comments and whether each still names
   something in the file or a module beside it.
+- [naming_passes.shale](naming_passes.shale): `hunt_names`' checks judged
+  over the whole tree once every file is read, `preposition_split`,
+  `container`, a field's `short_name` and `where_name`, and the census
+  `words=1` prints. They need no other library, so they sit apart.
 - [naming_plants.shale](naming_plants.shale): `hunt_names`' self-test,
   which check each plant is for and what a run over them gets wrong.
 - [gate_recipe.shale](gate_recipe.shale): what the recipes that exit

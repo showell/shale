@@ -30,6 +30,10 @@
 --                                 terms, and what a list's name says
 --   is_letter_of_set(name, siblings)
 --                                 a field's letter that `short_name` passes
+--   reads_as_maker(def, ws, signature, facts, prepositions)
+--                                 what `phrase_name` passes as a maker
+--   file_definitions(f, src, known, facts)
+--                                 hunt_names' definition records of a file
 
 -- The kinds of node a definition may sit in and still be top-level or a
 -- module type's member, which `associated` holds. Inside any other kind,
@@ -675,4 +679,270 @@ function list_name_finding(subject, w)
     return {check = "singular_list", why = opening .. " but the word that counts, `" .. head .. "`, is an adjective: the name has no noun; say what the list holds" .. example}
   end
   return {check = "singular_list", why = opening .. " but reads as one thing, `" .. head .. "`: " .. honest_list_names(bare, ws, at, element, w)}
+end
+
+-- ── what `phrase_name` reads of a type, for hunt_names ───────────────────
+
+-- The first words `phrase_name` lets a constructor start with. They are the
+-- ones constructors use in safari, roc-chat and roc-markdown: `Clock.at_step`,
+-- `Dm.between`, `SignedIn.by_session`, `MdText.for_input`, `Name.of_strict`,
+-- `Directory.with_founder`. `from` has a wider rule of its own,
+-- `is_from_conversion`.
+const CONSTRUCTOR_WORDS = {at = true, between = true, by = true, ["for"] = true, of = true, with = true}
+const CONVERSION_WORDS = {into = true, to = true}
+const CHANGED_COPY_WORDS = {with = true, without = true}
+
+-- Whether `type_text` names the module `def` is in, a type declared in it, or
+-- the type `def` is a member of. Type arguments don't count:
+-- `Bike.Motion(others)` is `Bike.Motion`. A type declared in the file is its
+-- own written bare too, as a member of the module's type names one declared
+-- beside it (`Budget` in `MdText := [].{ Budget : ... }`). `facts` is the
+-- tables `file_definitions` fills.
+function is_own_type(def, type_text, facts)
+  local head = re_find(type_text, "^[A-Za-z0-9_.]+")
+  if head == nil then return false end
+  local parts = split(head.text, ".")
+  local module = module_name(def.path)
+  if #parts == 1 and has_key(facts.type_names, def.path .. "|" .. parts[1]) then return true end
+  return parts[1] == module or parts[1] == def.owner or parts[#parts] == def.owner
+end
+
+-- Whether `type_text` names its module's own type anywhere in it. Only a
+-- capital starts a type, so a field that shares a file's name is no mention.
+function mentions_own_type(def, type_text, facts)
+  for found in re_find_all(type_text, "\\b[A-Z][A-Za-z0-9_.]*") do
+    if is_own_type(def, found.text, facts) then return true end
+  end
+  return false
+end
+
+-- Whether the file at `path` declares one type, `[].{ ... }`, which holds the
+-- module's functions and has no values of its own.
+function has_no_type_of_its_own(path, facts)
+  local declared = get(facts.type_kinds, path, {})
+  return #declared == 1 and declared[1]
+end
+
+-- Whether a function named `ws`, whose first word is `from`, reads as a
+-- conversion: `phrase_name` in hunt_names' header.
+function is_from_conversion(def, ws, signature, facts, prepositions)
+  if mentions_own_type(def, signature.first, facts) or mentions_own_type(def, success_type(signature.result), facts) then return true end
+  return signature.known and has_no_type_of_its_own(def.path, facts) and #ws > 1 and not has_key(prepositions, ws[2])
+end
+
+-- Whether a function named `ws`, whose first word is a preposition, reads as a
+-- constructor, a conversion or a changed copy: `phrase_name` in hunt_names'
+-- header. `signature` is `{first, result, known}` as hunt_names reads it.
+function reads_as_maker(def, ws, signature, facts, prepositions)
+  local word = ws[1]
+  if has_key(CONVERSION_WORDS, word) then return true end
+  if has_key(CHANGED_COPY_WORDS, word) and signature.result == signature.first then return true end
+  if word == "from" then return is_from_conversion(def, ws, signature, facts, prepositions) end
+  return has_key(CONSTRUCTOR_WORDS, word) and is_own_type(def, success_type(signature.result), facts)
+end
+
+-- ── what hunt_names reads of each definition ─────────────────────────────
+
+-- hunt_names judges each top-level and module-member definition from the
+-- record these read out of a file. `facts` is the tables the read fills for
+-- the checks judged over the whole tree: `keywords`, each file's `#
+-- keywords:` words by path; `unions`, each type declaration's tag union by
+-- the type's name; `bool_aliases`, the names of aliases of `Bool`;
+-- `type_kinds`, each type a file declares, by path, as whether it is
+-- `[].{ ... }`, an empty union with members; `type_names`, each type name a
+-- file declares as a set of `path|Name`; and `names`, each type and record
+-- field name `container` checks, `{path, line, name, words, is_field, doc,
+-- ...}`, `doc` the comment lines above its declaration, lowercased.
+
+-- The keywords a file declares in a comment line `# keywords: for, on`,
+-- added to `facts.keywords`.
+function note_declared_keywords(path, src, facts)
+  for l in src do
+    local found = re_find(trim(l), "^# keywords: (.*)$")
+    if found ~= nil then
+      for w in split(found.groups[1], ",") do
+        if trim(w) ~= "" then push_at(facts.keywords, path, lower(trim(w))) end
+      end
+    end
+  end
+  return nil
+end
+
+-- Notes what the type declaration at `i` declares: its tag union in
+-- `facts.unions`, its kind in `facts.type_kinds`, its name in `facts.names`,
+-- and in `facts.bool_aliases` when it is an alias of `Bool`, under its bare
+-- name and, for a module type's member, `Owner.Name` as the checker writes
+-- it.
+function note_type_declaration(path, src, tree, i, facts)
+  local kids = children(tree, i)
+  local declared = #kids > 0 and attribute(tree, kids[1], "name") or ""
+  if declared == "" then return nil end
+  local line = tostring(tree[i].line)
+  local is_union = #kids > 1 and tree[kids[2]].kind == "ty-tag-union"
+  if is_union then facts.unions[declared] = union_shape(tree, kids[2]) end
+  push_at(facts.type_kinds, path, is_union and #facts.unions[declared].names == 0 and tree[kids[#kids]].kind == "associated")
+  facts.type_names[path .. "|" .. declared] = true
+  push(facts.names, {path = path, line = line, name = declared, words = name_words(declared), is_field = false, doc = doc_above(src, tree[i].line)})
+  if #kids > 1 and tree[kids[2]].kind == "ty" and attribute(tree, kids[2], "name") == "Bool" then
+    facts.bool_aliases[declared] = true
+    local parent = tree[i].parent
+    if parent > 0 and tree[parent].kind == "associated" and tree[parent].parent > 0 then
+      local owner_kids = children(tree, tree[parent].parent)
+      local owner = #owner_kids > 0 and attribute(tree, owner_kids[1], "name") or ""
+      if owner ~= "" then facts.bool_aliases[owner .. "." .. declared] = true end
+    end
+  end
+  return nil
+end
+
+-- Whether a `##` doc stands directly above line `line` of `src`: the
+-- answer a definition gives `world_verb`.
+function has_doc_above(src, line)
+  return line > 1 and starts_with(trim(src[line - 1]), "##")
+end
+
+-- The top-level annotation at `i`, as a definition record, or nil when it
+-- is only a `where` clause. `whole` is its type rendered, and `result` the
+-- type it returns. A function's record also has `arity` and `first` (its
+-- first argument's type), and an effect's has `types`, the type names its
+-- annotation mentions, and `args`, each argument's `argument_shape`.
+-- `callback` says it takes an effectful function, an argument whose source
+-- holds `=>`.
+function annotation_definition(path, src, tree, i)
+  local def = {path = path, line = tostring(tree[i].line), name = attribute(tree, i, "name"), owner = owner_of(tree, i), annotation = true, fn = false, callback = false, paired = false}
+  local kids = children(tree, i)
+  if #kids == 0 or tree[kids[1]].kind == "where" then return nil end
+  def.whole = render_type(tree, kids[1])
+  def.result = def.whole
+  if tree[kids[1]].kind == "ty-fn" then
+    local parts = children(tree, kids[1])
+    local is_effect = ends_with(def.name, "!")
+    def.fn = true
+    def.arity = #parts - 1
+    def.result = render_type(tree, parts[#parts])
+    def.first = #parts > 1 and render_type(tree, parts[1]) or ""
+    def.argument_types = {}
+    if is_effect then
+      def.types = mentioned_type_names(tree, kids[1], {})
+      def.args = {}
+    end
+    for a in take(parts, #parts - 1) do
+      push(def.argument_types, render_type(tree, a))
+      if contains(span_text(src, tree, a), "=>") then def.callback = true end
+      if is_effect then push(def.args, argument_shape(tree, a)) end
+    end
+  end
+  return def
+end
+
+-- The top-level definition `name = ...` at `i`, as a definition record, or
+-- nil when its pattern is not a plain name. `lambda` says its value is a
+-- lambda, `callback` that a lambda argument's name ends in `!`, `recurses`
+-- (for a name ending in a word of `recursion_suffixes`) that it calls
+-- itself, `typed` is the checker's type when there is one, and `parameters`
+-- holds `{name, line, typed}` for each lambda argument, `name` "" for one
+-- that is a pattern rather than a plain name. `pattern_types` is the
+-- checker's type of each plain-name pattern, by its node's index as text.
+function value_definition(path, tree, i, pattern_types, recursion_suffixes)
+  local kids = children(tree, i)
+  if #kids == 0 or tree[kids[1]].kind ~= "p-ident" then return nil end
+  local def = {path = path, line = tostring(tree[i].line), name = attribute(tree, kids[1], "raw"), owner = owner_of(tree, i), annotation = false, fn = false, callback = false, paired = false}
+  if #kids > 1 and tree[kids[2]].kind == "e-lambda" then
+    def.lambda = true
+    def.parameters = {}
+    for part in children(tree, kids[2]) do
+      if tree[part].kind == "args" then
+        for a in children(tree, part) do
+          if ends_with(attribute(tree, a, "raw"), "!") then def.callback = true end
+          local parameter = {name = tree[a].kind == "p-ident" and attribute(tree, a, "raw") or "", line = tostring(tree[a].line)}
+          if parameter.name ~= "" and has_key(pattern_types, tostring(a)) then parameter.typed = pattern_types[tostring(a)] end
+          push(def.parameters, parameter)
+        end
+      end
+    end
+  end
+  local ws = split(ends_with(def.name, "!") and sub(def.name, 1, #def.name - 1) or def.name, "_")
+  if #ws > 1 and has_key(recursion_suffixes, ws[#ws]) then def.recurses = calls_itself(tree, i, def.name) end
+  if has_key(pattern_types, tostring(kids[1])) then def.typed = pattern_types[tostring(kids[1])] end
+  return def
+end
+
+-- Whether the definition record `def`, read at `i`, is a top-level name
+-- that its file's header dictates, one of `dictated`.
+function is_dictated(tree, i, def, dictated)
+  return has_key(dictated, def.name) and owner_of(tree, i) == ""
+end
+
+-- Every top-level and module-member annotation and definition in the
+-- parsed file `f`, whose source lines are `src`, as definition records
+-- `{path, line, name, annotation, fn, callback, paired, ...}`, leaving out
+-- the names its header dictates, `known.dictated`. A definition whose
+-- annotation is just above it is `paired`, and the annotation then gets
+-- `has_def`, the definition's `typed` and its `callback`. `known` also
+-- holds `pattern_types` and `recursion_suffixes`, as `value_definition`
+-- takes them. Along the way this fills `facts`.
+function file_definitions(f, src, known, facts)
+  local definitions = {}
+  local path = f.path
+  local tree = f.nodes
+  note_declared_keywords(path, src, facts)
+  -- Each node is outer when it and every ancestor sit in OUTER_KINDS, and
+  -- its `declaration_line` is its line when it is an outer annotation or
+  -- type declaration, else "". A parent comes before its children.
+  local outer = {}
+  local declaration_line = {}
+  -- The definition record of each annotation, by the node's index.
+  local annotation_records = {}
+  for i = 1, #tree do
+    local node = tree[i]
+    local parent = node.parent
+    push(outer, parent == 0 or (outer[parent] and has_key(OUTER_KINDS, tree[parent].kind)))
+    local kind = node.kind
+    push(declaration_line, (outer[i] and (kind == "s-type-anno" or kind == "s-type-decl")) and tostring(node.line) or "")
+    if outer[i] and kind == "s-type-decl" then note_type_declaration(path, src, tree, i, facts) end
+    if kind == "anno-record-field" then
+      local at = field_declaration_line(tree, declaration_line, i)
+      local field = attribute(tree, i, "name")
+      if at ~= "" and field ~= "" then
+        local named = {path = path, line = tostring(node.line), name = field, words = name_words(field), is_field = true, doc = doc_above(src, tonumber(at))}
+        local siblings = {}
+        for k in children(tree, node.parent) do siblings[attribute(tree, k, "name")] = true end
+        named.letter_of_set = is_letter_of_set(field, siblings)
+        local field_type = children(tree, i)[1]
+        named.gives = render_type(tree, field_type)
+        named.is_function = tree[field_type].kind == "ty-fn"
+        named.first = ""
+        if named.is_function then
+          local parts = children(tree, field_type)
+          named.gives = render_type(tree, parts[#parts])
+          named.first = #parts > 1 and render_type(tree, parts[1]) or ""
+        end
+        push(facts.names, named)
+      end
+    end
+    if outer[i] and kind == "s-type-anno" then
+      local def = annotation_definition(path, src, tree, i)
+      if def ~= nil then def.has_doc = has_doc_above(src, tree[i].line) end
+      if def ~= nil and not is_dictated(tree, i, def, known.dictated) then
+        push(definitions, def)
+        annotation_records[tostring(i)] = def
+      end
+    end
+    if outer[i] and kind == "s-decl" then
+      local def = value_definition(path, tree, i, known.pattern_types, known.recursion_suffixes)
+      if def ~= nil then def.has_doc = has_doc_above(src, tree[i].line) end
+      if def ~= nil and not is_dictated(tree, i, def, known.dictated) then
+        local above = get(annotation_records, tostring(previous_sibling(tree, i)))
+        if above ~= nil and above.name == def.name then
+          def.paired = true
+          above.has_def = true
+          if has_key(def, "typed") then above.typed = def.typed end
+          if def.callback then above.callback = true end
+          above.parameters = get(def, "parameters", {})
+        end
+        push(definitions, def)
+      end
+    end
+  end
+  return definitions
 end

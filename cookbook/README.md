@@ -161,6 +161,8 @@ steps left for the writer.
   counts each member's uses. `use("cookbook:roc/member_uses.shale")`
 - `roc/module_family.shale` (library): how the type printer walks sibling
   modules as one family. `use("cookbook:roc/module_family.shale")`
+- `roc/naming_passes.shale` (library): `hunt_names`' checks judged over the
+  whole tree once every file is read, and its census. `use("cookbook:roc/naming_passes.shale")`
 - `roc/naming_plants.shale` (library): `hunt_names`' self-test, which check
   each plant is for. `use("cookbook:roc/naming_plants.shale")`
 - `roc/parsed.shale` (library): parses a tree's .roc files and fails on the
