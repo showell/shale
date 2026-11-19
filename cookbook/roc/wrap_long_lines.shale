@@ -12,7 +12,10 @@
 -- passes work on a copy of the folder's .roc files under
 -- `scratch:roc_commas_work/`, and the changed files are written back only
 -- once the rewrite has finished, so a run that stops, on a pass too many or
--- on a budget, leaves the folder as it was.
+-- on a budget, leaves the folder as it was. Under a mounts file with no
+-- `scratch:` mount, the copies go in a fresh hidden folder at the root
+-- instead (`.wrap_long_lines.XXXXXX`, named in the output), removed when the
+-- run ends; a run that stops leaves it, for `git status` to show.
 --
 -- Then it lists each code line still too wide, as `path:line (width): why:
 -- text`, `why` being `nothing to stack`: no group whose stacking would bring
@@ -50,7 +53,7 @@
 --   shale cookbook:roc/wrap_long_lines.shale self_test=1
 --
 -- `self_test=1` copies the plants in `cookbook/roc/plants/wrap_long_lines/` to
--- `scratch:wrap_long_lines/`, rewrites them there with `tokens=6` and the
+-- `scratch:wrap_long_lines/` (or the hidden folder above), rewrites them there with `tokens=6` and the
 -- self-test's Roc, and checks that the rewrite ends, that each plant comes
 -- out as its `.want` file, that no group is left to stack or to unstack, and
 -- that the list holds exactly `LONG_PLANTS`' lines and counts
@@ -74,7 +77,18 @@ use("./groups.shale")
 use("./parsed.shale")
 const SELF_TEST = arg("self_test", "") == "1"
 const PLANTS = "cookbook:roc/plants/wrap_long_lines"
-const SELF_TEST_DIR = "scratch:wrap_long_lines"
+
+-- Where the work copies go: `scratch:` when the mounts file has it, else a
+-- fresh hidden folder at the root, which the run removes when it ends.
+function work_base()
+  if attempt(real, "scratch:.").ok then return "scratch:" end
+  local base = fresh_dir("", ".wrap_long_lines")
+  print("wrap_long_lines: no `scratch:` mount, so the work copies go in " .. base .. ", removed when the run ends")
+  return base
+end
+
+const WORK_BASE = work_base()
+const SELF_TEST_DIR = path_under(WORK_BASE, "wrap_long_lines")
 const DIRS_ARG = SELF_TEST and SELF_TEST_DIR or arg("dir", "roc")
 const WIDTH = arg("width", 100)
 const TOKENS = SELF_TEST and STACK_TOKENS or arg("tokens", 0)
@@ -124,8 +138,8 @@ end
 -- The rewrite of `dir` works on a copy of its .roc files, so a run that
 -- stops, on a budget or a pass too many, leaves the folder as it was.
 function work_of(dir)
-  if SELF_TEST then return "scratch:roc_commas_work/self_test" end
-  return "scratch:roc_commas_work/" .. re_replace(real(dir), "[^A-Za-z0-9]", "_")
+  if SELF_TEST then return path_under(WORK_BASE, "roc_commas_work/self_test") end
+  return path_under(WORK_BASE, "roc_commas_work/" .. re_replace(real(dir), "[^A-Za-z0-9]", "_"))
 end
 
 function fresh_work_copy(dir, work, paths)
@@ -360,11 +374,19 @@ function self_test()
   if read(dir .. "/too_deep.roc") ~= read(PLANTS .. "/too_deep/too_deep.roc") then fail("wrap_long_lines: a rewrite that stops should leave too_deep.roc as it was") end
   print("ok   too_deep.roc: stops naming its file, and is left as it was")
   remove_tree(work_of(dir))
+  remove_tree(SELF_TEST_DIR)
   print("PASS: the rewrite ends, every plant comes out as its .want, no group is left to stack or to unstack, the lines left wide are listed or counted, and a rewrite past its passes stops naming its file and changes none")
+end
+
+-- The hidden work folder, when there is no `scratch:`, goes once the run
+-- has finished.
+function remove_work_base()
+  if WORK_BASE ~= "scratch:" then remove_tree(WORK_BASE) end
 end
 
 if SELF_TEST then
   self_test()
+  remove_work_base()
 else
   local report = fresh_report()
   for dir in dirs_of(DIRS_ARG) do
@@ -377,6 +399,7 @@ else
     end
     remove_tree(r.work)
   end
+  remove_work_base()
   print_findings((WRITE and "" or "report, nothing written: ") .. report_summary(report), report.long)
   fail_if_refused("wrap_long_lines", report.refused)
 end

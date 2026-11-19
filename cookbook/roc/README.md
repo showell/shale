@@ -173,7 +173,8 @@ end, and fails the run.
   width, reading groups as `check_stacking.shale` does. Numeric data, such as a
   list of polygon points, stays packed, as both recipes leave it (`groups.shale`'s
   `is_data_line` and `is_number_data`). It rewrites a copy under
-  `scratch:` and writes the folder only once the rewrite has finished, so a
+  `scratch:` (or, with no such mount, a hidden folder at the root that it
+  removes) and writes the folder only once the rewrite has finished, so a
   run that stops leaves the folder as it was.
 
       cd <repo> && shale <shale>/cookbook/roc/wrap_long_lines.shale dir=roc width=100
