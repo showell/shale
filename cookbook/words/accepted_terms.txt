@@ -58,6 +58,7 @@ mac     -- a message authentication code, by its own name
 max     -- Roc's own `Num.max`
 md      -- Markdown's file extension
 mib     -- a unit, mebibytes
+msg     -- roc-ray's platform requires `Msg` (`[Model : model, Msg : msg] for program`)
 min     -- Roc's own `Num.min`
 ms      -- a unit, milliseconds
 nav     -- HTML's element
