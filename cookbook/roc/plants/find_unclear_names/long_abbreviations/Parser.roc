@@ -1,8 +1,8 @@
-## A plant for `abbreviation`'s longer forms: the plural of a short word that
-## abbreviates, and the abbreviations past four letters that the
+## A plant for `abbreviation`'s longer forms: the plurals of short words that
+## abbreviate (`attrs`, `vals`, and `idxes` with its `es`), and the abbreviations past four letters that the
 ## abbreviations file lists.
 Parser := [].{
-	Node : { attrs : List(Str), delim : U8 }
+	Node : { attrs : List(Str), delim : U8, idxes : List(U64), vals : List(Str) }
 
 	parse_args : List(Str) -> List(Str)
 	parse_args = |args| {
