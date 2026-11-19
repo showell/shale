@@ -39,9 +39,11 @@ static const char *const HOST_CONFINE_DEVICES[] = {"/dev/null", "/dev/zero", "/d
 static const char *const HOST_CONFINE_RANDOM[] = {"/dev/random", "/dev/urandom"};
 
 // The files below the user's home a program of ours reads: git's own
-// configuration, which git refuses to run without reading when it is there
-// (a file it cannot read is a fatal error to it, not a missing one).
-static const char *const HOST_CONFINE_HOME_FILES[] = {".gitconfig", ".config/git/config"};
+// configuration, its default excludes and attributes, which git refuses to
+// run without reading when they are there (a file it cannot read is a fatal
+// error to it, not a missing one: `git add` stopped on
+// ~/.config/git/ignore in the box's census).
+static const char *const HOST_CONFINE_HOME_FILES[] = {".gitconfig", ".config/git/config", ".config/git/ignore", ".config/git/attributes"};
 
 SLICE_TYPE(HostConfineNames, const char *const);
 
