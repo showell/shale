@@ -11,7 +11,8 @@
 //   program of ours reads from the user's home (HOST_CONFINE_HOME_FILES),
 //   the mounts file and the user prelude a child `shale` reads, and the
 //   reaper, this program;
-// - **devices**: /dev/null, /dev/zero and /dev/full read and written,
+// - **devices**: /dev/null, /dev/zero, /dev/full and the pseudo-terminals
+//   (/dev/ptmx, /dev/pts) read and written,
 //   /dev/random and /dev/urandom read.
 // - **the run's own temporary folder**, made below TMPDIR (else /tmp) at
 //   its first program and handed to every program as TMPDIR, written; it
@@ -34,8 +35,13 @@ static const char *const HOST_CONFINE_SYSTEM[] = {
     "/usr", "/bin", "/sbin", "/lib", "/lib32", "/lib64", "/libx32", "/etc", "/proc", "/sys", "/run/systemd/resolve",
 };
 
-// The devices a program reads and writes, and those it only reads.
-static const char *const HOST_CONFINE_DEVICES[] = {"/dev/null", "/dev/zero", "/dev/full"};
+// The devices a program reads and writes, and those it only reads. A
+// pseudo-terminal's (/dev/ptmx, /dev/pts) are among the first: a test that
+// opens one (test_secrets' openpty) or a program that runs another on one.
+// The cost: a program may write to any terminal of the user's, which shows
+// text there; it can type into none, as the kernel refuses TIOCSTI since
+// 6.2.
+static const char *const HOST_CONFINE_DEVICES[] = {"/dev/null", "/dev/zero", "/dev/full", "/dev/ptmx", "/dev/pts"};
 static const char *const HOST_CONFINE_RANDOM[] = {"/dev/random", "/dev/urandom"};
 
 // The files below the user's home a program of ours reads: git's own

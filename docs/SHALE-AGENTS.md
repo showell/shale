@@ -239,8 +239,9 @@ has none of it):
   the root and the mounts without ` ro`; it may read and run only those, the
   read-only mounts and the system's folders (`/usr`, `/etc`, `/proc`,
   `/sys`, `/bin`, `/lib*`, the resolver's `/run/systemd/resolve`), plus
-  `/dev/null`, `/dev/zero`, `/dev/full` and `/dev/urandom`, and a few named
-  files (`~/.gitconfig`, `~/.config/git/config`, the mounts file and the
+  `/dev/null`, `/dev/zero`, `/dev/full`, the pseudo-terminals and
+  `/dev/urandom`, and a few named files (git's `~/.gitconfig` and
+  `~/.config/git/` config, ignore and attributes, the mounts file and the
   user prelude); a secrets mount's folder is in no rule. Everything it
   starts is held the same, for good. Each program gets the run's own
   temporary folder as TMPDIR (below the inherited TMPDIR, else `/tmp`),
