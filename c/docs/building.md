@@ -42,7 +42,8 @@ dispatches it and returns, and `run=<id>` reads its verdict later, with the
 tier's `PASS full` and wall time. The runner starts with no `shale`: it
 builds the first one as "First install on a new machine" below says and
 installs it by `c/install.shale`, under a mounts file the workflow writes for
-itself. Beside the checkout it installs what the tier reaches for: TCC, the
+itself, and runs the tier under the box's umask, 002, since the goldens
+freeze each file's mode. Beside the checkout it installs what the tier reaches for: TCC, the
 pinned Zig and zig-ast built by it, roc-ast, go-ast, the pinned Roc nightly
 and roc-types under `~/tools`, and angry-gopher and zig-ast checked out
 beside shale for the docs' citations. The tier's whole output is the run's

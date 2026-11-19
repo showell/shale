@@ -61,11 +61,17 @@ jobs:
           ref: 7ca0aab74d357e2fdde98f4ce1b22cc23f1d3387
           path: zig-ast
 
-      - name: Install TCC
+      # TCC, and the box's git: Ubuntu 24.04's own 2.43, in place of the
+      # newer one the runner image carries. The goldens freeze git's messages
+      # and the folders a bare `git init` makes, and a newer git changes both.
+      - name: Install TCC and git 2.43
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q tcc
+          ver=$(apt-cache madison git | awk '$3 ~ /^1:2\.43\./ {print $3; exit}')
+          test -n "$ver"
+          sudo apt-get install -y -q --allow-downgrades tcc "git=$ver" "git-man=$ver"
           tcc -v
+          git --version
           gcc --version | head -1
 
       # The pinned Zig on PATH, roc-ast and go-ast under ~/tools (and
