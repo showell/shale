@@ -228,7 +228,7 @@ a checkout's root, with TCC and GCC and nothing else:
     tcc -run c/gen_preludes.c
     mkdir -p c/out/release
     gcc -std=c11 -Wall -Wextra -Werror -Ic/foundation -O2 -Ic/out/gen -Ic c/shale.c -o c/out/release/shale
-    PATH="$PWD/c/out/release:$PATH" shale c/install.shale
+    PATH="$HOME/.local/bin:$PWD/c/out/release:$PATH" shale c/install.shale
 
 The first line writes `c/out/gen/preludes.h` from `c/preludes/`
 (`gcc -o gen c/gen_preludes.c && ./gen` does the same without TCC; the
@@ -236,7 +236,10 @@ fast tier needs TCC anyway). The compile is the command block's release
 line (`command_argv` in `c/build/lib.shale`). The new `shale` then runs the
 install above, which builds and checks everything again and puts its own
 `shale` on PATH; it needs the mount lines its header names (`tools`, and
-`localbin = ~/.local/bin`).
+`localbin = ~/.local/bin`). `~/.local/bin` comes before the new `shale`'s
+folder on PATH: it holds no `shale` yet, so the new one runs the install,
+and once the install links its own there, the install's last check finds
+that one on PATH, as it requires.
 
 ## Summary
 

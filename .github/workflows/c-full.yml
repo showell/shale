@@ -116,7 +116,7 @@ jobs:
           tcc -run c/gen_preludes.c
           mkdir -p c/out/release
           gcc -std=c11 -Wall -Wextra -Werror -Ic/foundation -O2 -Ic/out/gen -Ic c/shale.c -o c/out/release/shale
-          PATH="$PWD/c/out/release:$PATH" shale c/install.shale
+          PATH="$HOME/.local/bin:$PWD/c/out/release:$PATH" shale c/install.shale
           command -v shale
           shale --version
 
