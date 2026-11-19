@@ -317,6 +317,8 @@ function self_test()
     {glob = at .. "long_abbreviations/*.roc", counts = {abbreviation = 11}, says = {"Parser.roc:5: abbreviation: `attrs` abbreviates: attrs", "`idxes` abbreviates: idxes", "`vals` abbreviates: vals", "`delim` abbreviates: delim", "`parse_args` abbreviates: args", "`params` abbreviates: params", "`elem_count` abbreviates: elem", "`expr_text` abbreviates: expr", "`stmt_kind` abbreviates: stmt", "`tmpl_name` abbreviates: tmpl"}},
     {glob = at .. "long_abbreviations/*.roc", args = {"accepted=" .. at .. "project_args.txt"}, counts = {abbreviation = 9}, says = {"`attrs` abbreviates: attrs", "`params` abbreviates: params"}},
     {glob = at .. "quiet_long_abbreviations/*.roc"},
+    {glob = at .. "common_words/*.roc", counts = {abbreviation = 2}, says = {"`Flw` abbreviates: flw", "`night_dmr` abbreviates: dmr"}},
+    {glob = at .. "quiet_common_words/*.roc"},
     {glob = at .. "tags.roc", counts = {abbreviation = 4}, says = {"tags.roc:3: abbreviation: `NoRef` abbreviates: ref", "tags.roc:3: abbreviation: `Ref` abbreviates: ref", "tags.roc:5: abbreviation: `TmplMissing` abbreviates: tmpl", "tags.roc:11: abbreviation: `BadAttr` abbreviates: attr"}},
     {glob = at .. "quiet_tags.roc"},
     {glob = at .. "module_doc/*.roc", counts = {module_doc = 5}, says = {"`NoDoc` has no `##` doc", "`Hashless` has no `##` doc", "`Old`'s top comment says `originally`", "`Sky`'s top comment says `used to`", "Sun.roc:3: module_doc: `Sun`'s doc says `originally`"}},
