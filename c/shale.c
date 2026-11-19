@@ -44,6 +44,7 @@
 #include "host/host.c"
 #include "host/host_confine.c"
 #include "host/host_refusals.c"
+#include "host/host_unconfined.c"
 #include "host/host_write_gate.c"
 #include "host/host_run_secrets.c"
 #include "host/host_run.c"

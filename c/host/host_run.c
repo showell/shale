@@ -7,8 +7,8 @@
 // budget, so a tail of 3 over a 10 GB log holds three lines; only the answer
 // goes to the values' arena.
 //
-// Include host.c, host_confine.c, host_refusals.c, host_write_gate.c and
-// host_run_secrets.c first.
+// Include host.c, host_confine.c, host_refusals.c, host_unconfined.c,
+// host_write_gate.c and host_run_secrets.c first.
 
 // The most a `sleep` waits in one call: ten minutes.
 enum { HOST_SLEEP_MAX_MS = 600000 };
@@ -553,59 +553,6 @@ static STATUS_MUST_USE Status host_run_out(Run *r, Pos pos, const RunOpts *o, Ho
         break;
     }
     }
-    return OK;
-}
-
-// git's own settings an unconfined push runs under, ahead of the script's
-// argv: no hook, no fsmonitor and no credential helper of the repository's
-// (each a program git would start, outside the confinement), and ssh itself
-// as ssh. They come before every `-c` of the script's, which
-// host_run_unconfined refuses, so none is undone.
-static const char *const HOST_UNCONFINED_GIT[] = {"-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "credential.helper=", "-c", "core.sshCommand=ssh"};
-
-SLICE_TYPE(HostConfineArgs, const char *const);
-
-// `unconfined = "tag: why"`: the one program `run` starts outside the
-// Landlock confinement, a `git push` that needs ssh's key files, which no
-// rule allows (an agent's push runs confined). Into `*out`, the argv with
-// HOST_UNCONFINED_GIT after `git`.
-// DRAGON: the file system's boundaries. An unconfined git runs every
-// program its settings name with all the user's file powers: a hook, an
-// ssh command, a receive-pack, a credential helper.
-// REMEDY: it is refused but for `git` (by its name and the file it reaches)
-// with a `push` among its words, no `-c` but `color.ui=never` (the git
-// prelude's), no `--receive-pack` or `--exec`, and no `env` but
-// GIT_TERMINAL_PROMPT; HOST_UNCONFINED_GIT turns off the repository's own
-// programs; the record says `(unconfined: ...)`. What is left: a
-// repository's `url.*.insteadOf` and a remote's `receivepack`, read from
-// its config. test_run_guards' an_unconfined_run_is_a_git_push_alone plants
-// each refusal.
-static STATUS_MUST_USE Status host_run_unconfined(Host *h, Run *r, Pos pos, SpawnStrs argv, const HostEnvOpt *env, Str why, Str cwd, SpawnStrs *out) {
-    Str reached = S("");
-    bool found = host_resolved_name(h, r->ctx.values, at(argv, 0), cwd, &reached);
-    bool git = str_eq(host_base_name(at(argv, 0).s), S("git")) && found && str_eq(reached, S("git"));
-    bool push_word = false;
-    for (size_t i = 1; i < argv.len; i++) {
-        Str w = at(argv, i).s;
-        push_word = push_word || str_eq(w, S("push"));
-        if (str_starts_with(w, S("--receive-pack")) || str_starts_with(w, S("--exec"))) return host_fail_plain(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` push takes no `--receive-pack` or `--exec`: each names a program it would start outside the confinement"));
-        if (str_eq(w, S("-c")) && (i + 1 >= argv.len || !str_eq(at(argv, i + 1).s, S("color.ui=never")))) return host_fail_plain(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` push takes no `-c` but `color.ui=never`: a setting could name a program git starts outside the confinement"));
-    }
-    if (!git || !push_word) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` ({s}) is for a `git push` alone, which needs ssh's key files; every other program runs confined to the mounts"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(why)));
-    for (size_t j = 0; j < env->names.len; j++) {
-        if (!str_eq(at(env->names, j), S("GIT_TERMINAL_PROMPT"))) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` push takes no `env` but GIT_TERMINAL_PROMPT, not {s}: a variable could name a program git starts"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(at(env->names, j))));
-    }
-    HostConfineArgs fixed = {HOST_UNCONFINED_GIT, sizeof HOST_UNCONFINED_GIT / sizeof *HOST_UNCONFINED_GIT};
-    size_t n = argv.len + fixed.len;
-    OsStr *all = ARENA_ARRAY(r->ctx.values, OsStr, n);
-    if (all == NULL) return run_values_oom(r, pos);
-    SLICE_TYPE(ArgvRoom, OsStr);
-    ArgvRoom room = {all, n};
-    at(room, 0) = at(argv, 0);
-    for (size_t i = 0; i < fixed.len; i++) at(room, 1 + i) = os_str_own((Str){at(fixed, i), strlen(at(fixed, i))});
-    for (size_t i = 1; i < argv.len; i++) at(room, fixed.len + i) = at(argv, i);
-    out->ptr = all;
-    out->len = n;
     return OK;
 }
 

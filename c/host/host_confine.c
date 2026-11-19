@@ -111,15 +111,18 @@ static bool host_confine_holds_secrets(PathsSecretDirs secrets, Str dir) {
     return false;
 }
 
-// The rules for the run's root and mounts into the ruleset `fd`.
+// Stops the run when a secrets mount's folder lies inside the root or another
+// mount, so that no program, confined or not, runs beside it.
 // DRAGON: the secrets rule. A Landlock rule allows a whole folder, and no
 // rule below it can take a right back, so a secrets mount whose folder is
-// inside the root or another mount would be readable to every program.
+// inside the root or another mount would be readable to every program; an
+// unconfined one (host_unconfined.c) checks its local paths by the same
+// folders.
 // REMEDY: such mounts run no program: the stop names neither folder.
 // test_run_guards'
 // a_program_by_a_secret_s_path_is_the_secrets_guard_s_before_git_is_asked
 // plants it.
-static STATUS_MUST_USE Status host_confine_mounts(Host *h, Run *r, Pos pos, Str who, int fd, uint64_t handled) {
+static STATUS_MUST_USE Status host_confine_secrets_apart(Host *h, Run *r, Pos pos, Str who) {
     PathRun *pr = &builtin_files_of(r)->path;
     PathsSecretDirs secrets = paths_secret_dirs(&h->paths, pr);
     Str root = paths_root_of(&h->paths, pr);
@@ -131,6 +134,14 @@ static STATUS_MUST_USE Status host_confine_mounts(Host *h, Run *r, Pos pos, Str 
     if (leaks) {
         return host_fail(r, pos, CLASS_REFUSED, S("`{s}`: a secrets mount's folder is inside the root or another mount, which a program may read, and Landlock cannot hide a folder below one it allows: move the secrets folder out, and then programs run"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who)));
     }
+    return OK;
+}
+
+// The rules for the run's root and mounts into the ruleset `fd`.
+static STATUS_MUST_USE Status host_confine_mounts(Host *h, Run *r, Pos pos, Str who, int fd, uint64_t handled) {
+    PathRun *pr = &builtin_files_of(r)->path;
+    Str root = paths_root_of(&h->paths, pr);
+    TRY(host_confine_secrets_apart(h, r, pos, who));
     TRY(host_confine_allow(r, pos, who, fd, root, handled, handled, S("the root")));
     for (size_t k = 0; k < h->paths.mounts.len; k++) {
         const Mount *m = &at(h->paths.mounts, k);

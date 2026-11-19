@@ -1,7 +1,9 @@
 -- c/build/host.shale: the host's block, c/host's process plumbing.
 -- c/build.shale runs it, with the `build` mount that `use` below reads; see
 -- that file for the tiers and the blocks.
--- budget: steps=40000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
+-- (steps: 60M since 2026-11-19, as each of its 23 plants copies c/, which
+-- the builtin table and the Landlock files grew past 40M's room.)
+-- budget: steps=60000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
 
 use("build:lib.shale")
 

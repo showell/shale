@@ -297,12 +297,29 @@ TEST(ssh_reads_its_known_hosts_and_no_key_and_the_caches_are_the_build_mount_s) 
 }
 
 // `unconfined` runs a git push past the mounts, to a bare repository no
-// mount names, and nothing else: another program, a `-c`, a
-// `--receive-pack` and an `env` that could name a program git starts are
-// each refused, and the record says the push was unconfined.
-TEST(an_unconfined_run_is_a_git_push_alone) {
+// mount names, and a deploy's `ssh`, `scp` and `rsync` to the prod host,
+// and nothing else: another program (one with a `push` among its words
+// too), a `-c`, a `--receive-pack`, another host, an ssh option, an scp
+// option, a local path outside the mounts, an rsync shell, option or daemon,
+// and an `env` are each refused, and the record says the push was
+// unconfined. No test reaches any host: `ssh`, `scp` and `rsync` are fakes
+// first on PATH that say how they were called, so a planted fault that let
+// one through would print, never connect.
+TEST(an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone) {
     static Ran x;
     guards_ran_with(&x, "", false);
+    guards_zig_fake(&x, "fakebin/ssh", "#!/bin/sh\necho \"fake $(basename \"$0\") $*\"\n");
+    guards_zig_fake(&x, "fakebin/scp", "#!/bin/sh\necho \"fake $(basename \"$0\") $*\"\n");
+    guards_zig_fake(&x, "fakebin/rsync", "#!/bin/sh\necho \"fake $(basename \"$0\") $*\"\n");
+    static OsStr path_env[1];
+    SLICE_TYPE(EnvRoom, OsStr);
+    EnvRoom room = {path_env, 1};
+    Buf pb = buf_make(&x.host);
+    EXPECT_EQ(buf_lit(&pb, "PATH="), OK);
+    EXPECT_EQ(buf_str(&pb, ran_at(&x, "fakebin")), OK);
+    EXPECT_EQ(buf_lit(&pb, ":/usr/bin:/bin"), OK);
+    at(room, 0) = os_str_own(buf_view(&pb));
+    x.lh.env = (SpawnStrs){path_env, 1};
     guards_git_bare(&x, ran_at(&x, "outside.git"));
     ran_write(&x, "root/where.txt", ran_at(&x, "outside.git"));
     ran_run(&x, S("function c(a, o) return host(\"run\", a, o) end\n"
@@ -313,6 +330,20 @@ TEST(an_unconfined_run_is_a_git_push_alone) {
                   "print(c({\"git\", \"push\", \"-q\", out, \"master\"}, o).code ~= 0)\n"
                   "o.unconfined = \"t: past the mounts\"\n"
                   "print(attempt(c, {\"cp\", \"where.txt\", \"x\"}, o).error)\n"
+                  "print(attempt(c, {\"cp\", \"push\", \"x\"}, o).error)\n"
+                  "print(attempt(c, {\"ssh\", \"steve@example.org\", \"true\"}, o).error)\n"
+                  "print(attempt(c, {\"ssh\", \"-o\", \"ProxyCommand=x\", \"steve@162.243.1.123\"}, o).error)\n"
+                  "print(attempt(c, {\"ssh\", \"-F\", \"f\", \"steve@162.243.1.123\"}, o).error)\n"
+                  "print(attempt(c, {\"scp\", \"-S\", \"x\", \"where.txt\", \"steve@162.243.1.123:/tmp/x\"}, o).error)\n"
+                  "print(attempt(c, {\"scp\", \"where.txt\", \"other@162.243.1.123:/tmp/x\"}, o).error)\n"
+                  "print(attempt(c, {\"scp\", \"steve@162.243.1.123:/etc/hosts\", \"../x.txt\"}, o).error)\n"
+                  "print(attempt(c, {\"rsync\", \"-e\", \"ssh -o ProxyCommand=x\", \"where.txt\", \"steve@162.243.1.123:/tmp/\"}, o).error)\n"
+                  "print(attempt(c, {\"rsync\", \"--rsync-path=x\", \"where.txt\", \"steve@162.243.1.123:/tmp/\"}, o).error)\n"
+                  "print(attempt(c, {\"rsync\", \"-avz\", \"where.txt\", \"steve@162.243.1.123::mod\"}, o).error)\n"
+                  "print(attempt(c, {\"ssh\", \"steve@162.243.1.123\"}, {timeout_ms = 10000, tail = 3, unconfined = \"t: x\", env = {SSH_AUTH_SOCK = \"x\"}}).error)\n"
+                  "print(c({\"ssh\", \"steve@162.243.1.123\", \"true\"}, o).out)\n"
+                  "print(c({\"scp\", \"-q\", \"where.txt\", \"steve@162.243.1.123:/tmp/x\"}, o).out)\n"
+                  "print(c({\"rsync\", \"-rlt\", \"--delete\", \"--chmod=D755,F644\", \"-e\", \"ssh\", \"where.txt\", \"steve@162.243.1.123:/tmp/\"}, o).out)\n"
                   "print(attempt(c, {\"git\", \"-c\", \"core.sshCommand=x\", \"push\", out, \"master\"}, o).error)\n"
                   "print(attempt(c, {\"git\", \"push\", \"--receive-pack=x\", out, \"master\"}, o).error)\n"
                   "print(attempt(c, {\"git\", \"push\", out, \"master\"}, {timeout_ms = 10000, tail = 3, unconfined = \"t: x\", env = {GIT_SSH_COMMAND = \"x\"}}).error)\n"
@@ -320,10 +351,24 @@ TEST(an_unconfined_run_is_a_git_push_alone) {
            ran_budgets());
     EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("0\t0\t0\ntrue\n"
-                                     "`run`'s `unconfined` (t: past the mounts) is for a `git push` alone, which needs ssh's key files; every other program runs confined to the mounts\n"
+                                     "`run`'s `unconfined` (t: past the mounts) is for a `git push`, or `ssh`, `scp` or `rsync` to the hosts of HOST_UNCONFINED_HOSTS; every other program runs confined to the mounts\n"
+                                     "`run`'s `unconfined` (t: past the mounts) is for a `git push`, or `ssh`, `scp` or `rsync` to the hosts of HOST_UNCONFINED_HOSTS; every other program runs confined to the mounts\n"
+                                     "`run`'s `unconfined` ssh goes only to a host of HOST_UNCONFINED_HOSTS (c/host/host_unconfined.c), not `steve@example.org`\n"
+                                     "`run`'s `unconfined` ssh takes no option, not -o: an option could name a program, a config or a hop\n"
+                                     "`run`'s `unconfined` ssh takes no option, not -F: an option could name a program, a config or a hop\n"
+                                     "`run`'s `unconfined` scp takes -q, -r and -p, not -S: another option could name a program, a config or a hop\n"
+                                     "`run`'s `unconfined` scp goes only to a host of HOST_UNCONFINED_HOSTS (c/host/host_unconfined.c), not `other@162.243.1.123`\n"
+                                     "`run`'s `unconfined` scp: its local path ../x.txt is under neither the root nor a mount\n"
+                                     "`run`'s `unconfined` rsync takes `-e ssh` alone of a remote shell: any other is a program it would start\n"
+                                     "`run`'s `unconfined` rsync does not take --rsync-path=x: its options are HOST_UNCONFINED_RSYNC_LETTERS' and HOST_UNCONFINED_RSYNC_LONG's (c/host/host_unconfined.c)\n"
+                                     "`run`'s `unconfined` rsync takes no rsync daemon's module (`host::module`), not steve@162.243.1.123::mod\n"
+                                     "`run`'s `unconfined` ssh takes no `env` (git: but GIT_TERMINAL_PROMPT), not SSH_AUTH_SOCK: a variable could name a program it starts\n"
+                                     "fake ssh steve@162.243.1.123 true\n\n"
+                                     "fake scp -q where.txt steve@162.243.1.123:/tmp/x\n\n"
+                                     "fake rsync -rlt --delete --chmod=D755,F644 -e ssh where.txt steve@162.243.1.123:/tmp/\n\n"
                                      "`run`'s `unconfined` push takes no `-c` but `color.ui=never`: a setting could name a program git starts outside the confinement\n"
                                      "`run`'s `unconfined` push takes no `--receive-pack` or `--exec`: each names a program it would start outside the confinement\n"
-                                     "`run`'s `unconfined` push takes no `env` but GIT_TERMINAL_PROMPT, not GIT_SSH_COMMAND: a variable could name a program git starts\n"
+                                     "`run`'s `unconfined` git takes no `env` (git: but GIT_TERMINAL_PROMPT), not GIT_SSH_COMMAND: a variable could name a program it starts\n"
                                      "0\n"));
     Str ref = S("");
     EXPECT(ran_file(&x, "outside.git/refs/heads/master", &ref));
@@ -535,4 +580,4 @@ TEST_PART(run_guards, TEST_CASE(a_program_writes_and_reads_only_where_the_mounts
           TEST_CASE(stdout_secret_s_file_is_held_to_one_byte_past_its_cap_while_the_program_runs),
           TEST_CASE(job_wait_names_the_script_s_path_never_the_os_path),
           TEST_CASE(zig_ast_s_stderr_is_drained_while_it_answers_and_a_hung_one_stops_at_the_deadline), TEST_CASE(zig_ast_runs_confined_to_the_mounts),
-          TEST_CASE(ssh_reads_its_known_hosts_and_no_key_and_the_caches_are_the_build_mount_s), TEST_CASE(an_unconfined_run_is_a_git_push_alone));
+          TEST_CASE(ssh_reads_its_known_hosts_and_no_key_and_the_caches_are_the_build_mount_s), TEST_CASE(an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone));
