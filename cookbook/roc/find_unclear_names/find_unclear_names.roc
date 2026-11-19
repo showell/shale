@@ -1,15 +1,16 @@
-## cookbook/roc/find_unclear_names.shale, ported to Roc on Shale's platform
-## (roc_platform/README.md): names and top comments that say less than they
-## should. The original's header says the rules, `pure_mutator`,
-## `abbreviation` and `module_doc`; this port keeps its arguments, its output,
-## its stops and its exit code, line for line, and its self-test.
+## find_unclear_names, in Roc on Shale's platform (roc_platform/README.md):
+## names and top comments that say less than they should. Its launcher,
+## cookbook/roc/find_unclear_names.shale, is how it is run, and its header
+## says the rules, `pure_mutator`, `abbreviation` and `module_doc`.
+## check_goldens.shale, beside this, holds its output on the plants to its
+## goldens, line for line.
 ##
-##   shale roc_platform/run.shale script=cookbook/roc/find_unclear_names/find_unclear_names.roc glob=app/**/*.roc
-##   shale roc_platform/run.shale script=cookbook/roc/find_unclear_names/find_unclear_names.roc self_test=1
+##   cd <repo> && shale cookbook:roc/find_unclear_names.shale glob=app/**/*.roc
+##   shale cookbook:roc/find_unclear_names.shale self_test=1
 ##
 ## The arguments: `glob` (`**/*.roc`), `abbreviations`, `words`, `accepted`,
 ## `terms`, `house` (`house=0` leaves out the house style, `abbreviation`) and
-## `self_test` (`self_test=1` runs the original's plants against this port).
+## `self_test` (`self_test=1` runs the plants, each through the launcher).
 ## budget: steps=800000000 arena_bytes=2000000000 output_bytes=4000000 roc_cpu_ms=600000 programs=100
 app [main!] { pf: platform "../../../roc_platform/platform/main.roc" }
 
@@ -42,8 +43,9 @@ Lists : { abbreviations : Set(Str), words : Set(Str), accepted : Set(Str) }
 checks : List(Str)
 checks = ["pure_mutator", "abbreviation", "module_doc"]
 
-this_recipe : Str
-this_recipe = "cookbook/roc/find_unclear_names/find_unclear_names.roc"
+## The launcher, which the self-test runs each plant through.
+launcher : Str
+launcher = "cookbook:roc/find_unclear_names.shale"
 
 main! : {} => {}
 main! = |{}| {
@@ -521,8 +523,8 @@ is_whole_stem = |stem, lists|
 		!(Set.contains(lists.abbreviations, stem))
 	}
 
-## Whether a word of a name is an abbreviation (the original's header and
-## `is_abbreviated` say the rule).
+## Whether a word of a name is an abbreviation (the launcher's header says
+## the rule).
 is_abbreviated : Str, Lists -> Bool
 is_abbreviated = |word, lists| {
 	letters = Str.to_utf8(word).keep_if(|b| is_lower(b) or is_digit(b))
@@ -868,7 +870,7 @@ print_findings! = |summary, found| {
 	}
 }
 
-# ── The self-test: the original's plants, run against this port ─────────
+# ── The self-test: the plants, each through the launcher ────────────────
 
 Row : { glob : Str, args : List(Str), counts : List((Str, U64)), says : List(Str), stops : Bool }
 
@@ -947,14 +949,14 @@ row_faults! = |row, r| {
 	$faults
 }
 
-## Each row run as a child of its own, through the launcher; a check no row
+## Each row run as a child of its own, through `launcher`; a check no row
 ## fires fails too, since it could be blind (`check_plants`).
 self_test! : {} => {}
 self_test! = |{}| {
 	var $wrong = 0
 	var $fired = Set.empty()
 	for row in rows {
-		argv = List.concat(["shale", "roc_platform/run.shale", "script=${this_recipe}", "glob=${row.glob}"], row.args)
+		argv = List.concat(["shale", launcher, "glob=${row.glob}"], row.args)
 		r = Shale.run!({ argv, keep: Whole(4000000), timeout_ms: 120000, want: "" })
 		faults = row_faults!(row, r)
 		for pair in row.counts {

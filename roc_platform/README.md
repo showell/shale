@@ -90,8 +90,11 @@ the pinned Roc (`roc-version`, `--opt=dev`, or `--opt=speed` with
 `opt=speed`) into an archive and links it
 with the host's object. The host's object is all of C Shale, compiled once
 with `gcc -O2` (about 25 s). The launcher then runs the program in this
-root. The object and each script's program are cached by content hash under
-`out/`. `timing=1` prints each phase's time. A `## budget: NAME=N ...` line
+root, or rooted at `in=` (an absolute folder). The object and each script's
+program are cached by content hash under `out/`, each built in a job of its
+own (`out/jobs/`): runs at once build a key once, the others waiting for
+that job, and a run that is stopped leaves the build to finish for the
+next. `timing=1` prints each phase's time. A `## budget: NAME=N ...` line
 in the script sets its budgets.
 
 The examples:
@@ -114,16 +117,22 @@ host's object, so it runs when a Roc build is asked for, not in the tiers.
 ## The ports
 
 **`cookbook/roc/find_unclear_names/find_unclear_names.roc`** is the first
-real port: cookbook/roc/find_unclear_names.shale in Roc, with its arguments,
-its output, its stops, its exit code and its self-test (`self_test=1` runs
-the original's plants against the port, each through this launcher). The
-Shale original stays beside it. `compare_with_original.shale`, in the same
-folder, holds the two to each other line for line and exit code for exit
-code: each plant row, both self-tests, and roc-chat's app, roc-markdown's
-package and roc-apps' Safari (`opt=speed`, `runs=N`).
+real port, and the recipe itself: cookbook/roc/find_unclear_names.shale is
+now its launcher, so every caller launches it as before. The launcher hands
+its values to `run.shale` in the checkout its cookbook is in (the `cookbook`
+mount's parent) with `in=` its own root, so the build is the checkout's and
+the program runs rooted where the caller is (the host takes `--root`).
+`check_goldens.shale`, in the same folder, holds it line for line and exit
+code for exit code to goldens written from the Shale original's output on
+the plants (each plant row and `self_test=1`), and the full tier runs it and
+the recipe's self-test with the cookbook's (`cookbook-test`). The port had
+matched the original in all 31 cases of the comparison before it (those 27,
+the port's own self-test, and three trees of other repositories), and the
+original was then deleted.
 
 Measured on 2026-11-19 (2 cores; the fastest of 3; the launcher's whole
-wall time, the original's as `shale` runs it):
+wall time, the original's as `shale` runs it), before the launcher moved
+into the recipe's place:
 
 | tree | Shale | Roc, dev | Roc, `--opt=speed` |
 |---|---|---|---|
@@ -135,6 +144,14 @@ wall time, the original's as `shale` runs it):
 The port's own builds: 1.2 to 1.3 s for `--opt=dev` (cold or after a
 one-line edit), 17 s for `--opt=speed`, beside the host's object once per
 change to `c/` (25 to 50 s).
+
+Through the launcher, cached, one file (roc-apps' Safari.roc) takes 28 to
+42 ms of wall and CPU a run, against the original's 10 to 12 ms: two
+`shale`s and three `git`s (the keys) before the program. A tree is within a
+few percent of the original (Safari's 212 files, 1.30 s against 1.27 s).
+The first run after a change to `c/` waits about 25 s for the host's object
+and 1 to 3 s for the script's build, in jobs whose CPU is no caller's: a
+cold run under quality's `cpu_budget_ms = 7000` used 1.35 s of CPU.
 
 ## What the spike measured
 
@@ -181,5 +198,8 @@ value, a tag union with payloads as an argument and as an answer, and a
 - The Roc's arena has its own budget, set to the run's `arena_bytes`,
   beside the values' arena.
 - The host's cache key ignores uncommitted edits under `c/`.
-- A script must be one file, and there is no helper library: a port writes its
-  own text helpers (a `Text` module is undecided).
+- A script is one file, with its own text helpers: there is no helper
+  module.
+- A caller's cache key (roc-apps' tools/quality_keys.shale) follows a
+  recipe's `use`s, so it does not see a change to the Roc script a launcher
+  runs, nor to the platform.

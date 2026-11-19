@@ -147,7 +147,9 @@ steps left for the writer.
 - `roc/find_extra_parens.shale`: finds the parentheses and braceless `if`s a
   code emitter leaves, and with `write=1` rewrites them. `shale cookbook:roc/find_extra_parens.shale`
 - `roc/find_unclear_names.shale`: finds names and module docs that say less
-  than they should. `shale cookbook:roc/find_unclear_names.shale`
+  than they should; the launcher of a Roc script
+  (`roc/find_unclear_names/find_unclear_names.roc`, on `roc_platform/`).
+  `shale cookbook:roc/find_unclear_names.shale`
 - `roc/find_unused_imports.shale`: finds imports a file never uses.
   `shale cookbook:roc/find_unused_imports.shale`
 - `roc/gate_recipe.shale` (library): what the recipes that gate a build

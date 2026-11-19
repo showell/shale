@@ -144,7 +144,10 @@ finding. A project's own words stay with the project and are passed in.
   file beside it), and a module
   with no doc or with history in its top comment (`module_doc`). `terms=`
   names a project's file of fixed terms that open a name and only look like a
-  verb, as `set_cookie` does.
+  verb, as `set_cookie` does. It is written in Roc,
+  [find_unclear_names/find_unclear_names.roc](find_unclear_names/find_unclear_names.roc),
+  on Shale's Roc platform; the `.shale` file is its launcher, and
+  [check_goldens.shale](find_unclear_names/check_goldens.shale) holds it to its goldens.
 - [find_unused_imports.shale](find_unused_imports.shale) finds an import line whose
   name the file never uses (`unused_import`), since Roc doesn't warn of one:
   no value, tag or type starts with the module's name or alias, no name

@@ -127,5 +127,9 @@ to extend. The library both scripts use is `c/builtin_table.shale`.
   second; TCC cannot read glue's header).
 - **When a Roc build is asked for:** `roc_platform/run.shale` builds the
   host's object (`gcc -O2`, about 25 s, cached) and the script;
-  `roc_platform/self_test.shale` is the policy proofs end to end. Both need
-  the pinned Roc, which the tiers do not have.
+  `roc_platform/self_test.shale` is the policy proofs end to end, run by
+  hand. Both need the pinned Roc.
+- **The full tier's `cookbook-test`** runs the Roc recipes' self-tests with
+  the rest (cookbook/roc/find_unclear_names.shale, a launcher, and its
+  check_goldens.shale), so it builds the host's object once, with the pinned
+  Roc that c-full.yml installs.
