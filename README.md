@@ -27,7 +27,8 @@ Every script runs inside guard rails that a shell does not have:
   `index`, `refused`, `budget reads`), not a traceback.
 - **It is confined.** A script reads and writes only under the folder it
   runs in and the mounts you name (`name:path`): no `..`, no absolute
-  paths.
+  paths. A program it runs is held to the same mounts by the kernel
+  (Landlock), and so is everything that program starts.
 - **It refuses the risky shortcut, by name.** `run` refuses a program at a
   path git does not track (a script just written, not yet read), a shell or
   an interpreter (`bash`, `python3`, `node`), and a text tool Shale already

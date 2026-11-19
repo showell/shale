@@ -234,6 +234,22 @@ has none of it):
   refused by its own name and by the name of the file it reaches, every
   link followed (`tool`, which is `bash`). An `env` that sets PATH, an
   `LD_` name, BASH_ENV or ENV needs a want too: each picks what runs.
+  **A program runs confined to the mounts** (Landlock, Linux 6.2 or
+  later; `c/host/host_confine.c` holds the list): it may write only under
+  the root and the mounts without ` ro`; it may read and run only those, the
+  read-only mounts and the system's folders (`/usr`, `/etc`, `/proc`,
+  `/sys`, `/bin`, `/lib*`, the resolver's `/run/systemd/resolve`), plus
+  `/dev/null`, `/dev/zero`, `/dev/full` and `/dev/urandom`, and a few named
+  files (`~/.gitconfig`, `~/.config/git/config`, the mounts file and the
+  user prelude); a secrets mount's folder is in no rule. Everything it
+  starts is held the same, for good. `/tmp` and the home's caches
+  (`~/.cache`) are outside it. A `want` never widens it. A program it
+  refuses gets EACCES from the call it made, so a script sees the
+  program's own words, `Permission denied`, and its exit code: a refusal
+  is a gap to name in host_confine.c on purpose. A kernel without Landlock
+  (or older than ABI 3) runs no program, and nor does a secrets mount
+  whose folder lies inside the root or another mount: no rule could hide
+  it.
   A program runs in a process group of its own, and when it exits, what it
   left running there gets TERM, 2 seconds, then KILL before `run` returns:
   a server meant to outlive the call is a job (`job_start`, below).
