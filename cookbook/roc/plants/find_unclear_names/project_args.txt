@@ -1,0 +1,2 @@
+-- A plant for `accepted=`: a project's term that the abbreviations file lists.
+args    -- the plant's word for a command line's arguments, as the shell says it

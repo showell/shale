@@ -1,13 +1,21 @@
 -- Abbreviations a Roc name should spell out, one a line. Read by
--- find_unclear_names.shale, whose `abbreviation` check reports a name holding one.
+-- find_unclear_names.shale, whose `abbreviation` check reports a name holding one,
+-- or its plural (`params`), unless a project's `accepted=` file holds it.
 accel
+args
 col
+delim
+elem
+expr
 dist
 frac
 grad
 iters
+param
 pos
 poly
 pts
 sim
+stmt
+tmpl
 vis

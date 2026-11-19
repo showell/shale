@@ -39,10 +39,15 @@
 --                 is already what it gets.
 --   abbreviation  A name with a word short for another, since Roc's style
 --                 guide prefers the plain word: a word from the
---                 abbreviations file, or a word of two to four letters
---                 (`st`, `tks`, `Inl`, `Emph`) that is no English word of
---                 the words file, no accepted term, no plural of either, and
---                 no letter and an axis (`dx`). A type's words are split at
+--                 abbreviations file, whatever its length (`delim`,
+--                 `param`, `args`), the plural of an abbreviation (`attrs`,
+--                 `params`), or a word of two to four letters (`st`, `tks`,
+--                 `Inl`, `Emph`) that is no English word of the words file,
+--                 no accepted term, no plural of either, and no letter and
+--                 an axis (`dx`). A term accepted, the cookbook's or the
+--                 project's, is never one, even one the abbreviations file
+--                 lists (a project's `args`). A word ending as no plural
+--                 does (`class`, `bonus`, `alias`) is no plural. A type's words are split at
 --                 its capitals, so `TkKind` holds `tk`. A word's marks and
 --                 trailing digits go first (`buf0` is `buf`), and a letter
 --                 alone is hunt_names' `short_name`'s. The names read are a
@@ -143,18 +148,46 @@ function is_plain_short_word(w, lists)
   return #w == 2 and has_item({"x", "y", "z"}, sub(w, 2, 2))
 end
 
--- Whether a word of a name is an abbreviation: one the abbreviations file
--- lists, or a word of two to four letters that is neither plain nor a plain
--- word's plural. Its marks (`!`, `$`) and trailing digits (`buf0`) go first;
--- a letter alone is `short_name`'s, in hunt_names.
+-- Whether a word of two to four letters is short for another: no plain
+-- short word.
+function is_short_abbreviation(w, lists)
+  if #w < 2 or #w > 4 or re_find(w, "^[a-z]+$") == nil then return false end
+  return not is_plain_short_word(w, lists)
+end
+
+-- The stems a word may be the plural of, `boxes` giving `boxe` and `box`:
+-- none for a word that ends as no plural does (`class`, `bonus`, `alias`,
+-- `basis`, `chaos`).
+function plural_stems(w)
+  if #w < 3 or not ends_with(w, "s") or re_find(w, "(ss|us|is|as|os)$") ~= nil then return {} end
+  local stems = {sub(w, 1, #w - 1)}
+  if ends_with(w, "es") and #w > 3 then push(stems, sub(w, 1, #w - 2)) end
+  return stems
+end
+
+-- Whether a word of a name is an abbreviation. A term the cookbook or the
+-- project accepts never is, and one the abbreviations file lists always is,
+-- whatever its length (`delim`, `params`). A plural is judged by its stem:
+-- the plural of a plain word or a term is plain (`ids`, `boxes`), and of an
+-- abbreviation an abbreviation (`attrs`). Past those, a word of two to four
+-- letters that is no plain word is one. Its marks (`!`, `$`) and trailing
+-- digits (`buf0`) go first; a letter alone is `short_name`'s, in hunt_names.
 function is_abbreviated(word, lists)
   local w = re_replace(word, "[^a-z0-9]", "")
-  if has_key(lists.abbreviations, w) then return true end
   if has_key(lists.accepted, w) then return false end
+  if has_key(lists.abbreviations, w) then return true end
   w = re_replace(w, "[0-9]+$", "")
-  if #w < 2 or #w > 4 or re_find(w, "^[a-z]+$") == nil then return false end
-  if is_plain_short_word(w, lists) then return false end
-  return not (ends_with(w, "s") and #w > 2 and is_plain_short_word(sub(w, 1, #w - 1), lists))
+  if has_key(lists.accepted, w) then return false end
+  if has_key(lists.abbreviations, w) then return true end
+  if #w <= 4 and is_plain_short_word(w, lists) then return false end
+  local stems = plural_stems(w)
+  for stem in stems do
+    if has_key(lists.accepted, stem) or (#stem <= 4 and is_plain_short_word(stem, lists)) then return false end
+  end
+  for stem in stems do
+    if has_key(lists.abbreviations, stem) or is_short_abbreviation(stem, lists) then return true end
+  end
+  return is_short_abbreviation(w, lists)
 end
 
 -- The names a file gives, each once, with the line it first appears on: its
@@ -246,6 +279,9 @@ function self_test()
     {glob = at .. "quiet_short_words/*.roc", args = {"accepted=" .. at .. "project_terms.txt"}},
     {glob = at .. "quiet_short_words/*.roc", args = {"accepted=" .. at .. "no_reason.txt"}, stops = true, says = {"`qty` has no reason"}},
     {glob = at .. "quiet_abbreviation.roc", args = {"abbreviations=" .. at .. "no_such.txt"}, stops = true, says = {"no word list"}},
+    {glob = at .. "long_abbreviations/*.roc", counts = {abbreviation = 9}, says = {"Parser.roc:5: abbreviation: `attrs` abbreviates: attrs", "`delim` abbreviates: delim", "`parse_args` abbreviates: args", "`params` abbreviates: params", "`elem_count` abbreviates: elem", "`expr_text` abbreviates: expr", "`stmt_kind` abbreviates: stmt", "`tmpl_name` abbreviates: tmpl"}},
+    {glob = at .. "long_abbreviations/*.roc", args = {"accepted=" .. at .. "project_args.txt"}, counts = {abbreviation = 7}, says = {"`attrs` abbreviates: attrs", "`params` abbreviates: params"}},
+    {glob = at .. "quiet_long_abbreviations/*.roc"},
     {glob = at .. "module_doc/*.roc", counts = {module_doc = 5}, says = {"`NoDoc` has no `##` doc", "`Hashless` has no `##` doc", "`Old`'s top comment says `originally`", "`Sky`'s top comment says `used to`", "Sun.roc:3: module_doc: `Sun`'s doc says `originally`"}},
     {glob = at .. "quiet_module_doc/*.roc"},
     {glob = at .. "module_doc_private/*.roc", counts = {module_doc = 2}, says = {"`Shown` has no `##` doc", "`Silent` has no `##` doc"}},

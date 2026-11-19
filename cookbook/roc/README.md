@@ -136,7 +136,8 @@ finding. A project's own words stay with the project and are passed in.
   unused lines fail the run.
 - [find_unclear_names.shale](find_unclear_names.shale) finds a pure function named like a
   mutation (`pure_mutator`), an abbreviation in a name, a parameter's or a
-  local's included (`abbreviation`: a word of `cookbook/words/abbreviations.txt`,
+  local's included (`abbreviation`: a word of `cookbook/words/abbreviations.txt`
+  whatever its length (`delim`) or its plural (`attrs`, `params`),
   or a word of two to four letters, `st` or `Inl`, that neither
   `cookbook/words/short_words.txt` nor the reasoned table
   `cookbook/words/accepted_terms.txt` holds, nor a project's own `accepted=`
