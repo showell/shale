@@ -95,8 +95,9 @@ static bool host_confine_holds_secrets(PathsSecretDirs secrets, Str dir) {
 // rule below it can take a right back, so a secrets mount whose folder is
 // inside the root or another mount would be readable to every program.
 // REMEDY: such mounts run no program: the stop names neither folder.
-// test_run_guards' a_secrets_folder_inside_the_root_runs_no_program plants
-// it.
+// test_run_guards'
+// a_program_by_a_secret_s_path_is_the_secrets_guard_s_before_git_is_asked
+// plants it.
 static STATUS_MUST_USE Status host_confine_mounts(Host *h, Run *r, Pos pos, Str who, int fd, uint64_t handled) {
     PathRun *pr = &builtin_files_of(r)->path;
     PathsSecretDirs secrets = paths_secret_dirs(&h->paths, pr);

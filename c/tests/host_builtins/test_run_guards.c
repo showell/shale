@@ -323,7 +323,92 @@ TEST(an_env_that_picks_the_program_needs_a_want) {
     ran_free(&x);
 }
 
-TEST_PART(run_guards, TEST_CASE(an_env_that_picks_the_program_needs_a_want), TEST_CASE(a_refused_program_by_another_name_is_refused_by_the_one_it_reaches),
+// What a decoy file under the test's folder holds, or "absent".
+static Str guards_decoy(Ran *x, const char *rel) { // cstr: a test's literal
+    Str got = S("");
+    return ran_file(x, rel, &got) ? got : S("absent");
+}
+
+// A program runs confined to the mounts (host_confine.c): it writes only under
+// the root and the writable mounts, reads nothing outside them and the
+// system's folders, and a link out of the root reaches nothing. Each refusal
+// is aimed at a decoy under the test's own folder, outside every mount: a
+// read-only `tools` mount, a folder no mount names, a decoy home's
+// `.local/bin`, and a job's program as well as `run`'s. What a script sees is
+// the program's own EACCES.
+TEST(a_program_writes_and_reads_only_where_the_mounts_allow) {
+    static Ran x;
+    guards_ran_with(&x, "tools = D/tools ro tools\nout = D/out\n", false);
+    ran_put(&x, "root/a.txt", "a\n");
+    ran_put(&x, "tools/t.txt", "t\n");
+    ran_put(&x, "out/.keep", "");
+    ran_put(&x, "decoy/keep.txt", "keep\n");
+    ran_put(&x, "home/.local/bin/.keep", "");
+    FileSystemCPath to_cp;
+    FileSystemCPath link_cp;
+    const char *to_c = NULL;
+    const char *link_c = NULL;
+    EXPECT_EQ(file_system_cstr(&to_cp, os_str_own(ran_at(&x, "decoy")), &to_c), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_cstr(&link_cp, os_str_own(ran_at(&x, "root/out_link")), &link_c), FILE_SYSTEM_OK);
+    EXPECT_EQ(symlink(to_c, link_c), 0);
+    char exe[PATH_MAX];
+    EXPECT(realpath("c/out/tcc/shale", exe) != NULL);
+    x.lh.reaper = ran_cs(exe);
+    ran_run(&x, ran_d(&x, "function c(a) return host(\"run\", a, {timeout_ms = 5000, tail = 3}) end\n"
+                          "print(c({\"cp\", \"a.txt\", \"D/tools/new.txt\"}).out)\n"
+                          "print(c({\"cp\", \"a.txt\", \"D/decoy/new.txt\"}).code)\n"
+                          "print(c({\"truncate\", \"-s\", \"0\", \"D/decoy/keep.txt\"}).code)\n"
+                          "print(c({\"cp\", \"D/decoy/keep.txt\", \"copy.txt\"}).out)\n"
+                          "print(c({\"cp\", \"out_link/keep.txt\", \"copy.txt\"}).code)\n"
+                          "print(c({\"cp\", \"a.txt\", \"out_link/new.txt\"}).code)\n"
+                          "print(host(\"run\", {\"cp\", \"a.txt\", \"D/home/.local/bin/git\"}, {timeout_ms = 5000, tail = 3, env = {HOME = \"D/home\"}}).code)\n"
+                          "local j = host(\"job_start\", {\"cp\", \"a.txt\", \"D/decoy/job.txt\"}, {log = \"j.log\"})\n"
+                          "print(host(\"job_wait\", j, {timeout_ms = 10000}).code)\n"
+                          "print(c({\"cp\", \"D/tools/t.txt\", \"D/out/t.txt\"}).code)\n"
+                          "print(c({\"mkdir\", \"sub\"}).code)\n"
+                          "print(c({\"mv\", \"a.txt\", \"sub/a.txt\"}).code)\n"),
+           ran_budgets());
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), ran_d(&x, "cp: cannot create regular file 'D/tools/new.txt': Permission denied\n\n"
+                                             "1\n1\n"
+                                             "cp: cannot open 'D/decoy/keep.txt' for reading: Permission denied\n\n"
+                                             "1\n1\n1\n1\n"
+                                             "0\n0\n0\n"));
+    // Every decoy is as it was; what the mounts allow was done.
+    EXPECT_STR(guards_decoy(&x, "tools/new.txt"), S("absent"));
+    EXPECT_STR(guards_decoy(&x, "decoy/new.txt"), S("absent"));
+    EXPECT_STR(guards_decoy(&x, "decoy/keep.txt"), S("keep\n"));
+    EXPECT_STR(guards_decoy(&x, "decoy/job.txt"), S("absent"));
+    EXPECT_STR(guards_decoy(&x, "home/.local/bin/git"), S("absent"));
+    EXPECT_STR(guards_decoy(&x, "root/copy.txt"), S("absent"));
+    EXPECT_STR(guards_decoy(&x, "out/t.txt"), S("t\n"));
+    EXPECT_STR(guards_decoy(&x, "root/sub/a.txt"), S("a\n"));
+    ran_free(&x);
+}
+
+// What the confinement allows still works: git makes a repository in a mount
+// and commits to it (its objects moved between folders, Landlock's REFER),
+// and a build writes its out folder.
+TEST(git_commits_in_a_mount_and_a_build_writes_its_out_folder_confined) {
+    static Ran x;
+    guards_ran_with(&x, "work = D/work\n", false);
+    ran_put(&x, "work/r/a.c", "int f(void) { return 1; }\n");
+    ran_run(&x, S("function c(a) return host(\"run\", a, {timeout_ms = 10000, tail = 3, cwd = \"work:r\"}) end\n"
+                  "print(c({\"git\", \"init\", \"-q\"}).code)\n"
+                  "print(c({\"git\", \"add\", \"a.c\"}).code)\n"
+                  "print(c({\"git\", \"-c\", \"user.name=t\", \"-c\", \"user.email=t@t\", \"commit\", \"-q\", \"-m\", \"m\"}).code)\n"
+                  "print(c({\"git\", \"rev-list\", \"--count\", \"HEAD\"}).out)\n"
+                  "mkdir(\"work:r/out\")\n"
+                  "print(c({\"tcc\", \"-c\", \"a.c\", \"-o\", \"out/a.o\"}).code)\n"
+                  "print(exists(\"work:r/out/a.o\"))\n"),
+           ran_budgets());
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("0\n0\n0\n1\n\n0\ntrue\n"));
+    ran_free(&x);
+}
+
+TEST_PART(run_guards, TEST_CASE(a_program_writes_and_reads_only_where_the_mounts_allow), TEST_CASE(git_commits_in_a_mount_and_a_build_writes_its_out_folder_confined),
+          TEST_CASE(an_env_that_picks_the_program_needs_a_want), TEST_CASE(a_refused_program_by_another_name_is_refused_by_the_one_it_reaches),
           TEST_CASE(each_kind_of_refused_program_is_refused_by_its_other_names), TEST_CASE(copy_mode_gives_a_copy_its_source_s_bits_and_a_read_only_mount_refuses_it),
           TEST_CASE(a_nul_in_an_argument_an_env_a_secrets_name_or_a_secret_is_refused_before_any_guard),
           TEST_CASE(a_git_that_cannot_start_is_said_not_taken_for_a_program_it_does_not_track),

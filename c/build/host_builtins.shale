@@ -17,8 +17,23 @@ use("build:lib.shale")
 -- faults below planted in a copy of c/ (`run_plants`), each caught by its
 -- `aim` tests.
 
-const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 14, ["c/tests/host_builtins/test_run_guards.c"] = 12}
+const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 14, ["c/tests/host_builtins/test_run_guards.c"] = 14}
 const HOST_BUILTINS_PLANTS = {
+  {name = "a program runs unconfined", file = "spawn_child.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "a_program_writes_and_reads_only_where_the_mounts_allow",
+   old = "    if (c->confine_fd >= 0) {\n        if (prctl(", new = "    if (0) {\n        if (prctl("},
+  {name = "a read-only mount is a program's to write", file = "host_confine.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "a_program_writes_and_reads_only_where_the_mounts_allow",
+   old = "m->access == MOUNT_READ_ONLY ? LANDLOCK_READ_RIGHTS : handled;", new = "handled;"},
+  {name = "a truncate is outside the ruleset", file = "landlock.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "a_program_writes_and_reads_only_where_the_mounts_allow",
+   old = "    if (abi >= 3) all |= LANDLOCK_TRUNCATE;\n", new = ""},
+  {name = "a secrets folder inside the root is a program's to read", file = "host_confine.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "a_program_by_a_secret_s_path_is_the_secrets_guard_s_before_git_is_asked",
+   old = "    if (leaks) {\n", new = "    if (0) {\n"},
+  {name = "a confined program cannot move a file between folders", file = "landlock.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "git_commits_in_a_mount_and_a_build_writes_its_out_folder_confined",
+   old = "    if (abi >= 2) all |= LANDLOCK_REFER;\n", new = ""},
   {name = "a script's NUL is made an OS string", file = "host.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "a_nul_in_an_argument_an_env_a_secrets_name_or_a_secret_is_refused_before_any_guard",
    old = "    if (os_str_of(s, out)) return OK;\n", new = "    out->s = s;\n    return OK;\n"},
