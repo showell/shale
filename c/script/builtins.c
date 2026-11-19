@@ -632,6 +632,29 @@ static STATUS_MUST_USE Status builtin_arg(Run *r, Pos pos, ConstValues args, Val
     return OK;
 }
 
+// The names of the launch's `name=value`s, in its order: what a launcher that
+// hands its values on reads, since it names them by value and Shale's check of
+// them before the run cannot (`arg`'s by a literal).
+static STATUS_MUST_USE Status builtin_arg_names(Run *r, Pos pos, ConstValues args, Value *out) {
+    (void)args;
+    Table *t = NULL;
+    TRY(run_new_table(r, pos, &t));
+    SLICE_TYPE(GivenArgs, const Arg);
+    GivenArgs given = {r->args, r->args_len};
+    if (given.len > 0) t->kind = TABLE_LIST;
+    for (size_t i = 0; i < given.len; i++) {
+        Str name = at(given, i).name;
+        TRY(run_charge(r, pos, name.len));
+        Str copy = {0};
+        if (!arena_dup(r->ctx.values, name, &copy)) return run_values_oom(r, pos);
+        Value v;
+        value_string(&v, copy);
+        TRY(run_list_push(r, pos, t, &v));
+    }
+    value_table(out, t);
+    return OK;
+}
+
 // Never reached: `yield()` compiles to its own op, and a call with arguments
 // is refused by its count, so a call here is a bug in the C.
 static STATUS_MUST_USE Status builtin_yield(Run *r, Pos pos, ConstValues args, Value *out) {

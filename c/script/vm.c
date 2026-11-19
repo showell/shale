@@ -90,6 +90,7 @@ static BuiltinSpecs builtin_specs(void) {
         {2, 2, builtin_same},           // same
         {0, 0, builtin_now},            // now
         {1, 2, builtin_arg},            // arg
+        {0, 0, builtin_arg_names},      // arg_names
         {1, 1, builtin_fail},           // fail
         {1, 4, builtin_host},           // host
         {0, 0, builtin_budget},         // budget

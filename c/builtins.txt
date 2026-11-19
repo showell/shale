@@ -577,6 +577,13 @@ arg(name: Str, default?: Str | Int | Bool) -> Str | Int | Bool
   values: the value, or the fallback
   driver: return arg(q.name, q.fallback)
 
+arg_names() -> List(Str)
+  impl: c builtin_arg_names
+  kind: effect
+  stops: -
+  doc: the names of the run's `name=value`s, in the launch's order
+  anchor: docs/SHALE.md#the-host-and-output
+
 fail(msg: Str) -> Never
   impl: c builtin_fail
   kind: effect

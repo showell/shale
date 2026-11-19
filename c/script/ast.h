@@ -84,6 +84,7 @@ typedef enum {
     BUILTIN_SAME,
     BUILTIN_NOW,
     BUILTIN_ARG,
+    BUILTIN_ARG_NAMES,
     BUILTIN_FAIL,
     BUILTIN_HOST,
     BUILTIN_BUDGET,
@@ -112,7 +113,7 @@ static inline BuiltinNames ast_builtin_names(void) {
         S_ITEM("seconds"), S_ITEM("human"), S_ITEM("pad"), S_ITEM("table"), S_ITEM("push"),
         S_ITEM("pop"), S_ITEM("sort"), S_ITEM("keys"), S_ITEM("has_key"), S_ITEM("get"),
         S_ITEM("count"), S_ITEM("reverse"), S_ITEM("take"), S_ITEM("last"), S_ITEM("same"),
-        S_ITEM("now"), S_ITEM("arg"), S_ITEM("fail"), S_ITEM("host"), S_ITEM("budget"),
+        S_ITEM("now"), S_ITEM("arg"), S_ITEM("arg_names"), S_ITEM("fail"), S_ITEM("host"), S_ITEM("budget"),
         S_ITEM("call_bytes"), S_ITEM("yield"), S_ITEM("print"),
     };
     _Static_assert(sizeof names / sizeof *names == BUILTIN_COUNT_OF, "a name for every builtin");
