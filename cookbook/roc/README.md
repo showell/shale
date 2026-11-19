@@ -221,8 +221,14 @@ end, and fails the run.
       cd <repo> && shale --undo-on-stop <shale>/cookbook/roc/rewrite_method_calls.shale glob='app/*.roc' root=app/main.roc peers=undo apply=1
 
 - [compare_machine_code.shale](compare_machine_code.shale) compares two builds of a Roc archive
-  and says whether they hold the same machine code. Use it to confirm that
-  a change is only a reformat.
+  or program and says whether they hold the same machine code. Use it to
+  confirm that a change is only a reformat or a move. It compares each
+  procedure's body as a multiset, Roc's hashed names and the addresses
+  masked, so a move across modules, which reorders the whole layout, is
+  still SAME; a body whose code matches and whose data alone differs (a
+  crash message naming a renamed module) is reported apart, as DATA ONLY.
+  `by=line` is the stricter line-by-line comparison, for a reformat inside
+  one module.
 
       cd <repo> && shale <shale>/cookbook/roc/compare_machine_code.shale old=<a.a> new=<b.a>
 

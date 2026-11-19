@@ -1,0 +1,31 @@
+
+plant.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000001000 <roc__p1111aaaa1111aaaa1111aaaa1111aaaa>:
+    1000:	55                   	push   %rbp
+    1001:	48 89 e5             	mov    %rsp,%rbp
+    1004:	48 8d 05 f5 0f 00 00 	lea    0xff5(%rip),%rax        # 2000 <roc__h9999aaaa9999aaaa9999aaaa9999aaaa>
+    100b:	e8 04 00 00 00       	call   1014 <roc__p2222bbbb2222bbbb2222bbbb2222bbbb>
+    1010:	75 ee                	jne    1000 <roc__p1111aaaa1111aaaa1111aaaa1111aaaa>
+    1012:	5d                   	pop    %rbp
+    1013:	c3                   	ret
+
+0000000000001014 <roc__p2222bbbb2222bbbb2222bbbb2222bbbb>:
+    1014:	55                   	push   %rbp
+    1015:	48 8d 05 09 00 00 00 	lea    0x9(%rip),%rdi        # 1025 <roc__p2222bbbb2222bbbb2222bbbb2222bbbb+0x11>
+    101c:	48 c7 c6 0b 00 00 00 	mov    $0xb,%rsi
+    1023:	0f 0b                	ud2
+    1025:	61                   	(bad)
+    1026:	20 63 72             	and    %ah,0x72(%rbx)
+    1029:	61                   	(bad)
+    102a:	73 68                	jae    1094 <roc__rc_decref_3333cccc3333cccc3333cccc3333cccc+0x64>
+    102c:	20 6d 73             	and    %ch,0x73(%rbp)
+    102f:	67                   	addr32
+
+0000000000001030 <roc__rc_decref_3333cccc3333cccc3333cccc3333cccc>:
+    1030:	55                   	push   %rbp
+    1031:	5d                   	pop    %rbp
+    1032:	c3                   	ret

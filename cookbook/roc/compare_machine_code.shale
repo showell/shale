@@ -1,37 +1,116 @@
--- Compare two builds of a Roc archive (or of any object file objdump can
--- disassemble) and say whether they hold the same machine code, and if not,
--- where they first differ. Roc names each procedure `roc__p` or `roc__proc_`
--- followed by hex digits that change whenever the source's layout does, so a pure
--- reformat (roc fmt, a new comment, a renamed local) changes the archive's
--- bytes without changing its code. This script masks those names before
--- comparing the two disassemblies line by line.
+-- Compare two builds of a Roc archive or program (or of any object file
+-- objdump can disassemble) and say whether they hold the same machine code,
+-- and if not, where they differ. Roc names each procedure `roc__p` (or
+-- `roc__proc_`, `roc__rc_decref_`, ...) followed by hex digits that change
+-- whenever the source's layout does, so a pure reformat (roc fmt, a new
+-- comment, a renamed local) changes the bytes without changing the code.
 --
---   cd <repo> && shale <shale>/cookbook/roc/compare_machine_code.shale old=<a.a> new=<b.a>
+--   cd <repo> && shale <shale>/cookbook/roc/compare_machine_code.shale old=<a> new=<b>
+--   ... by=line                   the old way: the two listings line by line
+--   shale cookbook:roc/compare_machine_code.shale self_test=1
 --
--- To get the old archive, build the old commit in a git worktree. The run
--- fails on an archive objdump can't disassemble (binutils' objdump doesn't
--- read wasm32), because two empty listings would compare as the same.
+-- `by=procedure` (the default) splits each disassembly into procedures and
+-- compares the two sides as multisets of bodies, so a move ACROSS modules,
+-- which renames the procedures and so reorders the whole layout, is still
+-- the same code. A body is its symbol's readable part (the name with Roc's
+-- hashes written `X`: `roc__pX`, `roc__rc_decref_X`) and its instructions,
+-- with these masked:
+--   - each instruction's address;
+--   - rip-relative displacements (`0x40f(%rip)` is `X(%rip)`), and the
+--     symbol a rip-relative operand names loses its `+0x..` offset;
+--   - a jump or call target inside the procedure itself is its offset from
+--     the start (`<.+1291>`), whatever symbol objdump names;
+--   - a target anywhere else, the next procedure's start included, is that
+--     symbol's readable part, its offset kept.
+-- Roc puts a procedure's string literals (a crash message) after its code,
+-- and objdump decodes them as instructions, garbage jumps into the
+-- neighbouring symbol among them. So in a Roc procedure the bytes from the
+-- first address its own rip-relative operands point at, to its end, are its
+-- DATA, compared as bytes, not instructions. Zero bytes at a procedure's end
+-- are padding, left out.
 --
--- budget: steps=400000000 arena_bytes=2000000000
+-- objdump's boundary artefact: the last Roc procedure before the
+-- `roc__rc_decref_` ones, and each of those, ends in a `jmp` into the next
+-- symbol, after its `ret` (in a procedure with data, as the data's last five
+-- bytes). Which procedure is last depends on the layout, so the jump moves
+-- from body to body; it is left out, and counted in the report, only where
+-- it follows a `ret` and no branch of the procedure reaches it. A jump a
+-- branch reaches is code, and a new target for it is a difference.
+--
+-- The report is SAME, or each body found on one side only: its readable
+-- name, address and a short diff against the nearest body on the other side
+-- (the same name, the closest length). A body whose code matches one on the
+-- other side and whose data alone differs is reported apart, as DATA ONLY,
+-- so a reader can judge it: a string in its data, both sides' text shown,
+-- or a literal's length, when the bodies differ only in immediates a few
+-- instructions after a rip-relative load of another symbol (a crash message
+-- in .rodata naming a renamed module; the two strings are read from the
+-- files with `objdump -s`). Any difference stops the run nonzero.
+--
+-- `by=line` compares the listings line by line, addresses kept and Roc's
+-- names masked: right for a reformat inside one module, which keeps the
+-- layout; a module rename reorders everything after it, and it says
+-- DIFFERENT. To get the old build, build the old commit in a git worktree.
+-- The run fails on a file objdump can't disassemble (binutils' objdump
+-- doesn't read wasm32), because two empty listings would compare as the same.
+--
+-- `self_test=1` compares the plants in cookbook/roc/plants/compare_machine_code/,
+-- each `<case>.old.dis` against `<case>.new.dis` (objdump -dr listings), and
+-- holds each to the verdict its name starts with: `same_`, `code_` (a code
+-- difference caught) or `data_` (data only).
+--
+-- budget: steps=2000000000 reads=100000 read_bytes=400000000 arena_bytes=2000000000 machine_bytes=1000000000
 
 const OLD = arg("old", "")
 const NEW = arg("new", "")
+const BY = arg("by", "procedure")
+const SELF_TEST = arg("self_test", "") == "1"
+-- From the shale checkout's root, as the self-test runs, so a lane's plants are its own.
+const PLANTS = "cookbook/roc/plants/compare_machine_code"
+const HEX_DIGITS = "0123456789abcdef"
+-- The printable ASCII bytes, 32 to 126, for showing a body's data.
+const PRINTABLE = [=[ !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~]=]
 
--- The line with each `roc__p<hex>` and `roc__proc_<hex>` written as `roc__pX`.
+-- The line with each `roc__p<hex>` and `roc__proc_<hex>` written as `roc__pX`,
+-- and on a line naming Roc's symbols, any other run of 16 hex digits or more
+-- (`roc__rc_decref_<hex>`, `roc__h<hex>`) as `X`.
 function with_roc_names_masked(line)
-  if not contains(line, "roc__p") then return line end
-  return re_replace(line, "roc__p(roc_)?[0-9a-f]+", "roc__pX")
+  if not contains(line, "roc__") then return line end
+  return re_replace(re_replace(line, "roc__p(roc_)?[0-9a-f]+", "roc__pX"), "[0-9a-f]{16,}", "X")
 end
 
--- The file's disassembly with Roc's names masked. The lines naming the file
--- itself are left out, and the addresses are kept, since the same code is
--- laid out at the same addresses.
-function disassembly(path)
-  local r = run({"objdump", "-dr", "--no-show-raw-insn", path}, {timeout_ms = 120000, whole = 64000000})
+-- The integer a run of lowercase hex digits says.
+function hex_value(s)
+  local n = 0
+  for i = 1, #s do n = n * 16 + find(HEX_DIGITS, sub(s, i, i)) - 1 end
+  return n
+end
+
+-- A byte's two hex digits as the character it is, `.` past printable ASCII.
+function shown_byte(b)
+  local n = hex_value(b)
+  if n < 32 or n > 126 then return "." end
+  return sub(PRINTABLE, n - 31, n - 31)
+end
+
+-- objdump's listing of a file: run with raw bytes in procedure mode, since
+-- a body's data is compared as bytes, and with every zero byte shown (`-z`),
+-- not a run of them written `...`.
+function objdump_text(path, raw)
+  local argv = {"objdump", "-drz", real(path)}
+  if not raw then argv = {"objdump", "-dr", "--no-show-raw-insn", real(path)} end
+  local r = run(argv, {timeout_ms = 120000, whole = 400000000, nice = 19})
   if r.code ~= 0 then fail("objdump failed on " .. path .. " (code " .. r.code .. "), so it can't be compared: " .. trim(sub(r.out, 1, 200))) end
+  return r.out
+end
+
+-- by=line: the file's disassembly with Roc's names masked. The lines naming
+-- the file itself are left out, and the addresses are kept, since the same
+-- code is laid out at the same addresses.
+function disassembly(path)
   local out = {}
   local instructions = 0
-  for l in lines(r.out) do
+  for l in lines(objdump_text(path, false)) do
     if not contains(l, "file format") and not starts_with(l, "In archive") then
       local masked = with_roc_names_masked(l)
       push(out, masked)
@@ -42,16 +121,480 @@ function disassembly(path)
   return out
 end
 
-if OLD == "" or NEW == "" then fail("compare_machine_code needs old=<archive> new=<archive>") end
-local old_lines = disassembly(OLD)
-local new_lines = disassembly(NEW)
-for i = 1, min(#old_lines, #new_lines) do
-  if old_lines[i] ~= new_lines[i] then
-    print("DIFFERENT at line " .. i .. " of " .. #old_lines .. " and " .. #new_lines .. ":")
-    print("  old: " .. old_lines[i])
-    print("  new: " .. new_lines[i])
-    fail("not the same code")
+function compare_by_line()
+  local old_lines = disassembly(OLD)
+  local new_lines = disassembly(NEW)
+  for i = 1, min(#old_lines, #new_lines) do
+    if old_lines[i] ~= new_lines[i] then
+      print("DIFFERENT at line " .. i .. " of " .. #old_lines .. " and " .. #new_lines .. ":")
+      print("  old: " .. old_lines[i])
+      print("  new: " .. new_lines[i])
+      fail("not the same code")
+    end
+  end
+  if #old_lines ~= #new_lines then fail("DIFFERENT: " .. #old_lines .. " lines against " .. #new_lines) end
+  print("SAME: " .. #old_lines .. " lines of disassembly, Roc's hashed names masked")
+end
+
+-- ── by=procedure ──
+
+-- Where a procedure ends: past its last row's bytes.
+function end_of(p)
+  local e = p.start
+  for r in p.rows do
+    if r.addr >= 0 then e = max(e, r.addr + #r.bytes) end
+  end
+  return e
+end
+
+-- The address a rip-relative operand's `# <hex> <sym>` comment names, or -1.
+function rip_target(insn)
+  if not contains(insn, "(%rip)") then return -1 end
+  local m = re_find(insn, "# ([0-9a-f]+) <")
+  if m == nil then return -1 end
+  return hex_value(m.group)
+end
+
+-- One instruction with its addresses masked, as the header says.
+function normal_insn(insn, start, stop)
+  local rip = contains(insn, "(%rip)")
+  if rip then insn = re_replace(insn, "-?0x[0-9a-f]+\\(%rip\\)", "X(%rip)") end
+  local m = re_find(insn, "([0-9a-f]+) <([^>]*)>$")
+  if m ~= nil then
+    local t = hex_value(m.groups[1])
+    local target = ""
+    if t >= start and t < stop then
+      target = "<.+" .. (t - start) .. ">"
+    else
+      local name = with_roc_names_masked(m.groups[2])
+      if rip and contains(name, "+0x") then name = sub(name, 1, find(name, "+0x") - 1) end
+      target = "<" .. name .. ">"
+    end
+    insn = sub(insn, 1, m.at - 1) .. target
+  end
+  return with_roc_names_masked(trim_end(insn))
+end
+
+-- Whether the procedure's last row is objdump's boundary artefact: an
+-- unconditional `jmp` right after a `ret`, into the next symbol, that no
+-- branch of the procedure reaches. The last Roc procedure before the
+-- `roc__rc_decref_` ones ends so, whichever procedure that is, so a new
+-- layout moves the jump from one body to another. A jump any branch reaches,
+-- or one after anything but a `ret`, is code, and stays.
+function ends_in_stray_jump(p, rows, stop)
+  if #rows < 2 then return false end
+  local last = rows[#rows]
+  if not starts_with(last.insn, "jmp ") or not starts_with(rows[#rows - 1].insn, "ret") then return false end
+  local m = re_find(last.insn, "([0-9a-f]+) <")
+  if m == nil or hex_value(m.group) < stop then return false end
+  local mark = "<.+" .. (last.addr - p.start) .. ">"
+  for r in rows do
+    if contains(normal_insn(r.insn, p.start, stop), mark) then return false end
+  end
+  return true
+end
+
+-- Whether a procedure's data ends in the same stray jump: `e9` and a small
+-- forward rel32 (under 64 KiB), the last five bytes, when the procedure
+-- with data is the one before the `roc__rc_decref_` ones. Text never ends
+-- so: a Roc string holds no `00 00`. The zero bytes before the jump pad
+-- the procedure out to it, and are taken off with any other padding.
+function data_ends_in_stray_jump(data)
+  local n = #data
+  if n < 6 or data[n - 4] ~= "e9" then return false end
+  return data[n] == "00" and data[n - 1] == "00"
+end
+
+-- Whether every byte of a row is zero (a row of none is not).
+function all_zero(bytes)
+  if #bytes == 0 then return false end
+  for b in bytes do if b ~= "00" then return false end end
+  return true
+end
+
+-- A procedure's body: `{name, at, code, data, code_text, key, rips,
+-- stray}`. `code` is the masked instructions after the readable name, `data`
+-- the bytes from the first address its own rip-relative operands point at
+-- to its end (Roc's procedures alone: another compiler's take the address of
+-- their own code), `key` the two together; `rips` gives each code line's
+-- rip-relative target, -1 for none, and `stray` says the boundary jump was
+-- left out.
+function body_of(p)
+  local stop = end_of(p)
+  local data_at = stop
+  if starts_with(p.name, "roc__") then
+    for r in p.rows do
+      local t = rip_target(r.insn)
+      if t > r.addr and t >= p.start and t < data_at then data_at = t end
+    end
+  end
+  local code_rows = {}
+  local data = {}
+  for r in p.rows do
+    if r.addr >= data_at then
+      for b in r.bytes do push(data, b) end
+    else
+      push(code_rows, r)
+    end
+  end
+  -- zero bytes at the end pad the procedure out to the next one's alignment
+  while #code_rows > 0 and all_zero(code_rows[#code_rows].bytes) do pop(code_rows) end
+  local stray = ends_in_stray_jump(p, code_rows, stop)
+  if stray then pop(code_rows) end
+  while #code_rows > 0 and all_zero(code_rows[#code_rows].bytes) do pop(code_rows) end
+  if data_ends_in_stray_jump(data) then
+    stray = true
+    for i = 1, 5 do pop(data) end
+  end
+  while #data > 0 and data[#data] == "00" do pop(data) end
+  local code = {with_roc_names_masked(p.name)}
+  local rips = {-1}
+  for r in code_rows do
+    push(code, normal_insn(r.insn, p.start, stop))
+    push(rips, rip_target(r.insn))
+  end
+  local code_text = join(code, "\n")
+  return {name = code[1], at = p.at, code = code, data = data, rips = rips, stray = stray, code_text = code_text, key = code_text .. "\n-- data: " .. join(data, " ")}
+end
+
+-- The bodies of an objdump -dr listing (raw bytes shown), in order. A
+-- procedure is read as `{name, at, start, rows}`, each row `{addr, bytes,
+-- insn}` (a relocation's or a `...` row has `addr` -1 and no bytes), and
+-- kept as its body alone. A section's or a member's heading ends the
+-- procedure before it.
+function bodies_of(text)
+  local out = {}
+  local cur = nil
+  for l in lines(text) do
+    if ends_with(l, ">:") and like(l, "* <*>:") then
+      if cur ~= nil then push(out, body_of(cur)) end
+      local at = sub(l, 1, find(l, " <") - 1)
+      cur = {name = sub(l, find(l, " <") + 2, #l - 2), at = at, start = hex_value(at), rows = {}}
+    elseif l == "" then
+      -- the blank line before each heading
+    elseif starts_with(l, "Disassembly of section") or contains(l, "file format") or starts_with(l, "In archive") then
+      if cur ~= nil then push(out, body_of(cur)) end
+      cur = nil
+    elseif cur ~= nil then
+      if starts_with(l, "\t") then
+        push(cur.rows, {addr = -1, bytes = {}, insn = trim(l)})
+      else
+        local f = split(l, "\t")
+        local addr = hex_value(trim(sub(f[1], 1, #f[1] - 1)))
+        local bytes = words(get(f, 2, ""))
+        if #f < 3 and #cur.rows > 0 then
+          -- a long instruction's bytes, wrapped onto a line of their own
+          for b in bytes do push(cur.rows[#cur.rows].bytes, b) end
+        else
+          push(cur.rows, {addr = addr, bytes = bytes, insn = get(f, 3, "")})
+        end
+      end
+    end
+  end
+  if cur ~= nil then push(out, body_of(cur)) end
+  return out
+end
+
+-- A body's data as text: printable bytes as themselves, the rest as `.`.
+function data_text(b)
+  local s = ""
+  for x in b.data do s = s .. shown_byte(x) end
+  return s
+end
+
+-- The bodies each side has that the other lacks, as a multiset: `{old, new}`.
+function unmatched(old_bodies, new_bodies)
+  local count = {}
+  for b in old_bodies do incr(count, b.key) end
+  local only_new = {}
+  for b in new_bodies do
+    if get(count, b.key, 0) > 0 then count[b.key] = count[b.key] - 1 else push(only_new, b) end
+  end
+  local only_old = {}
+  local left = {}
+  for b in old_bodies do
+    local used = get(left, b.key, 0)
+    if used < get(count, b.key, 0) then
+      push(only_old, b)
+      left[b.key] = used + 1
+    end
+  end
+  return {old = only_old, new = only_new}
+end
+
+-- The line with each immediate (`$0x46`) written `$X`.
+function with_immediates_masked(line)
+  if not contains(line, "$") then return line end
+  return re_replace(line, "\\$-?0x[0-9a-f]+", "$X")
+end
+
+-- The lines where a pair of bodies differs, when each is only an immediate
+-- a few instructions after a rip-relative load of another symbol's address:
+-- a literal's length, beside a pointer to it (a crash message in .rodata
+-- whose text grew). Otherwise nil.
+function literal_lines(c)
+  if #c.old.code ~= #c.new.code then return nil end
+  local at = {}
+  for i = 2, #c.old.code do
+    local a = c.old.code[i]
+    local b = c.new.code[i]
+    if a ~= b then
+      if with_immediates_masked(a) ~= with_immediates_masked(b) then return nil end
+      local load = 0
+      for j = max(2, i - 6), i - 1 do
+        if c.old.rips[j] >= 0 and c.new.rips[j] >= 0 and not contains(c.old.code[j], "<.+") then load = j end
+      end
+      if load == 0 then return nil end
+      push(at, {line = i, load = load})
+    end
+  end
+  if #at == 0 then return nil end
+  return at
+end
+
+-- The verdict of two listings: `{procedures, new_procedures, stray,
+-- data_only = {{old, new, literal}}, code = {{old, new}}}`, a side of a code
+-- pair nil where the other side has no body of its name left; a data-only
+-- pair's `literal` is `literal_lines`' answer, or nil where the data after
+-- the code differs.
+function compare_listings(old_text, new_text)
+  local old_bodies = bodies_of(old_text)
+  local new_bodies = bodies_of(new_text)
+  local instructions = 0
+  for b in old_bodies do instructions = instructions + #b.code end
+  if instructions == 0 then fail("objdump read no instructions from the old side (wasm32? binutils can't), so it can't be compared") end
+  local u = unmatched(old_bodies, new_bodies)
+  local data_only = {}
+  local code = {}
+  local taken = {}
+  for i = 1, #u.new do push(taken, false) end
+  -- data only: the same code, other data
+  local by_code = {}
+  for i = 1, #u.new do push_at(by_code, u.new[i].code_text, i) end
+  local old_left = {}
+  for b in u.old do
+    local found = 0
+    for i in get(by_code, b.code_text, {}) do
+      if found == 0 and not taken[i] then found = i end
+    end
+    if found > 0 then
+      taken[found] = true
+      push(data_only, {old = b, new = u.new[found]})
+    else
+      push(old_left, b)
+    end
+  end
+  -- code: each old body against the new body of its name closest in length
+  for b in old_left do
+    local best = 0
+    for i = 1, #u.new do
+      local n = u.new[i]
+      if not taken[i] and n.name == b.name then
+        if best == 0 or abs(#n.code - #b.code) < abs(#u.new[best].code - #b.code) then best = i end
+      end
+    end
+    if best > 0 then
+      taken[best] = true
+      push(code, {old = b, new = u.new[best]})
+    else
+      push(code, {old = b})
+    end
+  end
+  for i = 1, #u.new do
+    if not taken[i] then push(code, {new = u.new[i]}) end
+  end
+  local code_left = {}
+  for c in code do
+    local lit = nil
+    if c.old ~= nil and c.new ~= nil then lit = literal_lines(c) end
+    if lit ~= nil then push(data_only, {old = c.old, new = c.new, literal = lit}) else push(code_left, c) end
+  end
+  local stray = 0
+  for b in old_bodies do if b.stray then stray = stray + 1 end end
+  for b in new_bodies do if b.stray then stray = stray + 1 end end
+  return {procedures = #old_bodies, new_procedures = #new_bodies, stray = stray, data_only = data_only, code = code_left}
+end
+
+-- The first line where two lists differ, or the shorter's length + 1.
+function first_difference(a, b)
+  for i = 1, min(#a, #b) do
+    if a[i] ~= b[i] then return i end
+  end
+  return min(#a, #b) + 1
+end
+
+function print_code_pair(c)
+  if c.new == nil then
+    print("  only in old: " .. c.old.name .. " at " .. c.old.at .. ", " .. #c.old.code .. " lines")
+    return
+  end
+  if c.old == nil then
+    print("  only in new: " .. c.new.name .. " at " .. c.new.at .. ", " .. #c.new.code .. " lines")
+    return
+  end
+  print("  " .. c.old.name .. ": old at " .. c.old.at .. " (" .. #c.old.code .. " lines), new at " .. c.new.at .. " (" .. #c.new.code .. " lines)")
+  local i = first_difference(c.old.code, c.new.code)
+  if i > #c.old.code and i > #c.new.code then
+    print("    the same code; the data differs, and other code shares it")
+    return
+  end
+  for j = max(2, i - 1), min(max(#c.old.code, #c.new.code), i + 2) do
+    if get(c.old.code, j, "") == get(c.new.code, j, "") then
+      print("        " .. get(c.old.code, j, ""))
+    else
+      if j <= #c.old.code then print("    old " .. c.old.code[j]) end
+      if j <= #c.new.code then print("    new " .. c.new.code[j]) end
+    end
   end
 end
-if #old_lines ~= #new_lines then fail("DIFFERENT: " .. #old_lines .. " lines against " .. #new_lines) end
-print("SAME: " .. #old_lines .. " lines of disassembly, Roc's hashed names masked")
+
+-- `n` bytes of a file's memory from `addr`, as text (`objdump -s`), or ""
+-- with no file (a plant).
+function bytes_at(path, addr, n)
+  if path == "" then return "" end
+  local r = run({"objdump", "-s", "--start-address=" .. addr, "--stop-address=" .. (addr + n), real(path)}, {timeout_ms = 60000, tail = 200})
+  local s = ""
+  for l in lines(r.out) do
+    local w = words(l)
+    if #w >= 2 and re_match(l, "^ [0-9a-f]+ [0-9a-f]") then
+      local hexes = substitute(sub(l, #w[1] + 2, #w[1] + 37), " ", "", {missing_ok = true})
+      for i = 1, #hexes // 2 do s = s .. shown_byte(sub(hexes, 2 * i - 1, 2 * i)) end
+    end
+  end
+  return s
+end
+
+-- The largest immediate in a line, or 0.
+function largest_immediate(line)
+  local n = 0
+  for m in re_find_all(line, "\\$0x([0-9a-f]+)") do n = max(n, hex_value(m.group)) end
+  return n
+end
+
+function print_literal_pair(d, old_path, new_path)
+  print("  " .. d.old.name .. ": old at " .. d.old.at .. ", new at " .. d.new.at .. "; the same " .. (#d.old.code - 1) .. " instructions but for a literal's length:")
+  for a in d.literal do
+    print("    old " .. d.old.code[a.line])
+    print("    new " .. d.new.code[a.line])
+  end
+  -- the literal's length is the smallest of the changed immediates
+  local a = d.literal[1]
+  local old_n = 200
+  local new_n = 200
+  for x in d.literal do
+    old_n = min(old_n, largest_immediate(d.old.code[x.line]))
+    new_n = min(new_n, largest_immediate(d.new.code[x.line]))
+  end
+  local old_s = bytes_at(old_path, d.old.rips[a.load], old_n)
+  if old_s ~= "" then
+    print("    old \"" .. old_s .. "\"")
+    print("    new \"" .. bytes_at(new_path, d.new.rips[a.load], new_n) .. "\"")
+  end
+end
+
+function print_data_pair(d, old_path, new_path)
+  if has_key(d, "literal") then
+    print_literal_pair(d, old_path, new_path)
+    return
+  end
+  local a = data_text(d.old)
+  local b = data_text(d.new)
+  local i = 1
+  while i <= min(#a, #b) and sub(a, i, i) == sub(b, i, i) do i = i + 1 end
+  local from = max(1, i - 30)
+  print("  " .. d.old.name .. ": old at " .. d.old.at .. ", new at " .. d.new.at .. "; the same " .. (#d.old.code - 1) .. " instructions, data " .. #d.old.data .. " bytes against " .. #d.new.data .. ", from byte " .. i .. ":")
+  print("    old \"" .. sub(a, from, i + 50) .. "\"")
+  print("    new \"" .. sub(b, from, i + 50) .. "\"")
+end
+
+-- "1 body", "2 bodies".
+function bodies(n)
+  if n == 1 then return "1 body" end
+  return n .. " bodies"
+end
+
+-- Print a verdict, the files named for showing a literal ("" for none);
+-- true when it is SAME.
+function report(v, old_path, new_path)
+  local stray = ""
+  if v.stray > 0 then stray = "; " .. v.stray .. " stray jumps after a last ret, into the next symbol, left out" end
+  if #v.code == 0 and #v.data_only == 0 then
+    print("SAME: " .. v.procedures .. " procedures, each body on both sides (addresses, rip-relative offsets, jump targets and Roc's hashed names masked" .. stray .. ")")
+    return true
+  end
+  if stray ~= "" then print("(" .. sub(stray, 3) .. ")") end
+  if #v.code > 0 then
+    print("DIFFERENT CODE: " .. bodies(#v.code) .. " (" .. v.procedures .. " procedures old, " .. v.new_procedures .. " new)")
+    for c in take(v.code, 20) do print_code_pair(c) end
+    if #v.code > 20 then print("  ... and " .. (#v.code - 20) .. " more") end
+  else
+    print("SAME CODE: " .. v.procedures .. " procedures, each body's code on both sides")
+  end
+  if #v.data_only > 0 then
+    print("DATA ONLY: " .. bodies(#v.data_only) .. " whose code matches and whose data alone differs (judge them):")
+    for d in take(v.data_only, 20) do print_data_pair(d, old_path, new_path) end
+  end
+  return false
+end
+
+function compare_by_procedure()
+  local v = compare_listings(objdump_text(OLD, true), objdump_text(NEW, true))
+  if not report(v, OLD, NEW) then
+    if #v.code > 0 then fail("not the same code") end
+    fail("the same code; the data alone differs in " .. bodies(#v.data_only) .. ", shown above")
+  end
+end
+
+-- The verdict word a plant's name starts with, against what the comparison says.
+function plant_verdict(v)
+  if #v.code > 0 then return "code" end
+  if #v.data_only > 0 then return "data" end
+  return "same"
+end
+
+function self_test()
+  local cases = {}
+  for p in glob(PLANTS .. "/*.old.dis") do push(cases, strip_suffix(basename(p), ".old.dis")) end
+  sort(cases)
+  if #cases == 0 then fail("compare_machine_code self_test: no plants in " .. PLANTS) end
+  local wrong = 0
+  local seen = {}
+  for c in cases do
+    local v = compare_listings(read(PLANTS .. "/" .. c .. ".old.dis"), read(PLANTS .. "/" .. c .. ".new.dis"))
+    local want = sub(c, 1, find(c, "_") - 1)
+    local got = plant_verdict(v)
+    seen[want] = true
+    -- each plant also holds the rule it is for, so a pass is for the reason meant
+    local why = ""
+    if want == "code" and #v.code ~= 1 then why = #v.code .. " code differences, not 1" end
+    if want == "data" and #v.data_only ~= 1 then why = #v.data_only .. " data-only bodies, not 1" end
+    if c == "data_literal_length" and #v.data_only == 1 and not has_key(v.data_only[1], "literal") then why = "the length is not read as a literal's" end
+    if c == "data_crash_string" and #v.data_only == 1 and has_key(v.data_only[1], "literal") then why = "the string is read as a literal's length" end
+    if c == "same_boundary_jumps" and v.stray ~= 4 then why = v.stray .. " stray jumps left out, not 4" end
+    if why ~= "" then
+      print("compare_machine_code self_test: " .. c .. ": " .. why)
+      wrong = wrong + 1
+    elseif got ~= want then
+      print("compare_machine_code self_test: " .. c .. " says " .. got .. ", want " .. want .. ":")
+      report(v, "", "")
+      wrong = wrong + 1
+    end
+  end
+  for w in {"same", "code", "data"} do
+    if not has_key(seen, w) then fail("compare_machine_code self_test: no `" .. w .. "_` plant") end
+  end
+  if wrong > 0 then fail("compare_machine_code self_test: " .. wrong .. " plants wrong") end
+  print("compare_machine_code self_test: PASS (" .. #cases .. " plants: a move across modules and objdump's boundary jumps SAME; a changed instruction, a changed immediate and a reached trailing jump's new target caught; a changed crash string and a literal's new length data only)")
+end
+
+if SELF_TEST then
+  self_test()
+elseif OLD == "" or NEW == "" then
+  fail("compare_machine_code needs old=<file> new=<file> (or self_test=1)")
+elseif BY == "line" then
+  compare_by_line()
+elseif BY == "procedure" then
+  compare_by_procedure()
+else
+  fail("compare_machine_code: by=" .. BY .. " is neither `procedure` nor `line`")
+end

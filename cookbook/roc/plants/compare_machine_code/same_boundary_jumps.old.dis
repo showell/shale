@@ -1,0 +1,37 @@
+
+plant.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000001000 <roc__p1010aaaa1010aaaa1010aaaa1010aaaa>:
+    1000:	55                   	push   %rbp
+    1001:	48 8d 05 03 00 00 00 	lea    0x3(%rip),%rdi        # 100b <roc__p1010aaaa1010aaaa1010aaaa1010aaaa+0xb>
+    1008:	5d                   	pop    %rbp
+    1009:	0f 0b                	ud2
+    100b:	6f                   	outsl  %ds:(%rsi),(%dx)
+    100c:	76 65                	jbe    1080 <roc__rc_decref_3030cccc3030cccc3030cccc3030cccc+0x5f>
+    100e:	72 66                	jb     1080 <roc__rc_decref_3030cccc3030cccc3030cccc3030cccc+0x5f>
+    1010:	6c                   	insb   (%dx),%es:(%rdi)
+    1011:	6f                   	outsl  %ds:(%rsi),(%dx)
+    1012:	77 65                	ja     1080 <roc__rc_decref_3030cccc3030cccc3030cccc3030cccc+0x5f>
+    1014:	64                   	fs
+    1015:	00                   	(bad)
+
+0000000000001016 <roc__p2020bbbb2020bbbb2020bbbb2020bbbb>:
+    1016:	55                   	push   %rbp
+    1017:	48 89 e5             	mov    %rsp,%rbp
+    101a:	5d                   	pop    %rbp
+    101b:	c3                   	ret
+    101c:	e9 4a 00 00 00       	jmp    106b <roc__rc_decref_3030cccc3030cccc3030cccc3030cccc+0x4a>
+
+0000000000001021 <roc__rc_decref_3030cccc3030cccc3030cccc3030cccc>:
+    1021:	55                   	push   %rbp
+    1022:	5d                   	pop    %rbp
+    1023:	c3                   	ret
+    1024:	e9 30 00 00 00       	jmp    1059 <roc__rc_decref_4040dddd4040dddd4040dddd4040dddd+0x30>
+
+0000000000001029 <roc__rc_decref_4040dddd4040dddd4040dddd4040dddd>:
+    1029:	55                   	push   %rbp
+    102a:	5d                   	pop    %rbp
+    102b:	c3                   	ret

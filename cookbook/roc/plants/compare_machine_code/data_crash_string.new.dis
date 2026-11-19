@@ -1,0 +1,17 @@
+
+plant.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000002000 <roc__p9999aaaa9999aaaa9999aaaa9999aaaa>:
+    2000:	55                   	push   %rbp
+    2001:	48 8d 05 03 00 00 00 	lea    0x3(%rip),%rdi        # 200b <roc__p9999aaaa9999aaaa9999aaaa9999aaaa+0xb>
+    2008:	5d                   	pop    %rbp
+    2009:	0f 0b                	ud2
+    200b:	53                   	push   %rbx
+    200c:	71 75                	jno    2083 <roc__p7777abab7777abab7777abab7777abab+0x5>
+    200e:	61                   	(bad)
+    200f:	73 68                	jae    207b <roc__p7777abab7777abab7777abab7777abab+0x2>
+    2011:	2e                   	cs
+    2012:	78                   	(bad)
