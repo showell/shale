@@ -2,8 +2,8 @@
 -- effect named like a state, a question that returns no `Bool`, a name made
 -- only of vague words, and the other checks below. A finding is a question
 -- for the reader, not a verdict. The recipe reads the top-level definitions
--- and the members of module types (`Html := [].{ ... }`), never local ones,
--- from the syntax tree of Roc's own parser (cookbook/roc/parsed.shale), so
+-- and the members of module types (`Html := [].{ ... }`), and locals only for
+-- `short_name`, from the syntax tree of Roc's own parser (cookbook/roc/parsed.shale), so
 -- an annotation broken across lines and a `where` clause read as Roc reads
 -- them. Files that don't parse are listed after the findings, and then the
 -- run fails.
@@ -119,13 +119,21 @@
 --                 number, a `Str`, a `Bool`: `entry : F64`) holds nothing a
 --                 container could, so it passes. Fields in a local's
 --                 annotation are not read.
---   short_name    A top-level or member name, or a record field, of one
---                 letter (`w : F64`, `{ k : U64 }`). It is read far from where
---                 it is defined, and a local of the same letter shadows it. A
---                 field may be a coordinate (`x`, `y`, `z`, and `w` beside `x`
---                 and `y`), a colour's channel (`r`, `g`, `b`, and `a`
+--   short_name    A name of one letter (`w : F64`, `{ k : U64 }`, `p = w *
+--                 h`): a top-level or member name, a record field, and every
+--                 binding inside a definition, a local, a function's or a
+--                 lambda's parameter, a match arm's binding, a destructured
+--                 record's field and a `var` (past its `$`). A field or a
+--                 binding may be a coordinate (`x`, `y`, `z`, and `w` beside
+--                 `x` and `y`), a colour's channel (`r`, `g`, `b`, and `a`
 --                 beside them) or a triangle's corner (`a`, `b` and `c`, all
---                 three). Locals and lambda parameters are not checked.
+--                 three, a binding's from one record). A loop's variable may
+--                 be one letter too: a `for`'s binding, a `var` a `while`
+--                 tests, and the parameters of a one-line lambda that is the
+--                 direct argument of a list method (`xs.map(|x| x * 2)`,
+--                 `List.walk(xs, 0, |n, x| n + x)`; declared.shale's
+--                 LOOP_METHODS). A lambda over two lines, or handed to
+--                 anything else, names its parameters.
 --   worker_name   A name whose last word says only that it is a helper:
 --                 `_acc`, `_loop`, `_inner`, `_helper` or `_rec`
 --                 (`count_acc`). Name a recursive worker for the parameter
@@ -644,6 +652,7 @@ end
 
 for file in parsed.files do
   for found in where_name_findings(file, LANGUAGE_FIXED_NAMES) do report(file.path, found.line, "where_name", found.why) end
+  for found in short_binding_findings(file) do report(file.path, found.line, "short_name", found.why) end
 end
 
 -- `stale_doc_name` in the header. Each plant opens by naming its check, so

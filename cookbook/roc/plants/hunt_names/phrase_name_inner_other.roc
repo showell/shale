@@ -4,5 +4,5 @@ MdText := [].{
 	Width : { left : U64 }
 
 	at_most : U64 -> Budget
-	at_most = |n| { left: n }
+	at_most = |number| { left: number }
 }

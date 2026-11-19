@@ -1,9 +1,9 @@
 ## Quiet under the types for `phrase_name`: the checker shows an unannotated
 ## constructor gives its own type, and a `from_*` takes it.
 QuietPhraseNameInferred := [Made(U64)].{
-	at_step = |n| QuietPhraseNameInferred.Made(n + 1)
+	at_step = |number| QuietPhraseNameInferred.Made(number + 1)
 
-	from_made = |QuietPhraseNameInferred.Made(n)| n
+	from_made = |QuietPhraseNameInferred.Made(number)| number
 
 	is_eq : _
 }

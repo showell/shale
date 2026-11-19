@@ -1,7 +1,7 @@
 ## Under the types, `question` judges an unannotated function by what the
 ## checker infers: `is_ready` gives a number, not a `Bool`.
 QuestionInferred := [].{
-	is_ready = |n| n + 1
+	is_ready = |number| number + 1
 
 	has_room = |xs| List.len(xs) > 3
 }

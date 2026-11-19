@@ -15,7 +15,7 @@ Invite : {
 
 Time :: [].{
 	two : I64 -> Str
-	two = |n| Str.concat("0", n.to_str())
+	two = |number| Str.concat("0", number.to_str())
 }
 
 Key :: [].{
@@ -30,8 +30,8 @@ tag_name : Str
 tag_name = "p"
 
 add_two : U64 -> U64
-add_two = |n| {
-	one = n + 1
+add_two = |number| {
+	one = number + 1
 	two = one + 1
 	two
 }

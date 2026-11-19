@@ -30,6 +30,8 @@
 --                                 terms, and what a list's name says
 --   is_letter_of_set(name, siblings)
 --                                 a field's letter that `short_name` passes
+--   short_binding_findings(file)  `short_name`'s one-letter locals, parameters
+--                                 and match bindings
 --   reads_as_maker(def, ws, signature, facts, prepositions)
 --                                 what `phrase_name` passes as a maker
 --   file_definitions(f, src, known, facts)
@@ -524,6 +526,131 @@ function is_letter_of_set(name, siblings)
   if has_item({"x", "y", "z"}, name) or (name == "w" and has_key(siblings, "x") and has_key(siblings, "y")) then return true end
   if has_item({"a", "b", "c"}, name) and has_key(siblings, "a") and has_key(siblings, "b") and has_key(siblings, "c") then return true end
   return has_item({"r", "g", "b", "a"}, name) and has_key(siblings, "r") and has_key(siblings, "g") and has_key(siblings, "b")
+end
+
+-- The list methods whose one-line lambda is a loop's body, so its
+-- parameters are loop variables (`xs.map(|x| x * 2)`, `List.walk(xs, 0, |n,
+-- x| n + x)`).
+const LOOP_METHODS = {map = true, map2 = true, map3 = true, map_with_index = true, map_try = true, keep_if = true, drop_if = true, keep_oks = true, keep_errs = true, walk = true, walk_backwards = true, walk_until = true, walk_with_index = true, walk_try = true, any = true, all = true, count_if = true, find_first = true, find_last = true, find_first_index = true, find_last_index = true, sort_with = true, join_map = true, ["for_each!"] = true, ["for_each_try!"] = true, ["walk!"] = true, ["walk_try!"] = true}
+const PATTERN_HOLDERS = {args = true, field = true, ["p-record"] = true, ["p-tuple"] = true, ["p-list"] = true, ["p-tag"] = true, ["p-as"] = true}
+
+-- The last node of the subtree at `at`: the tree is in order, each subtree
+-- running on while the depth is deeper than its root's.
+function subtree_end(tree, at)
+  local stop = at
+  while stop < #tree and tree[stop + 1].depth > tree[at].depth do stop = stop + 1 end
+  return stop
+end
+
+-- Whether the lambda at `at` is a loop's body: on one line, and the direct
+-- argument of a list method (LOOP_METHODS), as a method call or a module's
+-- (`List.map(xs, |x| ...)`).
+function is_loop_lambda(tree, at)
+  local lambda = tree[at]
+  if lambda.line ~= lambda.end_line then return false end
+  local holder = tree[lambda.parent]
+  if holder.kind == "args" and tree[holder.parent].kind == "e-method-call" then
+    return has_key(LOOP_METHODS, re_replace(get(tree[holder.parent], "method", ""), "^\\.", ""))
+  end
+  if holder.kind ~= "e-apply" or holder.kids[1] == at then return false end
+  local callee = tree[holder.kids[1]]
+  if callee.kind ~= "e-ident" then return false end
+  local parts = split(get(callee, "raw", ""), ".")
+  return #parts == 2 and parts[1] == "List" and has_key(LOOP_METHODS, parts[2])
+end
+
+-- The name a node binds, `""` for none: a pattern's name, a record's pun
+-- (`{ x }`), a list's rest (`.. as rest`) and a `var`.
+function bound_name(tree, at)
+  local n = tree[at]
+  if n.kind == "p-ident" then return get(n, "raw", "") end
+  if n.kind == "field" and tree[n.parent].kind == "p-record" and #n.kids == 0 then return get(n, "name", "") end
+  if n.kind == "p-list-rest" or n.kind == "s-var" then return get(n, "name", "") end
+  return ""
+end
+
+-- The names bound beside the binding at `at` in one pattern: a lambda's
+-- parameters, a record's fields, a tuple's or a tag's parts. A record's
+-- field renamed (`{ y: q }`) binds its pattern, beside the record's others.
+function bound_siblings(tree, holder)
+  local out = {}
+  for k in tree[holder].kids do
+    local name = bound_name(tree, k)
+    if name ~= "" then out[name] = true end
+    if tree[k].kind == "field" then
+      for j in tree[k].kids do
+        local inner = bound_name(tree, j)
+        if inner ~= "" then out[inner] = true end
+      end
+    end
+  end
+  return out
+end
+
+-- Whether a definition at `at` is top-level or a module type's member, its
+-- ancestors all OUTER_KINDS: hunt_names judges its name as a definition.
+function is_outer_definition(tree, at)
+  local up = tree[at].parent
+  while up > 0 do
+    if not has_key(OUTER_KINDS, tree[up].kind) then return false end
+    up = tree[up].parent
+  end
+  return true
+end
+
+-- hunt_names' `short_name` for what a file binds inside its definitions: each
+-- local, parameter, match binding, record destructuring and `var` whose name
+-- (past a `$` or `_`, before a `!`) is one letter, as `{line, why}`. These
+-- pass: a loop variable (a `for`'s binding, a `var` a `while` tests, the
+-- parameters of a loop's one-line lambda, `is_loop_lambda`), a coordinate
+-- (`x`, `y`, `z`, and `w` beside `x` and `y`), a colour's channels (`r`, `g`,
+-- `b` together, and `a` beside them) and a triangle's corners (`a`, `b` and
+-- `c` destructured from one record). Top-level and member names are the
+-- definition's, judged there; a `$name = ...` reassigns its `var`.
+function short_binding_findings(file)
+  local tree = file.nodes
+  local tested = {}
+  local vars = {}
+  for i = 1, #tree do
+    local n = tree[i]
+    if n.kind == "s-while" and #n.kids > 0 then
+      for j = n.kids[1], subtree_end(tree, n.kids[1]) do
+        if tree[j].kind == "e-ident" then tested[get(tree[j], "raw", "")] = true end
+      end
+    end
+    if n.kind == "s-var" then vars[get(n, "name", "")] = true end
+  end
+  local found = {}
+  for i = 1, #tree do
+    local name = bound_name(tree, i)
+    local letters = re_replace(re_replace(name, "^[$_]+", ""), "!$", "")
+    if #letters == 1 then
+      local n = tree[i]
+      -- Up through the pattern to what binds it, and the pattern it sits in.
+      local holder = n.parent
+      if n.kind == "p-ident" and tree[holder].kind == "field" then holder = tree[holder].parent end
+      local binder = n.parent
+      while binder > 0 and has_key(PATTERN_HOLDERS, tree[binder].kind) do binder = tree[binder].parent end
+      local binder_kind = n.kind == "s-var" and "s-var" or tree[binder].kind
+      local siblings = n.kind == "s-var" and {} or bound_siblings(tree, holder)
+      local is_record = tree[holder].kind == "p-record"
+      local skip = false
+      if binder_kind == "s-decl" and (is_outer_definition(tree, binder) or (starts_with(name, "$") and has_key(vars, name))) then skip = true end
+      if binder_kind == "s-var" and has_key(tested, name) then skip = true end
+      if binder_kind == "s-for" then skip = true end
+      if binder_kind == "e-lambda" and is_loop_lambda(tree, binder) then skip = true end
+      if is_letter_of_set(letters, siblings) and not (has_item({"a", "b", "c"}, letters) and not is_record and not (has_key(siblings, "r") and has_key(siblings, "g") and has_key(siblings, "b"))) then skip = true end
+      if not skip then
+        local what = "the binding"
+        if binder_kind == "s-decl" then what = "the local" end
+        if binder_kind == "e-lambda" then what = "the parameter" end
+        if binder_kind == "branch" then what = "the match binding" end
+        if binder_kind == "s-var" then what = "the var" end
+        push(found, {line = n.line, why = what .. " `" .. name .. "` is one letter: name what it holds"})
+      end
+    end
+  end
+  return found
 end
 
 -- Whether a word reads as a past participle: an irregular one of

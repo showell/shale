@@ -28,4 +28,4 @@ merge_onto : List(Shape), U64 -> List(Shape)
 merge_onto = |out, at| out
 
 area : List(Point), { rows : List(U64) } -> U64
-area = |l, { rows }| l.len() + rows.len()
+area = |bytes, { rows }| bytes.len() + rows.len()

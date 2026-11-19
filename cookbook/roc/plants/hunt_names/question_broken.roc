@@ -2,4 +2,4 @@
 # annotation broken after its colon.
 is_ready :
 	Str -> Str
-is_ready = |s| s
+is_ready = |text| text

@@ -3,7 +3,7 @@ import QuietDocShelf
 
 ## Each stop at its cheapest place, as `cheapest_insert_by_building` does.
 cheapest_insert : U64 -> U64
-cheapest_insert = |n| n + QuietDocShelf.shelf_width
+cheapest_insert = |number| number + QuietDocShelf.shelf_width
 
 ## As wide as `QuietDocShelf.shelf_height`.
 # And `insert_best!`, gone too.

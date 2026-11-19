@@ -3,7 +3,7 @@
 app [loaded] { pf: platform "./platform/main.roc" }
 
 loaded : U64 -> U64
-loaded = |n| n
+loaded = |number| number
 
 saved : U64 -> U64
-saved = |n| n
+saved = |number| number

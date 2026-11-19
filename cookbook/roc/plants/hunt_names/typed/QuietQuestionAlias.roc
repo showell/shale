@@ -4,7 +4,7 @@ QuietQuestionAlias := [].{
 	Answer : Bool
 
 	is_short : Str -> Answer
-	is_short = |s| Str.count_utf8_bytes(s) < 4
+	is_short = |text| Str.count_utf8_bytes(text) < 4
 }
 
 expect QuietQuestionAlias.is_short("a")
