@@ -142,8 +142,9 @@ finding. A project's own words stay with the project and are passed in.
   verb, as `set_cookie` does.
 - [find_unused_imports.shale](find_unused_imports.shale) finds an import line whose
   name the file never uses (`unused_import`), since Roc doesn't warn of one:
-  no value, tag or type starts with the module's name or alias, and no name
-  the line exposes is used. A use in an annotation, a pattern or an expect
+  no value, tag or type starts with the module's name or alias, no name
+  the line exposes is used, and no entry of a platform header's `hosted`
+  block names it. A use in an annotation, a pattern or an expect
   counts; one in a comment or a string doesn't. Its `glob=` takes several
   globs separated by commas.
 

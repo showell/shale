@@ -77,6 +77,8 @@ function heads_used(tree, src)
     if node.kind == "e-ident" then name = node.raw end
     if node.kind == "e-tag" and (contains(node.raw, ".") or has_key(nominal_names, "" .. i)) then name = node.raw end
     if node.kind == "ty" and not has_key(union_tags, "" .. i) then name = node.name end
+    -- A platform header's `hosted { "sym": Host.f! }` entry uses its module.
+    if node.kind == "symbol-map-entry" then name = get(node, "module", "") end
     if node.kind == "p-tag" then
       local written = starts_with(node.raw, ".") and written_tag(src[node.line], node.col) or node.raw
       if contains(written, ".") then name = written end

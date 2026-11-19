@@ -21,7 +21,9 @@
 --              expect or an interpolation alike. A name the line exposes
 --              (`exposing [line!]`) and the file uses is a use of the line.
 --              A file import, `import "page.html" as page : Str`, is used
---              when the file refers to `page`. A name in a comment or a
+--              when the file refers to `page`. An entry of a platform
+--              header's `hosted { ... }` block uses the module it names
+--              (`"sym": Host.f!` uses `Host`). A name in a comment or a
 --              string is no use.
 --
 -- A method call never names its module, so a module whose only use is a
@@ -63,6 +65,7 @@ function self_test()
     {glob = at .. "unused_in_prose.roc", counts = {unused_import = 1}, says = {"`game.Polygon` is imported"}},
     {glob = at .. "unused_method_only.roc", counts = {unused_import = 1}, says = {"`game.Distance` is imported"}},
     {glob = at .. "unused_tag_namesake.roc", counts = {unused_import = 1}, says = {"`game.Other` is imported"}},
+    {glob = at .. "unused_beside_hosted.roc", counts = {unused_import = 1}, says = {"unused_beside_hosted.roc:24: unused_import: `Http` is imported"}},
     {glob = at .. "unused.roc," .. at .. "unused_alias.roc", counts = {unused_import = 2}},
     {glob = at .. "quiet_qualified.roc"},
     {glob = at .. "quiet_annotation.roc"},
@@ -73,6 +76,7 @@ function self_test()
     {glob = at .. "quiet_alias.roc"},
     {glob = at .. "quiet_interpolation.roc"},
     {glob = at .. "quiet_file_import.roc"},
+    {glob = at .. "quiet_hosted.roc"},
     {glob = at .. "broken/*.roc", stops = true, says = {"refused: "}},
   })
   return nil
