@@ -108,26 +108,28 @@ jobs:
       - uses: ./shale/.github/actions/roc-deps
 
       # Its build takes about two minutes, so the binary is cached by the
-      # commit above and the Zig; restored and saved apart, as unit-deps'
+      # commit above and the Zig, built for the baseline x86-64 CPU: a
+      # native build cached on one runner's CPU died of an illegal
+      # instruction (popcnt) on another's; restored and saved apart, as unit-deps'
       # Zig is, so a red tier still keeps it.
       - uses: actions/cache/restore@v6
         id: zig-ast-cache
         with:
           path: ~/tools/zig-ast
-          key: zig-ast-7ca0aab74d357e2fdde98f4ce1b22cc23f1d3387-${{ hashFiles('zig-ast/zig-version') }}
+          key: zig-ast-baseline-7ca0aab74d357e2fdde98f4ce1b22cc23f1d3387-${{ hashFiles('zig-ast/zig-version') }}
 
       - name: Install zig-ast
         if: steps.zig-ast-cache.outputs.cache-hit != 'true'
         working-directory: zig-ast
         run: |
           test "$(tr -d '[:space:]' < zig-version)" = "$(zig version)"
-          zig build --prefix ~/tools/zig-ast
+          zig build -Dcpu=baseline --prefix ~/tools/zig-ast
 
       - uses: actions/cache/save@v6
         if: steps.zig-ast-cache.outputs.cache-hit != 'true'
         with:
           path: ~/tools/zig-ast
-          key: zig-ast-7ca0aab74d357e2fdde98f4ce1b22cc23f1d3387-${{ hashFiles('zig-ast/zig-version') }}
+          key: zig-ast-baseline-7ca0aab74d357e2fdde98f4ce1b22cc23f1d3387-${{ hashFiles('zig-ast/zig-version') }}
 
       - name: zig-ast's header
         run: |
