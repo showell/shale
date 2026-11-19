@@ -19,20 +19,26 @@ use("build:lib.shale")
 -- faults below planted in a copy of c/ (`run_plants`), each caught by its
 -- `aim` tests.
 
-const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 14, ["c/tests/host_builtins/test_run_guards.c"] = 17}
+const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 14, ["c/tests/host_builtins/test_run_guards.c"] = 18}
 const HOST_BUILTINS_PLANTS = {
   {name = "an unconfined run is any program", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
    old = "    bool git = named && str_eq(base, S(\"git\"));", new = "    bool git = true;"},
   {name = "an unconfined ssh reaches any host", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
-   old = "    if (!host_unconfined_host(first)) return", new = "    if (0) return"},
+   old = "    if (!host_unconfined_host(hosts, first)) return", new = "    if (0) return"},
   {name = "an unconfined ssh takes any option", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
    old = "    if (str_starts_with(first, S(\"-\"))) return", new = "    if (0) return"},
   {name = "an unconfined copy reaches any host", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
-   old = "            if (!host_unconfined_host(host)) return", new = "            if (0) return"},
+   old = "            if (!host_unconfined_host(hosts, host)) return", new = "            if (0) return"},
+  {name = "no hosts file is every host", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_copy_s_hosts_are_the_hosts_file_s_and_none_without_one",
+   old = "    size_t from = 0;\n    while (from <= hosts.len) {", new = "    if (hosts.len == 0) return true;\n    size_t from = 0;\n    while (from <= hosts.len) {"},
+  {name = "a hosts file's bad line is taken", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_copy_s_hosts_are_the_hosts_file_s_and_none_without_one",
+   old = "        if (!host_unconfined_host_line(line)) return", new = "        if (0) return"},
   {name = "an unconfined scp takes any option", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
    old = "        if (!host_unconfined_named(flags, at(argv, i).s)) return", new = "        if (0) return"},

@@ -1,19 +1,21 @@
 // host_unconfined.c: `run`'s `unconfined = "tag: why"`, the programs `run`
 // starts outside the Landlock confinement (host_confine.c), because what
 // they need no rule allows: ssh's key files. There are four, each held to a
-// narrow shape: a `git push`, and `ssh`, `scp` and `rsync` to a host of
-// HOST_UNCONFINED_HOSTS alone (a deploy's). Every other program, and every
+// narrow shape: a `git push`, and `ssh`, `scp` and `rsync` to a host of the
+// hosts file alone (a deploy's). Every other program, and every
 // other shape of these, is refused; a `want` is beside the point, and the
 // run's record says `(unconfined: ...)`.
 //
 // Include host.c, host_confine.c and host_refusals.c first.
 
-// The one home of the hosts an unconfined `ssh`, `scp` or `rsync` may reach,
-// as the deploy scripts write them (roc-chat's tools/deploy.shale, roc-apps'
-// site/deploy.sh, angry-gopher's ops/deploy): `user@host`, and in a copy's
-// operand `user@host:path`. A host by another spelling (no user, a name for
-// the address, an `ssh://` URL) is another host, and refused.
-static const char *const HOST_UNCONFINED_HOSTS[] = {"steve@162.243.1.123"};
+// The hosts file, the one home of the hosts an unconfined `ssh`, `scp` or
+// `rsync` may reach: the box's own, beside the mounts file,
+// `~/.config/shale/hosts`, or the file SHALE_HOSTS names (a test's). One
+// host a line, `user@host`, as the deploy scripts write it (and in a copy's
+// operand `user@host:path`); `#` lines and blank ones are skipped. Shale
+// ships none: no file is no host, and a host by another spelling (no user,
+// a name for the address, an `ssh://` URL) is another host, refused.
+enum { HOST_UNCONFINED_HOSTS_MAX = 64 * 1024 };
 
 // git's own settings an unconfined push runs under, ahead of the script's
 // argv: no hook, no fsmonitor and no credential helper of the repository's
@@ -46,11 +48,67 @@ static bool host_unconfined_named(HostConfineArgs names, Str s) {
     return false;
 }
 
-// Whether `host` is one of HOST_UNCONFINED_HOSTS.
-static bool host_unconfined_host(Str host) {
-    HostConfineArgs hosts = {HOST_UNCONFINED_HOSTS, sizeof HOST_UNCONFINED_HOSTS / sizeof *HOST_UNCONFINED_HOSTS};
-    for (size_t i = 0; i < hosts.len; i++) {
-        if (str_eq(host, ((Str){at(hosts, i), strlen(at(hosts, i))}))) return true;
+// Whether `line`, trimmed, is a host's line: `user@host`, one `@` with text
+// on both sides, and no space, tab, `:` or `/`.
+static bool host_unconfined_host_line(Str line) {
+    size_t at_signs = 0;
+    size_t at_at = 0;
+    for (size_t i = 0; i < line.len; i++) {
+        uint8_t c = str_byte(line, i);
+        if (c == ' ' || c == '\t' || c == ':' || c == '/') return false;
+        if (c == '@') {
+            at_signs++;
+            at_at = i;
+        }
+    }
+    return at_signs == 1 && at_at > 0 && at_at + 1 < line.len;
+}
+
+// The hosts file's text into `*out`, each line checked: "" for none (no
+// SHALE_HOSTS and no ~/.config/shale/hosts). A SHALE_HOSTS that names no
+// file, a file that cannot be read and a line that is not a host's stop
+// the run, naming the file and the line.
+static STATUS_MUST_USE Status host_unconfined_hosts(Run *r, Pos pos, Str *out) {
+    Arena *a = r->ctx.values;
+    PathRun *pr = &builtin_files_of(r)->path;
+    *out = S("");
+    const char *pinned = getenv("SHALE_HOSTS"); // cstr: the environment's
+    const char *home = getenv("HOME"); // cstr: the environment's
+    Str path = S("");
+    if (pinned != NULL) {
+        path = (Str){pinned, strlen(pinned)};
+    } else if (home != NULL && str_starts_with((Str){home, strlen(home)}, S("/"))) {
+        TRY(paths_cat(pr, pos, (Str){home, strlen(home)}, S("/.config/shale/hosts"), S(""), &path));
+    } else {
+        return OK;
+    }
+    Str text = S("");
+    FileSystemErr e = file_system_read_file(a, os_str_own(path), HOST_UNCONFINED_HOSTS_MAX, &text);
+    if (e == FILE_SYSTEM_OUT_OF_MEMORY) return run_values_oom(r, pos);
+    if (e == FILE_SYSTEM_FILE_NOT_FOUND && pinned == NULL) return OK; // skip: no hosts file is no host allowed
+    if (e != FILE_SYSTEM_OK) return host_fail(r, pos, CLASS_HOST, S("`run`'s `unconfined`: the hosts file {s} cannot be read: {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(path), MESSAGE_FROM_HOST(file_system_err_name(e))));
+    size_t from = 0;
+    size_t n = 0;
+    while (from <= text.len) {
+        size_t to = path_part_end_at(text, from, '\n');
+        Str line = mounts_trim(str_sub(text, from, to), true);
+        from = to + 1;
+        n++;
+        if (line.len == 0 || str_byte(line, 0) == '#') continue;
+        if (!host_unconfined_host_line(line)) return host_fail(r, pos, CLASS_HOST, S("`run`'s `unconfined`: the hosts file {s}, line {s}, is not a host's: one `user@host` a line"), MESSAGE_ARGS(MESSAGE_FROM_HOST(path), MESSAGE_FROM_HOST(run_unum(r, n))));
+    }
+    *out = text;
+    return OK;
+}
+
+// Whether `host` is a line of the hosts file's text `hosts`.
+static bool host_unconfined_host(Str hosts, Str host) {
+    size_t from = 0;
+    while (from <= hosts.len) {
+        size_t to = path_part_end_at(hosts, from, '\n');
+        Str line = mounts_trim(str_sub(hosts, from, to), true);
+        from = to + 1;
+        if (line.len > 0 && str_eq(line, host)) return true;
     }
     return false;
 }
@@ -70,7 +128,7 @@ static bool host_unconfined_remote(Str s, Str *host) {
 }
 
 static STATUS_MUST_USE Status host_unconfined_no_host(Run *r, Pos pos, Str prog, Str host) {
-    return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` {s} goes only to a host of HOST_UNCONFINED_HOSTS (c/host/host_unconfined.c), not `{s}`"), MESSAGE_ARGS(MESSAGE_FROM_HOST(prog), MESSAGE_FROM_SCRIPT(host)));
+    return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` {s} goes only to a host of the hosts file (~/.config/shale/hosts, or SHALE_HOSTS's), not `{s}`"), MESSAGE_ARGS(MESSAGE_FROM_HOST(prog), MESSAGE_FROM_SCRIPT(host)));
 }
 
 // A local operand `p` of an unconfined copy, from `cwd`, held to the root
@@ -116,7 +174,7 @@ static STATUS_MUST_USE Status host_unconfined_local(Host *h, Run *r, Pos pos, St
 
 // A copy's operands, `argv` from `first`: two at least, each remote one to
 // an allowed host, each local one under the mounts, the last written.
-static STATUS_MUST_USE Status host_unconfined_operands(Host *h, Run *r, Pos pos, Str prog, Str cwd, SpawnStrs argv, size_t first) {
+static STATUS_MUST_USE Status host_unconfined_operands(Host *h, Run *r, Pos pos, Str prog, Str cwd, SpawnStrs argv, size_t first, Str hosts) {
     if (argv.len < first + 2) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` {s} takes a source and a destination after its options"), MESSAGE_ARGS(MESSAGE_FROM_HOST(prog)));
     for (size_t i = first; i < argv.len; i++) {
         Str s = at(argv, i).s;
@@ -124,7 +182,7 @@ static STATUS_MUST_USE Status host_unconfined_operands(Host *h, Run *r, Pos pos,
         if (str_starts_with(s, S("-"))) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` {s} takes its options before its operands, not {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(prog), MESSAGE_FROM_SCRIPT(s)));
         if (host_unconfined_remote(s, &host)) {
             if (str_starts_with(str_sub(s, host.len, s.len), S("::"))) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` {s} takes no rsync daemon's module (`host::module`), not {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(prog), MESSAGE_FROM_SCRIPT(s)));
-            if (!host_unconfined_host(host)) return host_unconfined_no_host(r, pos, prog, host);
+            if (!host_unconfined_host(hosts, host)) return host_unconfined_no_host(r, pos, prog, host);
         } else {
             TRY(host_unconfined_local(h, r, pos, prog, cwd, s, i + 1 == argv.len));
         }
@@ -133,23 +191,23 @@ static STATUS_MUST_USE Status host_unconfined_operands(Host *h, Run *r, Pos pos,
 }
 
 // `ssh <host> [command...]`: the host first, no option.
-static STATUS_MUST_USE Status host_unconfined_ssh(Run *r, Pos pos, SpawnStrs argv) {
+static STATUS_MUST_USE Status host_unconfined_ssh(Run *r, Pos pos, SpawnStrs argv, Str hosts) {
     if (argv.len < 2) return host_fail_plain(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` ssh names its host"));
     Str first = at(argv, 1).s;
     if (str_starts_with(first, S("-"))) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` ssh takes no option, not {s}: an option could name a program, a config or a hop"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(first)));
-    if (!host_unconfined_host(first)) return host_unconfined_no_host(r, pos, S("ssh"), first);
+    if (!host_unconfined_host(hosts, first)) return host_unconfined_no_host(r, pos, S("ssh"), first);
     return OK;
 }
 
 // `scp [-q -r -p] operands...`.
-static STATUS_MUST_USE Status host_unconfined_scp(Host *h, Run *r, Pos pos, Str cwd, SpawnStrs argv) {
+static STATUS_MUST_USE Status host_unconfined_scp(Host *h, Run *r, Pos pos, Str cwd, SpawnStrs argv, Str hosts) {
     HostConfineArgs flags = {HOST_UNCONFINED_SCP_FLAGS, sizeof HOST_UNCONFINED_SCP_FLAGS / sizeof *HOST_UNCONFINED_SCP_FLAGS};
     size_t i = 1;
     while (i < argv.len && str_starts_with(at(argv, i).s, S("-"))) {
         if (!host_unconfined_named(flags, at(argv, i).s)) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` scp takes -q, -r and -p, not {s}: another option could name a program, a config or a hop"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(at(argv, i).s)));
         i++;
     }
-    return host_unconfined_operands(h, r, pos, S("scp"), cwd, argv, i);
+    return host_unconfined_operands(h, r, pos, S("scp"), cwd, argv, i, hosts);
 }
 
 // Whether `s`, a short option bundle after its `-`, holds only
@@ -165,7 +223,7 @@ static bool host_unconfined_rsync_letters(Str s) {
 
 // `rsync [options] operands...`: HOST_UNCONFINED_RSYNC_*'s options, and
 // `-e ssh` or `--rsh=ssh` alone of a shell.
-static STATUS_MUST_USE Status host_unconfined_rsync(Host *h, Run *r, Pos pos, Str cwd, SpawnStrs argv) {
+static STATUS_MUST_USE Status host_unconfined_rsync(Host *h, Run *r, Pos pos, Str cwd, SpawnStrs argv, Str hosts) {
     HostConfineArgs longs = {HOST_UNCONFINED_RSYNC_LONG, sizeof HOST_UNCONFINED_RSYNC_LONG / sizeof *HOST_UNCONFINED_RSYNC_LONG};
     size_t i = 1;
     while (i < argv.len && str_starts_with(at(argv, i).s, S("-"))) {
@@ -187,7 +245,7 @@ static STATUS_MUST_USE Status host_unconfined_rsync(Host *h, Run *r, Pos pos, St
     for (size_t k = i; k < argv.len; k++) {
         if (str_starts_with(at(argv, k).s, S("rsync://"))) return host_unconfined_no_host(r, pos, S("rsync"), at(argv, k).s);
     }
-    return host_unconfined_operands(h, r, pos, S("rsync"), cwd, argv, i);
+    return host_unconfined_operands(h, r, pos, S("rsync"), cwd, argv, i, hosts);
 }
 
 // `git ... push ...`: no `-c` but `color.ui=never` (the git prelude's), no
@@ -200,7 +258,7 @@ static STATUS_MUST_USE Status host_unconfined_git(Run *r, Pos pos, SpawnStrs arg
         if (str_starts_with(w, S("--receive-pack")) || str_starts_with(w, S("--exec"))) return host_fail_plain(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` push takes no `--receive-pack` or `--exec`: each names a program it would start outside the confinement"));
         if (str_eq(w, S("-c")) && (i + 1 >= argv.len || !str_eq(at(argv, i + 1).s, S("color.ui=never")))) return host_fail_plain(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` push takes no `-c` but `color.ui=never`: a setting could name a program git starts outside the confinement"));
     }
-    if (!push_word) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` ({s}) is for a `git push`, or `ssh`, `scp` or `rsync` to the hosts of HOST_UNCONFINED_HOSTS; every other program runs confined to the mounts"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(why)));
+    if (!push_word) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` ({s}) is for a `git push`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(why)));
     return OK;
 }
 
@@ -225,16 +283,18 @@ static STATUS_MUST_USE Status host_run_unconfined(Host *h, Run *r, Pos pos, Spaw
     bool named = found && str_eq(base, reached);
     bool git = named && str_eq(base, S("git"));
     bool ssh_family = named && (str_eq(base, S("ssh")) || str_eq(base, S("scp")) || str_eq(base, S("rsync")));
-    if (!git && !ssh_family) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` ({s}) is for a `git push`, or `ssh`, `scp` or `rsync` to the hosts of HOST_UNCONFINED_HOSTS; every other program runs confined to the mounts"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(why)));
+    if (!git && !ssh_family) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` ({s}) is for a `git push`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(why)));
     for (size_t j = 0; j < env->names.len; j++) {
         Str k = at(env->names, j);
         if (!(git && str_eq(k, S("GIT_TERMINAL_PROMPT")))) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` {s} takes no `env` (git: but GIT_TERMINAL_PROMPT), not {s}: a variable could name a program it starts"), MESSAGE_ARGS(MESSAGE_FROM_HOST(base), MESSAGE_FROM_SCRIPT(k)));
     }
     TRY(host_confine_secrets_apart(h, r, pos, S("run")));
     *out = argv;
-    if (str_eq(base, S("ssh"))) return host_unconfined_ssh(r, pos, argv);
-    if (str_eq(base, S("scp"))) return host_unconfined_scp(h, r, pos, cwd, argv);
-    if (str_eq(base, S("rsync"))) return host_unconfined_rsync(h, r, pos, cwd, argv);
+    Str hosts = S("");
+    if (ssh_family) TRY(host_unconfined_hosts(r, pos, &hosts));
+    if (str_eq(base, S("ssh"))) return host_unconfined_ssh(r, pos, argv, hosts);
+    if (str_eq(base, S("scp"))) return host_unconfined_scp(h, r, pos, cwd, argv, hosts);
+    if (str_eq(base, S("rsync"))) return host_unconfined_rsync(h, r, pos, cwd, argv, hosts);
     TRY(host_unconfined_git(r, pos, argv, why));
     HostConfineArgs fixed = {HOST_UNCONFINED_GIT, sizeof HOST_UNCONFINED_GIT / sizeof *HOST_UNCONFINED_GIT};
     size_t n = argv.len + fixed.len;

@@ -297,7 +297,8 @@ TEST(ssh_reads_its_known_hosts_and_no_key_and_the_caches_are_the_build_mount_s) 
 }
 
 // `unconfined` runs a git push past the mounts, to a bare repository no
-// mount names, and a deploy's `ssh`, `scp` and `rsync` to the prod host,
+// mount names, and a deploy's `ssh`, `scp` and `rsync` to a host of a
+// planted hosts file (SHALE_HOSTS),
 // and nothing else: another program (one with a `push` among its words
 // too), a `-c`, a `--receive-pack`, another host, an ssh option, an scp
 // option, a local path outside the mounts, an rsync shell, option or daemon,
@@ -320,6 +321,11 @@ TEST(an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone) {
     EXPECT_EQ(buf_lit(&pb, ":/usr/bin:/bin"), OK);
     at(room, 0) = os_str_own(buf_view(&pb));
     x.lh.env = (SpawnStrs){path_env, 1};
+    ran_put(&x, "hosts", "# the deploys' hosts\n\ndeploy@example.com\n");
+    FileSystemCPath hosts_cp;
+    const char *hosts_c = NULL;
+    EXPECT_EQ(file_system_cstr(&hosts_cp, os_str_own(ran_at(&x, "hosts")), &hosts_c), FILE_SYSTEM_OK);
+    EXPECT_EQ(setenv("SHALE_HOSTS", hosts_c, 1), 0);
     guards_git_bare(&x, ran_at(&x, "outside.git"));
     ran_write(&x, "root/where.txt", ran_at(&x, "outside.git"));
     ran_run(&x, S("function c(a, o) return host(\"run\", a, o) end\n"
@@ -332,40 +338,41 @@ TEST(an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone) {
                   "print(attempt(c, {\"cp\", \"where.txt\", \"x\"}, o).error)\n"
                   "print(attempt(c, {\"cp\", \"push\", \"x\"}, o).error)\n"
                   "print(attempt(c, {\"ssh\", \"steve@example.org\", \"true\"}, o).error)\n"
-                  "print(attempt(c, {\"ssh\", \"-o\", \"ProxyCommand=x\", \"steve@162.243.1.123\"}, o).error)\n"
-                  "print(attempt(c, {\"ssh\", \"-F\", \"f\", \"steve@162.243.1.123\"}, o).error)\n"
-                  "print(attempt(c, {\"scp\", \"-S\", \"x\", \"where.txt\", \"steve@162.243.1.123:/tmp/x\"}, o).error)\n"
-                  "print(attempt(c, {\"scp\", \"where.txt\", \"other@162.243.1.123:/tmp/x\"}, o).error)\n"
-                  "print(attempt(c, {\"scp\", \"steve@162.243.1.123:/etc/hosts\", \"../x.txt\"}, o).error)\n"
-                  "print(attempt(c, {\"rsync\", \"-e\", \"ssh -o ProxyCommand=x\", \"where.txt\", \"steve@162.243.1.123:/tmp/\"}, o).error)\n"
-                  "print(attempt(c, {\"rsync\", \"--rsync-path=x\", \"where.txt\", \"steve@162.243.1.123:/tmp/\"}, o).error)\n"
-                  "print(attempt(c, {\"rsync\", \"-avz\", \"where.txt\", \"steve@162.243.1.123::mod\"}, o).error)\n"
-                  "print(attempt(c, {\"ssh\", \"steve@162.243.1.123\"}, {timeout_ms = 10000, tail = 3, unconfined = \"t: x\", env = {SSH_AUTH_SOCK = \"x\"}}).error)\n"
-                  "print(c({\"ssh\", \"steve@162.243.1.123\", \"true\"}, o).out)\n"
-                  "print(c({\"scp\", \"-q\", \"where.txt\", \"steve@162.243.1.123:/tmp/x\"}, o).out)\n"
-                  "print(c({\"rsync\", \"-rlt\", \"--delete\", \"--chmod=D755,F644\", \"-e\", \"ssh\", \"where.txt\", \"steve@162.243.1.123:/tmp/\"}, o).out)\n"
+                  "print(attempt(c, {\"ssh\", \"-o\", \"ProxyCommand=x\", \"deploy@example.com\"}, o).error)\n"
+                  "print(attempt(c, {\"ssh\", \"-F\", \"f\", \"deploy@example.com\"}, o).error)\n"
+                  "print(attempt(c, {\"scp\", \"-S\", \"x\", \"where.txt\", \"deploy@example.com:/tmp/x\"}, o).error)\n"
+                  "print(attempt(c, {\"scp\", \"where.txt\", \"other@example.com:/tmp/x\"}, o).error)\n"
+                  "print(attempt(c, {\"scp\", \"deploy@example.com:/etc/hosts\", \"../x.txt\"}, o).error)\n"
+                  "print(attempt(c, {\"rsync\", \"-e\", \"ssh -o ProxyCommand=x\", \"where.txt\", \"deploy@example.com:/tmp/\"}, o).error)\n"
+                  "print(attempt(c, {\"rsync\", \"--rsync-path=x\", \"where.txt\", \"deploy@example.com:/tmp/\"}, o).error)\n"
+                  "print(attempt(c, {\"rsync\", \"-avz\", \"where.txt\", \"deploy@example.com::mod\"}, o).error)\n"
+                  "print(attempt(c, {\"ssh\", \"deploy@example.com\"}, {timeout_ms = 10000, tail = 3, unconfined = \"t: x\", env = {SSH_AUTH_SOCK = \"x\"}}).error)\n"
+                  "print(c({\"ssh\", \"deploy@example.com\", \"true\"}, o).out)\n"
+                  "print(c({\"scp\", \"-q\", \"where.txt\", \"deploy@example.com:/tmp/x\"}, o).out)\n"
+                  "print(c({\"rsync\", \"-rlt\", \"--delete\", \"--chmod=D755,F644\", \"-e\", \"ssh\", \"where.txt\", \"deploy@example.com:/tmp/\"}, o).out)\n"
                   "print(attempt(c, {\"git\", \"-c\", \"core.sshCommand=x\", \"push\", out, \"master\"}, o).error)\n"
                   "print(attempt(c, {\"git\", \"push\", \"--receive-pack=x\", out, \"master\"}, o).error)\n"
                   "print(attempt(c, {\"git\", \"push\", out, \"master\"}, {timeout_ms = 10000, tail = 3, unconfined = \"t: x\", env = {GIT_SSH_COMMAND = \"x\"}}).error)\n"
                   "print(c({\"git\", \"push\", \"-q\", out, \"master\"}, o).code)\n"),
            ran_budgets());
+    EXPECT_EQ(unsetenv("SHALE_HOSTS"), 0);
     EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("0\t0\t0\ntrue\n"
-                                     "`run`'s `unconfined` (t: past the mounts) is for a `git push`, or `ssh`, `scp` or `rsync` to the hosts of HOST_UNCONFINED_HOSTS; every other program runs confined to the mounts\n"
-                                     "`run`'s `unconfined` (t: past the mounts) is for a `git push`, or `ssh`, `scp` or `rsync` to the hosts of HOST_UNCONFINED_HOSTS; every other program runs confined to the mounts\n"
-                                     "`run`'s `unconfined` ssh goes only to a host of HOST_UNCONFINED_HOSTS (c/host/host_unconfined.c), not `steve@example.org`\n"
+                                     "`run`'s `unconfined` (t: past the mounts) is for a `git push`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts\n"
+                                     "`run`'s `unconfined` (t: past the mounts) is for a `git push`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts\n"
+                                     "`run`'s `unconfined` ssh goes only to a host of the hosts file (~/.config/shale/hosts, or SHALE_HOSTS's), not `steve@example.org`\n"
                                      "`run`'s `unconfined` ssh takes no option, not -o: an option could name a program, a config or a hop\n"
                                      "`run`'s `unconfined` ssh takes no option, not -F: an option could name a program, a config or a hop\n"
                                      "`run`'s `unconfined` scp takes -q, -r and -p, not -S: another option could name a program, a config or a hop\n"
-                                     "`run`'s `unconfined` scp goes only to a host of HOST_UNCONFINED_HOSTS (c/host/host_unconfined.c), not `other@162.243.1.123`\n"
+                                     "`run`'s `unconfined` scp goes only to a host of the hosts file (~/.config/shale/hosts, or SHALE_HOSTS's), not `other@example.com`\n"
                                      "`run`'s `unconfined` scp: its local path ../x.txt is under neither the root nor a mount\n"
                                      "`run`'s `unconfined` rsync takes `-e ssh` alone of a remote shell: any other is a program it would start\n"
                                      "`run`'s `unconfined` rsync does not take --rsync-path=x: its options are HOST_UNCONFINED_RSYNC_LETTERS' and HOST_UNCONFINED_RSYNC_LONG's (c/host/host_unconfined.c)\n"
-                                     "`run`'s `unconfined` rsync takes no rsync daemon's module (`host::module`), not steve@162.243.1.123::mod\n"
+                                     "`run`'s `unconfined` rsync takes no rsync daemon's module (`host::module`), not deploy@example.com::mod\n"
                                      "`run`'s `unconfined` ssh takes no `env` (git: but GIT_TERMINAL_PROMPT), not SSH_AUTH_SOCK: a variable could name a program it starts\n"
-                                     "fake ssh steve@162.243.1.123 true\n\n"
-                                     "fake scp -q where.txt steve@162.243.1.123:/tmp/x\n\n"
-                                     "fake rsync -rlt --delete --chmod=D755,F644 -e ssh where.txt steve@162.243.1.123:/tmp/\n\n"
+                                     "fake ssh deploy@example.com true\n\n"
+                                     "fake scp -q where.txt deploy@example.com:/tmp/x\n\n"
+                                     "fake rsync -rlt --delete --chmod=D755,F644 -e ssh where.txt deploy@example.com:/tmp/\n\n"
                                      "`run`'s `unconfined` push takes no `-c` but `color.ui=never`: a setting could name a program git starts outside the confinement\n"
                                      "`run`'s `unconfined` push takes no `--receive-pack` or `--exec`: each names a program it would start outside the confinement\n"
                                      "`run`'s `unconfined` git takes no `env` (git: but GIT_TERMINAL_PROMPT), not GIT_SSH_COMMAND: a variable could name a program it starts\n"
@@ -379,6 +386,74 @@ TEST(an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone) {
     EXPECT_EQ(buf_lit(&want, " master (unconfined: t: past the mounts) -> exit 0"), OK);
     EXPECT(str_starts_with(at(x.lh.records, x.lh.records.len - 1), buf_view(&want)));
     ran_free(&x);
+}
+
+// The hosts file is the one list of an unconfined copy's hosts, and Shale
+// ships none: with no SHALE_HOSTS and no ~/.config/shale/hosts (a decoy home)
+// no host is allowed; a SHALE_HOSTS that names no file, and a line that is
+// not `user@host`, stop the run naming the file and the line. `ssh` is a fake
+// first on PATH, so nothing is reached.
+TEST(an_unconfined_copy_s_hosts_are_the_hosts_file_s_and_none_without_one) {
+    static Ran x;
+    guards_ran_with(&x, "", false);
+    guards_zig_fake(&x, "fakebin/ssh", "#!/bin/sh\necho \"fake $*\"\n");
+    static OsStr path_env[1];
+    SLICE_TYPE(EnvRoom, OsStr);
+    EnvRoom room = {path_env, 1};
+    Buf pb = buf_make(&x.host);
+    EXPECT_EQ(buf_lit(&pb, "PATH="), OK);
+    EXPECT_EQ(buf_str(&pb, ran_at(&x, "fakebin")), OK);
+    EXPECT_EQ(buf_lit(&pb, ":/usr/bin:/bin"), OK);
+    at(room, 0) = os_str_own(buf_view(&pb));
+    x.lh.env = (SpawnStrs){path_env, 1};
+    ran_put(&x, "home/.keep", "");
+    const char *old_home = getenv("HOME"); // cstr: the environment's
+    char home_room[PATH_MAX];
+    int kept = snprintf(home_room, sizeof home_room, "%s", old_home != NULL ? old_home : "");
+    EXPECT(kept >= 0);
+    FileSystemCPath home_cp;
+    const char *home_c = NULL;
+    EXPECT_EQ(file_system_cstr(&home_cp, os_str_own(ran_at(&x, "home")), &home_c), FILE_SYSTEM_OK);
+    EXPECT_EQ(unsetenv("SHALE_HOSTS"), 0);
+    EXPECT_EQ(setenv("HOME", home_c, 1), 0);
+    ran_run(&x, S("function c(a, o) return host(\"run\", a, o) end\n"
+                  "print(attempt(c, {\"ssh\", \"deploy@example.com\", \"true\"}, {timeout_ms = 10000, tail = 3, unconfined = \"t: x\"}).error)\n"),
+           ran_budgets());
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("`run`'s `unconfined` ssh goes only to a host of the hosts file (~/.config/shale/hosts, or SHALE_HOSTS's), not `deploy@example.com`\n"));
+    EXPECT_EQ(setenv("HOME", home_room, 1), 0);
+    ran_free(&x);
+
+    static Ran y;
+    guards_ran_with(&y, "", false);
+    // y's own fake first on PATH: x's folder is gone.
+    Buf pyb = buf_make(&y.host);
+    EXPECT_EQ(buf_lit(&pyb, "PATH="), OK);
+    EXPECT_EQ(buf_str(&pyb, ran_at(&y, "fakebin")), OK);
+    EXPECT_EQ(buf_lit(&pyb, ":/usr/bin:/bin"), OK);
+    at(room, 0) = os_str_own(buf_view(&pyb));
+    y.lh.env = (SpawnStrs){path_env, 1};
+    guards_zig_fake(&y, "fakebin/ssh", "#!/bin/sh\necho \"fake $*\"\n");
+    ran_put(&y, "bad", "deploy@example.com\ndeploy at example.com\n");
+    FileSystemCPath bad_cp;
+    FileSystemCPath none_cp;
+    const char *bad_c = NULL;
+    const char *none_c = NULL;
+    EXPECT_EQ(file_system_cstr(&bad_cp, os_str_own(ran_at(&y, "bad")), &bad_c), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_cstr(&none_cp, os_str_own(ran_at(&y, "none")), &none_c), FILE_SYSTEM_OK);
+    EXPECT_EQ(setenv("SHALE_HOSTS", bad_c, 1), 0);
+    ran_run(&y, S("host(\"run\", {\"ssh\", \"deploy@example.com\", \"true\"}, {timeout_ms = 10000, tail = 3, unconfined = \"t: x\"})\n"), ran_budgets());
+    EXPECT_EQ(y.ran, STOP);
+    EXPECT(str_starts_with(y.r.ctx.stop.message, S("`run`'s `unconfined`: the hosts file ")));
+    Str bad_end = S(", line 2, is not a host's: one `user@host` a line");
+    Str said = y.r.ctx.stop.message;
+    EXPECT(said.len > bad_end.len && str_eq(str_sub(said, said.len - bad_end.len, said.len), bad_end));
+    EXPECT_EQ(setenv("SHALE_HOSTS", none_c, 1), 0);
+    ran_run(&y, S("host(\"run\", {\"ssh\", \"deploy@example.com\", \"true\"}, {timeout_ms = 10000, tail = 3, unconfined = \"t: x\"})\n"), ran_budgets());
+    EXPECT_EQ(y.ran, STOP);
+    EXPECT(str_starts_with(y.r.ctx.stop.message, S("`run`'s `unconfined`: the hosts file ")));
+    EXPECT_EQ(unsetenv("SHALE_HOSTS"), 0);
+    ran_free(&y);
 }
 
 // The permission bits of the file at `rel`.
@@ -580,4 +655,4 @@ TEST_PART(run_guards, TEST_CASE(a_program_writes_and_reads_only_where_the_mounts
           TEST_CASE(stdout_secret_s_file_is_held_to_one_byte_past_its_cap_while_the_program_runs),
           TEST_CASE(job_wait_names_the_script_s_path_never_the_os_path),
           TEST_CASE(zig_ast_s_stderr_is_drained_while_it_answers_and_a_hung_one_stops_at_the_deadline), TEST_CASE(zig_ast_runs_confined_to_the_mounts),
-          TEST_CASE(ssh_reads_its_known_hosts_and_no_key_and_the_caches_are_the_build_mount_s), TEST_CASE(an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone));
+          TEST_CASE(ssh_reads_its_known_hosts_and_no_key_and_the_caches_are_the_build_mount_s), TEST_CASE(an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone), TEST_CASE(an_unconfined_copy_s_hosts_are_the_hosts_file_s_and_none_without_one));

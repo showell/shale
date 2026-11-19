@@ -257,8 +257,12 @@ has none of it):
   the rules, each recorded as `(unconfined: ...)`
   (`c/host/host_unconfined.c`): a `git push` (no `-c` but `color.ui=never`,
   no `--receive-pack` or `--exec`, its hooks, fsmonitor and credential
-  helpers off), and a deploy's `ssh`, `scp` and `rsync` to a host of
-  `HOST_UNCONFINED_HOSTS` alone, written `user@host` (`user@host:path` in a
+  helpers off), and a deploy's `ssh`, `scp` and `rsync` to a host of the
+  **hosts file** alone: `~/.config/shale/hosts`, beside the mounts file (or
+  the file `SHALE_HOSTS` names), one `user@host` a line, `#` lines and blank
+  ones skipped (`deploy@example.com`). Shale ships no host: no file, or no
+  line, is no host allowed; a line that is not `user@host` stops the run
+  naming it. A host is written as in the file (`user@host:path` in a
   copy): ssh with no option before its host, scp with `-q`, `-r` and `-p`
   alone, rsync with its listed options and `-e ssh` alone of a shell, no
   daemon module, and each local path under the root or a mount (a written
