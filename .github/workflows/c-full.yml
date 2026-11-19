@@ -1,0 +1,135 @@
+# C Shale's full tier, `shale c/build.shale full=1`, on demand only: dispatched
+# by cookbook/build_on_github.shale (`workflow=c-full.yml`), or `gh workflow
+# run c-full.yml -f ref=<ref>`, never on a push, a PR or a schedule. It
+# builds the first `shale` from C with no shale installed (c/docs/building.md,
+# "First install on a new machine"), installs it by c/install.shale, then runs
+# the full tier, its output kept as the run's artifact `c-full-log`.
+name: c-full
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "The shale branch, tag or commit to test"
+        default: master
+        required: true
+      plants:
+        description: "`none` runs no plants (a plain full=1); `all` runs every one (full=1 plants=all)"
+        type: choice
+        options: [none, all]
+        default: none
+
+concurrency:
+  group: c-full-${{ inputs.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    # GitHub's `bash` is `bash -eo pipefail`, so a tee keeps the tier's exit.
+    shell: bash
+
+jobs:
+  full:
+    # The box's Ubuntu, 24.04: its GCC 13 and the TCC whose bugs style.md
+    # steers around (0.9.27+git20200814), which the discipline check's canary
+    # holds.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      # The folder that holds the checkouts is the `repos` mount: shale's docs
+      # cite angry-gopher's and zig-ast's files (tools/doc_check.shale's
+      # REPOS; the Roc ones are optional and left out).
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          path: shale
+          # The git prelude's goldens and the plants' proofs read history.
+          fetch-depth: 0
+
+      - uses: actions/checkout@v7
+        with:
+          repository: showell/angry-gopher
+          ref: master
+          path: angry-gopher
+
+      # zig-ast, the program behind the Zig builtins (the host_zig block
+      # speaks to it), at a pinned commit, built below by the Zig its
+      # zig-version pins.
+      - uses: actions/checkout@v7
+        with:
+          repository: showell/zig-ast
+          ref: 7ca0aab74d357e2fdde98f4ce1b22cc23f1d3387
+          path: zig-ast
+
+      - name: Install TCC
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q tcc
+          tcc -v
+          gcc --version | head -1
+
+      # The pinned Zig on PATH, roc-ast and go-ast under ~/tools (and
+      # zig-webbox beside shale, which the full tier doesn't read).
+      - uses: ./shale/.github/actions/unit-deps
+
+      # The pinned Roc nightly and roc-types, for the Roc recipes' self-tests.
+      - uses: ./shale/.github/actions/roc-deps
+
+      - name: Install zig-ast
+        working-directory: zig-ast
+        run: |
+          test "$(tr -d '[:space:]' < zig-version)" = "$(zig version)"
+          zig build --prefix ~/tools/zig-ast
+          said=$(~/tools/zig-ast/bin/zig-ast --serve < /dev/null)
+          case "$said" in "zig-ast serve "*) echo "$said" ;; *) echo "zig-ast said: $said"; exit 1 ;; esac
+
+      # The runner's own mounts file, made here: the tools, the writable
+      # `build` and `scratch` folders the golden tests and recipes use, the
+      # checkouts' folder as `repos`, this checkout's cookbook, and the
+      # `localbin` c/install.shale links `shale` in. Git commits as a
+      # placeholder identity (the goldens pin their own).
+      - name: Mounts and git
+        run: |
+          mkdir -p ~/.config/shale ~/.local/bin ~/build ~/scratch ~/tools/shale/bin
+          cat > ~/.config/shale/mounts <<EOF
+          tools = $HOME/tools tools
+          localbin = $HOME/.local/bin
+          build = $HOME/build
+          scratch = $HOME/scratch
+          repos = $GITHUB_WORKSPACE ro
+          cookbook = $GITHUB_WORKSPACE/shale/cookbook ro
+          EOF
+          cat ~/.config/shale/mounts
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          git config --global user.name "shale c-full"
+          git config --global user.email "c-full@localhost"
+          git config --global init.defaultBranch master
+
+      # c/docs/building.md's "First install on a new machine", line for line:
+      # the first `shale`, by TCC and GCC alone, runs c/install.shale, which
+      # runs the fast tier and the smoke test and links ~/.local/bin/shale.
+      - name: First install
+        working-directory: shale
+        run: |
+          tcc -run c/gen_preludes.c
+          mkdir -p c/out/release
+          gcc -std=c11 -Wall -Wextra -Werror -Ic/foundation -O2 -Ic/out/gen -Ic c/shale.c -o c/out/release/shale
+          PATH="$PWD/c/out/release:$PATH" shale c/install.shale
+          command -v shale
+          shale --version
+
+      - name: Full tier
+        working-directory: shale
+        run: |
+          plants=""
+          if [ "${{ inputs.plants }}" = all ]; then plants="plants=all"; fi
+          start=$SECONDS
+          shale c/build.shale full=1 $plants 2>&1 | tee "$RUNNER_TEMP/c-full.log"
+          echo "full tier: $((SECONDS - start)) s of wall time" | tee -a "$RUNNER_TEMP/c-full.log"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: c-full-log
+          path: ${{ runner.temp }}/c-full.log
+          if-no-files-found: ignore
