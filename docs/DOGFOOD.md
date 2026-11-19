@@ -62,3 +62,4 @@ vehicle; these fixes are the yield.
 | 2026-11-18 | `git_log` can't be limited to paths | `{paths}` (frictions-2) |
 | 2026-11-18 | quadratic `s = s .. x` in a loop | not reproduced: steps, arena and time grow linearly to 200k appends, a field's too (frictions-2) |
 | 2026-11-18 | a `grep_tree` regex alternation of 8 literals costs 59M steps over c/, against 10M as 8 regexes and 0.3M as 8 literals: each start spawns a thread per branch, and the first-byte skip barely skips | open: needle lists are the workaround; a fix is a literal prefilter in c/script/regex.c |
+| 2026-11-19 | cookbook/roc/find_unused_imports.shale reports a platform's `import Host` as unused (roc-chat platform/main.roc), though every entry of the header's `hosted { ... }` block uses it: the recipe doesn't read the header's hosted block as uses. roc-chat's verify runs it over app/ only for now | open |
