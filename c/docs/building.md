@@ -45,8 +45,8 @@ installs it by `c/install.shale`, under a mounts file the workflow writes for
 itself, and runs the tier under the box's umask, 002, since the goldens
 freeze each file's mode. Beside the checkout it installs what the tier reaches for: TCC, the
 pinned Zig and zig-ast built by it, roc-ast, go-ast, the pinned Roc nightly
-and roc-types under `~/tools`, and angry-gopher and zig-ast checked out
-beside shale for the docs' citations. The tier's whole output is the run's
+and roc-types under `~/tools`, and every sibling `tools/doc_check.shale`
+names checked out beside shale for the docs' citations, as the box has them. The tier's whole output is the run's
 `c-full-log` artifact.
 
 | Build | Compiler | Tier | What it's for |

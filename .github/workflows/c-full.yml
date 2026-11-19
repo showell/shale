@@ -36,9 +36,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      # The folder that holds the checkouts is the `repos` mount: shale's docs
-      # cite angry-gopher's and zig-ast's files (tools/doc_check.shale's
-      # REPOS; the Roc ones are optional and left out).
+      # The folder that holds the checkouts is the `repos` mount, and the
+      # docs check resolves shale's citations in every sibling of
+      # tools/doc_check.shale's REPOS, as the box has them all: a citation
+      # found only in an optional one (`.shale/prelude.shale`, roc-apps') is
+      # gone without it.
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
@@ -51,6 +53,30 @@ jobs:
           repository: showell/angry-gopher
           ref: master
           path: angry-gopher
+
+      - uses: actions/checkout@v7
+        with:
+          repository: showell/roc-apps
+          ref: master
+          path: roc-apps
+
+      - uses: actions/checkout@v7
+        with:
+          repository: showell/roc-chat
+          ref: main
+          path: roc-chat
+
+      - uses: actions/checkout@v7
+        with:
+          repository: showell/roc-markdown
+          ref: main
+          path: roc-markdown
+
+      - uses: actions/checkout@v7
+        with:
+          repository: showell/chat-client
+          ref: main
+          path: chat-client
 
       # zig-ast, the program behind the Zig builtins (the host_zig block
       # speaks to it), at a pinned commit, built below by the Zig its
