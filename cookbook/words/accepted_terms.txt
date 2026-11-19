@@ -12,6 +12,7 @@ apos    -- HTML's entity
 argb    -- a colour's channels, by their letters
 ast     -- computing's word for a syntax tree
 atx     -- CommonMark's name for a `#` heading
+bool    -- Roc's own `Bool`, and `roc glue`'s `RocBool`
 br      -- HTML's element
 cc      -- email's own word for a copy's recipients
 cols    -- a grid's columns, beside `rows` (Steve, 2026-11-19: "it conveniently matches rows as four letters")
