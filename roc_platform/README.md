@@ -9,10 +9,16 @@ component of Shale, and its surface is generated from Shale's builtin table.
 
 - **The platform** (`platform/`) gives a Roc app Shale's effects
   (`Shale.roc`): `read!`, `write!`, `exists!`, `list!`, `glob!`,
-  `grep_all!`, `run!`, `print!`, `arg!` and `fail!`. A Roc app has no FFI
-  and makes no system call, so every effect it makes goes through one of
-  these. **Only effects are exported:** what Roc does itself (lines,
-  sorting, text) is Roc's.
+  `grep_all!`, `run!`, `print!`, `arg!`, `fail!` and `roc_tree!` (Roc's
+  own parser's tree of each file, through roc-ast: a node is a record, its
+  attributes a list of name and value). A Roc app has no FFI and makes no
+  system call, so every effect it makes goes through one of these. **Only
+  effects are exported:** what Roc does itself (lines, sorting, text) is
+  Roc's. **The one exception is the regular expressions**, which Roc has
+  none of: `re_find!`, `re_find_all!`, `re_lines!`, `re_match!` and
+  `re_replace!`, Shale's own, a match a record (`at`, `text`, `groups`) and
+  no match `NoMatch`. A hosted function is effectful in Roc, so a Roc
+  function that calls one is effectful too.
 - **The host** (`host/host.c`) is C Shale itself: it includes `c/shale.c`
   whole, so the command line, the mounts, the preludes, the budgets, the
   report and the exit code are `shale`'s. What it runs is a small Shale
@@ -80,7 +86,8 @@ prototypes to the table, and has GCC read `host.c` with `-Werror`.
     shale roc_platform/run.shale script=roc_platform/examples/count_lines.roc file=README.md
 
 Run this from the shale checkout's root. `run.shale` builds the script with
-the pinned Roc (`roc-version`, `--opt=dev`) into an archive and links it
+the pinned Roc (`roc-version`, `--opt=dev`, or `--opt=speed` with
+`opt=speed`) into an archive and links it
 with the host's object. The host's object is all of C Shale, compiled once
 with `gcc -O2` (about 25 s). The launcher then runs the program in this
 root. The object and each script's program are cached by content hash under
@@ -103,6 +110,31 @@ build. It needs the pinned Roc and builds the
 host's object, so it runs when a Roc build is asked for, not in the tiers.
 
 `tools/measure.shale` times the builds and the runs.
+
+## The ports
+
+**`cookbook/roc/find_unclear_names/find_unclear_names.roc`** is the first
+real port: cookbook/roc/find_unclear_names.shale in Roc, with its arguments,
+its output, its stops, its exit code and its self-test (`self_test=1` runs
+the original's plants against the port, each through this launcher). The
+Shale original stays beside it. `compare_with_original.shale`, in the same
+folder, holds the two to each other line for line and exit code for exit
+code: each plant row, both self-tests, and roc-chat's app, roc-markdown's
+package and roc-apps' Safari (`opt=speed`, `runs=N`).
+
+Measured on 2026-11-19 (2 cores; the fastest of 3; the launcher's whole
+wall time, the original's as `shale` runs it):
+
+| tree | Shale | Roc, dev | Roc, `--opt=speed` |
+|---|---|---|---|
+| roc-chat app (153 files) | 0.73 to 0.76 s | 0.79 s | 0.55 s |
+| roc-markdown package (28 files) | 0.17 to 0.18 s | 0.20 s | 0.13 s |
+| roc-apps Safari (212 files) | 1.27 to 1.37 s | 1.35 s | 0.93 s |
+| a plant (one file) | 10 to 15 ms | 30 to 40 ms | |
+
+The port's own builds: 1.2 to 1.3 s for `--opt=dev` (cold or after a
+one-line edit), 17 s for `--opt=speed`, beside the host's object once per
+change to `c/` (25 to 50 s).
 
 ## What the spike measured
 
@@ -149,5 +181,5 @@ value, a tag union with payloads as an argument and as an answer, and a
 - The Roc's arena has its own budget, set to the run's `arena_bytes`,
   beside the values' arena.
 - The host's cache key ignores uncommitted edits under `c/`.
-- A script must be one file, and there is no helper library yet (a pure-Roc
-  `Text` module is next).
+- A script must be one file, and there is no helper library: a port writes its
+  own text helpers (a `Text` module is undecided).

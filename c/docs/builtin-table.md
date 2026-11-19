@@ -48,8 +48,9 @@ because Roc has none (Steve, 2026-11-19), listed in
 always effectful (`=>`), so a Roc function that calls one is effectful too.
 An exported effect adds `roc` (its declaration), `roc_params`
 (its arguments' names), `roc_doc`, `values` (the outcomes that are values:
-every other one is a stop) and its `driver` lines. Ten are exported now;
-the other 76 effects are candidates, each a table entry away.
+every other one is a stop) and its `driver` lines. Sixteen are exported
+now (eleven effects and the five regular expressions); the other 75 effects
+are candidates, each a table entry away.
 
 ## Why a text file read by Shale
 
