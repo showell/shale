@@ -171,12 +171,11 @@ jobs:
           command -v shale
           shale --version
 
-      # The box's umask, 002: the goldens freeze each file's mode, and the
-      # runner's 022 makes a folder 755 where the box's is 775.
+      # The runner's own umask, 022: the golden tests set theirs
+      # (tests/golden.shale).
       - name: Full tier
         working-directory: shale
         run: |
-          umask 0002
           plants=""
           if [ "${{ inputs.plants }}" = all ]; then plants="plants=all"; fi
           start=$SECONDS

@@ -42,8 +42,8 @@ dispatches it and returns, and `run=<id>` reads its verdict later, with the
 tier's `PASS full` and wall time. The runner starts with no `shale`: it
 builds the first one as "First install on a new machine" below says and
 installs it by `c/install.shale`, under a mounts file the workflow writes for
-itself, and runs the tier under the box's umask, 002, since the goldens
-freeze each file's mode. Beside the checkout it installs what the tier reaches for: TCC, the
+itself, and runs the tier under the runner's own umask, 022 (the golden
+tests set their own, below). Beside the checkout it installs what the tier reaches for: TCC, the
 pinned Zig and zig-ast built by it, roc-ast, go-ast, the pinned Roc nightly
 and roc-types under `~/tools`, and every sibling `tools/doc_check.shale`
 names checked out beside shale for the docs' citations, as the box has them. The tier's whole output is the run's
@@ -71,8 +71,9 @@ tests/golden.shale bin=<path>` runs them under any binary; `shale
 tests/golden.shale freeze=1` rebuilds them from `bin` (the release build
 unset), and refuses a changed case that `refreeze=` does not name: a
 deliberate change refreezes the cases it names, and its commit says why for
-each. Their run's folder is padded to a fixed length, so they hold on any
-box.
+each. Their run's folder is padded to a fixed length, and they run under
+umask 002 whatever the caller's (tests/golden.shale sets it), so they hold
+on any box.
 
 **The frozen outputs** (`c/tests/frozen/`, c/build/lib.shale's "Frozen
 outputs") hold what the vm, host_text and host_zig blocks' scripts print
