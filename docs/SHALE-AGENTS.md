@@ -230,7 +230,10 @@ has none of it):
   `perl`: Shale is the script), a text tool (`grep`, `sed`, `cat`, `head`,
   ...: the builtins do it), a wrapper (`env`, `timeout`, `xargs`, ...: run
   the program itself), and a program by a path git does not track, unless
-  it is under a ` tools` mount (a toolchain's install).
+  it is under a ` tools` mount (a toolchain's install). A program is
+  refused by its own name and by the name of the file it reaches, every
+  link followed (`tool`, which is `bash`). An `env` that sets PATH, an
+  `LD_` name, BASH_ENV or ENV needs a want too: each picks what runs.
   A program runs in a process group of its own, and when it exits, what it
   left running there gets TERM, 2 seconds, then KILL before `run` returns:
   a server meant to outlive the call is a job (`job_start`, below).

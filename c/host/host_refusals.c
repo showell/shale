@@ -112,6 +112,23 @@ static const HostRefusedGroup *host_group_of(HostRefusedGroups groups, Str name)
     return NULL;
 }
 
+// Refuses, without a want, an `env` name that changes which program runs or
+// what it loads before its own code: PATH, LD_*, BASH_ENV and ENV.
+// DRAGON: a refused program by its environment. The guards read argv[0],
+// so `env = {PATH = "d"}` with `d/git` a link to a shell ran the shell as
+// `git`, and LD_PRELOAD ran any library's code in any allowed program.
+// REMEDY: those names need a want, as the programs they would reach do.
+// test_run_guards' an_env_that_picks_the_program_needs_a_want plants each.
+static STATUS_MUST_USE Status host_refuse_env(Run *r, Pos pos, Str who, PathsStrs names) {
+    for (size_t i = 0; i < names.len; i++) {
+        Str k = at(names, i);
+        if (str_eq(k, S("PATH")) || str_eq(k, S("BASH_ENV")) || str_eq(k, S("ENV")) || str_starts_with(k, S("LD_"))) {
+            return host_fail(r, pos, CLASS_REFUSED, S("`{s}`'s `env` {s} changes which program runs, or what it loads before its own code; {{want = \"tag: why\"}} to set it anyway"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(k)));
+        }
+    }
+    return OK;
+}
+
 // Whether `argv0`, an absolute path, is inside a mount marked ` tools`.
 static bool host_under_tools_mount(const Host *h, Str argv0) {
     for (size_t k = 0; k < h->paths.mounts.len; k++) {

@@ -295,7 +295,31 @@ TEST(each_kind_of_refused_program_is_refused_by_its_other_names) {
     ran_free(&x);
 }
 
-TEST_PART(run_guards, TEST_CASE(a_refused_program_by_another_name_is_refused_by_the_one_it_reaches),
+// `env = {PATH = ...}` would pick a shell named `git`; LD_PRELOAD loads code
+// into any program. Each needs a want, for run and job_start alike.
+TEST(an_env_that_picks_the_program_needs_a_want) {
+    static Ran x;
+    guards_ran_with(&x, "", false);
+    ran_run(&x, S("function f(a, o) return host(\"run\", a, o) end\nfunction j(a, o) return host(\"job_start\", a, o) end\n"
+                  "for k in {\"PATH\", \"LD_PRELOAD\", \"LD_LIBRARY_PATH\", \"BASH_ENV\", \"ENV\"} do\n"
+                  "  local e = {}\n  e[k] = \"decoy\"\n"
+                  "  print(attempt(f, {\"true\"}, {timeout_ms = 5000, tail = 1, env = e}).error)\nend\n"
+                  "print(attempt(j, {\"true\"}, {log = \"j.log\", env = {PATH = \"decoy\"}}).error)\n"
+                  "print(host(\"run\", {\"true\"}, {timeout_ms = 5000, tail = 1, env = {LANG = \"C\"}}).code)\n"),
+           ran_budgets());
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("`run`'s `env` PATH changes which program runs, or what it loads before its own code; {want = \"tag: why\"} to set it anyway\n"
+                                     "`run`'s `env` LD_PRELOAD changes which program runs, or what it loads before its own code; {want = \"tag: why\"} to set it anyway\n"
+                                     "`run`'s `env` LD_LIBRARY_PATH changes which program runs, or what it loads before its own code; {want = \"tag: why\"} to set it anyway\n"
+                                     "`run`'s `env` BASH_ENV changes which program runs, or what it loads before its own code; {want = \"tag: why\"} to set it anyway\n"
+                                     "`run`'s `env` ENV changes which program runs, or what it loads before its own code; {want = \"tag: why\"} to set it anyway\n"
+                                     "`job_start`'s `env` PATH changes which program runs, or what it loads before its own code; {want = \"tag: why\"} to set it anyway\n"
+                                     "0\n"));
+    EXPECT_EQ(x.r.host_runs, 1);
+    ran_free(&x);
+}
+
+TEST_PART(run_guards, TEST_CASE(an_env_that_picks_the_program_needs_a_want), TEST_CASE(a_refused_program_by_another_name_is_refused_by_the_one_it_reaches),
           TEST_CASE(each_kind_of_refused_program_is_refused_by_its_other_names), TEST_CASE(copy_mode_gives_a_copy_its_source_s_bits_and_a_read_only_mount_refuses_it),
           TEST_CASE(a_nul_in_an_argument_an_env_a_secrets_name_or_a_secret_is_refused_before_any_guard),
           TEST_CASE(a_git_that_cannot_start_is_said_not_taken_for_a_program_it_does_not_track),

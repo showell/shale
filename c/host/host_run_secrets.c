@@ -51,6 +51,7 @@ static STATUS_MUST_USE Status host_guard_program(Host *h, Run *r, Pos pos, const
     for (size_t i = 0; i < words.len; i++) at(words, i) = at(p->argv, i).s;
     PathsStrs argv = {words.ptr, words.len};
     TRY(paths_refuse_secret_args(&h->paths, &rs->path, pos, p->who, argv, *cwd, p->env->names, p->env->values));
+    if (!p->has_want) TRY(host_refuse_env(r, pos, p->who, p->env->names));
     return host_refuse(h, r, pos, p->who, at(p->argv, 0), *cwd, p->has_want);
 }
 
