@@ -4,16 +4,17 @@
 the harness collects is frozen in `tests/golden/` with the output a C
 `shale` gave it, and a binary is held to that output byte for byte:
 
-    cd ~/showell_repos/shale && shale tests/golden.shale [bin=<path>]
-    cd ~/showell_repos/shale && shale tests/golden.shale freeze=1 [refreeze=<id>,<id>]
+    cd <shale> && shale tests/golden.shale [bin=<path>]
+    cd <shale> && shale tests/golden.shale freeze=1 [refreeze=<id>,<id>]
 
 The run (`tests/harness/run.shale`) runs every case under `bin`
 (`c/out/release/shale`, the C build under test, unset) in a work folder,
 `base=`: unset, this checkout's own, `build:golden/<checkout's folder>-<8
 hex digits of its real path's SHA-256>` (tests/golden.shale's
-`checkout_base`), so two checkouts' runs never share one. It prints each
-case that fails with its first differing line, then the count. A second
-golden run with the same base stops before it touches anything. The C build's full tier runs it (`c/build.shale full=1`).
+`checkout_base`), so each checkout's runs have a folder of their own. It
+prints each case that fails with its first differing line, then the count.
+A second golden run with the same base stops before it touches anything.
+The C build's full tier runs it (`c/build.shale full=1`).
 tests/golden.shale's header has the arguments of both.
 
 **Its functions are a library**, `tests/harness/lib.shale`, which the run
@@ -22,14 +23,14 @@ tests/golden.shale launches each: it writes `c/out/golden.mounts`, naming
 this checkout's `tests/harness` as `harness` beside the `build`, `tools`
 and `scratch` mounts it was given, and runs the body under it.
 
-The cookbook's self-tests are not frozen: the C full tier runs them live
-under the binary (`c/build.shale`'s `cookbook_self_tests`, as Zig's
-`cookbook-test` step does), so a recipe and its self-test change together.
+The cookbook's self-tests run live: the C full tier runs them under the
+binary (`c/build.shale`'s `cookbook_self_tests`), so a recipe and its
+self-test change together.
 
 ## The inputs
 
-The freeze collects them as it starts, so an input added to a check is
-frozen by the next freeze with no list to keep:
+The freeze collects them as it starts, so the next freeze picks up an
+input added to a check:
 
 - **zig-tests and prelude-tests:** every Shale source a Zig test hands to a
   runner helper (`expectOutput`, `expectStop`, `once` and the others in
@@ -72,8 +73,7 @@ words, `[--budget reads=3]`. Two more lines serve any of them:
   step gets the harness's alone). Each line is `name = <path> [words]`, the
   path below the run's work folder with `root` or `scratch` first. The
   harness refuses any other path, `..`, a `tools` mount and the harness's
-  own names, so an input's mount reaches only the run's fresh folders, never
-  a real one: `store/store.mounts`'s secrets mount is a folder the fixture
+  own names, so an input's mount reaches only the run's fresh folders: `store/store.mounts`'s secrets mount is a folder the fixture
   plants.
 
 The ones that reach past the box's own folders stop before they do or
@@ -87,7 +87,7 @@ tests share is one input.
 Every run is in a fresh folder at one fixed path, with one mounts file
 (`cookbook`, copied from this checkout; `tools`; `scratch`, a folder beside
 the root) and one environment. `SHALE_NOW` pins `now()`, git's dates and
-identity are pinned, there is no user prelude, and HOME and PATH are fixed.
+identity are pinned, the user prelude is off, and HOME and PATH are fixed.
 The umask is 002 whatever the caller's: tests/golden.shale sets it before
 the run or the freeze starts, so the harness's own folders and every case
 inherit it, and a mode frozen on the box holds on a 022 machine.
@@ -103,16 +103,16 @@ kind, mode and bytes (a git index by what it stages, below).
 machine` stop, which hangs on the same layouts. An input that observes them
 is **judged by class**: its frozen run stops on the arena, kept or machine
 budget, or its source reads `arena_bytes` outside a comment. The freeze
-finds these from the run and the source, never from a list, and says so in
-the case's `case.json`. Its stop's class, place and message are held
+finds these from the run and the source, and says so in the case's
+`case.json`. Its stop's class, place and message are held
 still; the digits of its `── used:` and `── steps:` lines and its stop's
 `(N steps)` are let go, and, when it reads `arena_bytes`, every digit of
 its output.
 
-## What a run does not repeat, and how it is held anyway
+## What changes from run to run, and how it is held anyway
 
-Three things a binary's runs do not repeat from one run to the next, and
-how the harness lets each go, so the inputs they touch are still judged:
+Three things change from one run of a binary to the next. The harness
+masks each, so the inputs they touch are still judged:
 
 - **`fresh_dir`'s random names.** The Linux prelude names its folder
   `<prefix>.XXXXXX`, mktemp's six characters from `[A-Za-z0-9]`. For the
@@ -135,23 +135,23 @@ how the harness lets each go, so the inputs they touch are still judged:
 ## The golden cases
 
 **The run's folder is padded to one length on every box.** A run's step
-counts hang on the lengths of the paths it is handed (a prelude scans them;
-18 cases moved when the base moved), so the run and the freeze each run in
+counts hang on the lengths of the paths it is handed (a prelude scans
+them), so the run and the freeze each run in
 a folder below their base whose real path is `WORK_PATH_BYTES` (160) bytes
-long (`padded_base`, tests/harness/lib.shale): folders named by `p`s, 63 at
-a time, since a store name holds at most 96. No symbolic link is used,
-since the file system follows none. A base whose real path is past 158 bytes is
+long (`padded_base`, tests/harness/lib.shale): real folders named by `p`s,
+63 at a time, since a store name holds at most 96 and the file system
+follows no symbolic link. A base whose real path is past 158 bytes is
 refused, naming the limit. So the goldens hold from GitHub's /home/runner,
 a cloud's /root or a laptop alike.
 
-**A case** is `tests/golden/<id>/`, its id from its input's origin, never a
-run's numbering, so a regeneration diffs cleanly
+**A case** is `tests/golden/<id>/`, its id from its input's origin, so a
+regeneration diffs cleanly
 (`src/script/interp_test.zig:192`, in legacy_zig/, is `zig-tests-script-interp_test-192`,
 `tests/inputs/store/store_budgets.shale [--budget reads=3]` is
 `store-store_budgets-budget-reads-3`). A doc block's id is its doc and the
-first 8 hex digits of its text's SHA-256, never its line
-(`docs-SHALE-AGENTS-1a2b3c4d`), so a paragraph added above it renames
-nothing; two blocks of a doc whose digits collide take `-2`, `-3` in the
+first 8 hex digits of its text's SHA-256
+(`docs-SHALE-AGENTS-1a2b3c4d`), so a paragraph added above it keeps its
+name; two blocks of a doc whose digits collide take `-2`, `-3` in the
 doc's order (`collect_docs`). Its origin in the manifest and `case.json`
 keeps the line, as of the last freeze. A doc block whose text changes is a
 new case, and its old one is gone: the freeze adds the new one and refuses
@@ -179,20 +179,20 @@ files copied to `<base>/case`, under the harness's mounts and pinned
 environment. It is masked, and the golden file holds the masked form: the
 `── time:` line out, `fresh_dir`'s names numbered, and, for an input judged
 by class, the numbers `#`, so what is frozen is its stop's class, place and
-message. Three masks more make a golden file the box's no more: the base's
+message. Three masks more make a golden file portable: the base's
 path is `{base}` and the tools mount's `{tools}`, a folder's size in
 `files` is `-` (the filesystem's), and a file's size is that of its masked
 bytes.
 
 ## The freeze
 
-    cd ~/showell_repos/shale && shale tests/golden.shale freeze=1 [refreeze=<id>,<id>]
+    cd <shale> && shale tests/golden.shale freeze=1 [refreeze=<id>,<id>]
 
 It runs every input twice under `bin` (`c/out/release/shale` unset) as the
 run does; an input whose two runs differ is nondeterministic and left out,
 with the line they differ at, and so is each origin in
-`tests/harness/freeze.shale`'s `LEFT_OUT`, with why; it collects no
-cookbook self-test. It builds the new goldens in its padded folder under
+`tests/harness/freeze.shale`'s `LEFT_OUT`, with why. The cookbook's
+self-tests stay live. It builds the new goldens in its padded folder under
 its base (the run's, this checkout's own unset) first, and writes them only when no case's expected output
 changed or went but those `refreeze=` names: **a re-freeze is a deliberate
 act, a case at a time**, and its commit says why for each case. A new case

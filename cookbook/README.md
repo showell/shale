@@ -5,8 +5,8 @@ Most you run, with their values on the launch line; a few are libraries,
 which a script loads with `use("cookbook:<path>")` and then calls. A recipe
 you run is named for what it does, verb first (`check_disk_space.shale`); a
 library is named for what it holds (`merge_conflicts.shale`).
-`check_recipe_names.shale` holds every recipe to that, and C's full tier
-(`shale c/build.shale full=1`) runs it.
+`check_recipe_names.shale` holds every recipe to that in C's full tier
+(`shale c/build.shale full=1`).
 
 The launches below go through the `cookbook` mount (a line `cookbook =
 /ABSOLUTE/PATH/TO/shale/cookbook` in `~/.config/shale/mounts`), so they work
@@ -20,31 +20,32 @@ with `--args-stdin`, one `NAME=VALUE` a line.
 A playbook is a recipe for one thing people keep asking for. It gathers what
 the work is made from, stops when the world has moved too far for its
 assumptions (each stop says what changed and what to do), and prints the
-steps left for the writer.
+steps left for the writer. `<repos>` below is the folder that holds your
+checkouts, and `<lanes>` the one that holds your lanes.
 
 - `plan_repo_essay.shale`: for "give me an essay on our local repos" (a repo
   map). It surveys the checkouts, compares them with the last map, and
   prints the age table, the README mentions and the steps to a gated note on
-  the essay surface. `cd /home/steve && shale cookbook:plan_repo_essay.shale`
-- `remove_lane.shale`: for "remove that finished lane". It fetches, runs
-  `retire_checkout.shale` on the lane and stops on anything less than a
-  plain CLEAR; then it removes the worktree (or deletes a standalone
-  clone's folder) and deletes the lane's branch, here and on origin, where
-  it is merged into origin's default branch (its tip there, or each of its
-  patches, as a rebased lane's are). Never a bare `git worktree
-  remove`. `cd ~/build/lanes && shale cookbook:remove_lane.shale dir=<lane>`
+  the essay surface. `shale cookbook:plan_repo_essay.shale`, from the folder
+  its header names
+- `remove_lane.shale`: for "remove that finished lane". It runs
+  `retire_checkout.shale` on the lane and goes on only at a plain CLEAR;
+  then it removes the worktree (or a standalone clone's folder) and deletes
+  the lane's branch, here and on origin, once it is merged. Use it in place
+  of a bare `git worktree remove`.
+  `cd <lanes> && shale cookbook:remove_lane.shale dir=<lane>`
 
 ## For any project
 
-- `build_on_github.shale`: runs a workflow on GitHub (by default Zig Shale's
-  `zig build test`, in legacy_zig/; `workflow=c-full.yml`, C Shale's full
-  tier), not on the box, and reports the run.
+- `build_on_github.shale`: runs a workflow on GitHub instead of locally
+  (`workflow=c-full.yml` is C Shale's full tier), and reports the run.
   `shale cookbook:build_on_github.shale workflow=c-full.yml ref=my-branch`
 - `check_page_links.shale`: checks every link and image on a web page,
-  through its redirects, by HEAD: what doesn't answer 200, and what moved.
+  through its redirects, by HEAD: what answers other than 200, and what
+  moved.
   `shale cookbook:check_page_links.shale url=https://roc.lynrummy.com/`
-- `check_conflict_markers.shale`: checks that files hold no git conflict
-  markers. `shale cookbook:check_conflict_markers.shale files=a.zig,docs/b.md`
+- `check_conflict_markers.shale`: finds git conflict markers left in
+  files. `shale cookbook:check_conflict_markers.shale files=a.zig,docs/b.md`
 - `check_disk_space.shale`: stops a run when the disk is under a floor of
   free space; `report=1` sizes the folders that grow. `shale cookbook:check_disk_space.shale floor=60`
 - `check_recipe_names.shale`: checks that every recipe here is named by the
@@ -56,50 +57,45 @@ steps left for the writer.
   Shale, Python, shell). `shale cookbook:check_syntax.shale files=src/a.zig,roc/Walk.roc`
 - `color_shale.shale`: colors Shale source as HTML pages.
   `shale cookbook:color_shale.shale files=cookbook/look.shale out=colored`
-- `count_shale_stops.shale`: counts how an agent's Shale launches went, from a
-  Claude Code transcript: ran, stopped (by kind and message), refused, and
-  the calls and programs its heredocs use. `shale cookbook:count_shale_stops.shale` (`since=`, `transcript=`)
+- `count_shale_stops.shale`: counts how an agent's Shale launches went, from
+  a Claude Code transcript. `shale cookbook:count_shale_stops.shale` (`since=`, `transcript=`)
 - `fetch_page.shale`: fetches a page and prints its status and the lines that
   matter, or waits until it says something. `shale cookbook:fetch_page.shale url=https://example.org/version`
 - `find_phrase.shale`: finds a phrase in wrapped prose, across line breaks,
   and with `new=` edits it. `shale cookbook:find_phrase.shale find=settled in=docs`
 - `findings.shale` (library): `print_findings(summary, lines)`, the findings
   between two copies of their summary. `use("cookbook:findings.shale")`
-- `folder_names.shale` (library): when a text names a folder: the name
-  standing alone, never inside a longer name or a file name.
+- `folder_names.shale` (library): when a text names a folder, as a name
+  standing alone.
   `use("cookbook:folder_names.shale")`
 - `listen.shale`: listens to a roc-chat conversation for the posts meant for
   one agent. `shale cookbook:listen.shale site=https://chat.lynrummy.com conv=3 me=agent:2 key=keys:<file> once=1`
 - `look.shale`: shows lines by number, and a literal's lines across folders,
   mounts or a git revision. `shale cookbook:look.shale at=src/io.zig:690-730`
-- `map_repos.shale`: maps the repos in a folder: each one's branch, last
-  commit, recent commits, uncommitted files, upstream, and the repos its
-  README names. `cd ~/showell_repos && shale cookbook:map_repos.shale` (`in=lanes`, `dot=1`, `json=1`)
+- `map_repos.shale`: maps the repos in a folder: branches, commits,
+  uncommitted files, upstreams, and the repos each README names.
+  `cd <repos> && shale cookbook:map_repos.shale`
 - `merge_conflicts.shale` (library): parses the markers git leaves in a
   conflicted file, so a resolution is a few lines. `use("cookbook:merge_conflicts.shale")`
 - `prune_merged_branches.shale`: finds the work branches merged into the
   default branch, and with `delete=1` deletes them. `shale cookbook:prune_merged_branches.shale`
 - `read_wants.shale`: reads back the log of shell escapes past the gate, with
-  counts by kind, tag and session. `shale cookbook:read_wants.shale since=2026-10-23`
+  counts by kind, tag and session. `shale cookbook:read_wants.shale since=<date>`
 - `read_zulip_topic.shale`: prints a Zulip topic's newest messages.
   `shale cookbook:read_zulip_topic.shale --args-stdin` (site, email, key, stream, topic, num)
 - `rename_words.shale`: renames a word across a project's files, whole words
   only. `shale cookbook:rename_words.shale from=fetchUser to=loadUser in=src ext=ts,tsx`
-- `retire_checkout.shale`: says whether a checkout can be deleted, and
-  deletes nothing: BLOCKED for uncommitted work, stashes, unpushed branches,
-  worktrees, a symbolic link into it, a sibling's tracked file or a memory
-  note that names it by its own path (as the mounts resolve it, never its
-  bare name); else CLEAR. `cd ~/showell_repos && shale cookbook:retire_checkout.shale dir=roc`
-  (A lane is removed by `remove_lane.shale`, which runs this first.)
+- `retire_checkout.shale`: says whether a checkout can be deleted, CLEAR or
+  BLOCKED with the reasons, and only reports.
+  `cd <repos> && shale cookbook:retire_checkout.shale dir=<checkout>`
+  (`remove_lane.shale` runs it first.)
 - `run.shale`: runs a command line and prints how each program ended, its
   time and the lines that matter. `shale cookbook:run.shale --args-stdin` (cmd, grep)
-- `run_zig_build.shale`: runs `zig build STEP` and prints its verdict without
-  the noise. `shale cookbook:run_zig_build.shale step=test`
+- `run_zig_build.shale`: runs `zig build STEP` and prints its verdict: the
+  summary, each error once, the failed tests. `shale cookbook:run_zig_build.shale step=test`
 - `survey_repos.shale`: surveys a folder of checkouts for a map of them:
-  each folder's kind, remote, first and last commit, age and commit count
-  as a pipe table, each README's opening, and which READMEs name which
-  folders (counts, `contexts=1` sentences, a dot edge list).
-  `cd ~/showell_repos && shale cookbook:survey_repos.shale contexts=1` (`skip=`, `today=`, `root=`, `json=1`)
+  an age table, each README's opening, and which READMEs name which
+  folders. `cd <repos> && shale cookbook:survey_repos.shale contexts=1`
 - `test_times.shale`: tests the time-history library on canned runs.
   `shale cookbook:test_times.shale self_test=1`
 - `times.shale` (library): `timed_run`, a stage's time against its recent
@@ -122,8 +118,10 @@ steps left for the writer.
   `shale cookbook:roc/check_errors.shale`
 - `roc/check_families.shale`: checks that look-alike modules are spelled
   alike and one type name means one thing. `shale cookbook:roc/check_families.shale`
-- `roc/check_foreign_code.shale`: runs every check that matters over another
-  project's Roc code, our house style left out. `shale cookbook:roc/check_foreign_code.shale`
+- `roc/check_foreign_code.shale`: runs the general checks over another
+  project's Roc code, without our house style. `shale cookbook:roc/check_foreign_code.shale`
+- `roc/check_module_size.shale`: holds each Roc module to a size, the whole
+  file counted. `shale cookbook:roc/check_module_size.shale`
 - `roc/check_name_types.shale`: finds names that disagree with their types.
   `shale cookbook:roc/check_name_types.shale table=name_types.txt`
 - `roc/check_stacking.shale`: finds groups laid out against the stacking
@@ -131,10 +129,9 @@ steps left for the writer.
 - `roc/check_vocabulary.shale`: holds a project to the words it has decided
   on. `shale cookbook:roc/check_vocabulary.shale words=vocabulary.txt`
 - `roc/compare_machine_code.shale`: says whether two builds of a Roc archive
-  or program hold the same machine code, procedure by procedure, so a move
-  across modules is still SAME. `shale cookbook:roc/compare_machine_code.shale old=a.a new=b.a`
+  or program hold the same machine code, procedure by procedure. `shale cookbook:roc/compare_machine_code.shale old=a.a new=b.a`
 - `roc/count_roc.shale`: counts a Roc project's modules, lines, test modules,
-  test lines and `expect`s, for each folder given. `cd ~/showell_repos && shale cookbook:roc/count_roc.shale in=roc-apps/basic skip=/tutorial/`
+  test lines and `expect`s, for each folder given. `cd <repos> && shale cookbook:roc/count_roc.shale in=roc-apps/basic`
 - `roc/declared.shale` (library): what a file declares, and a name's words,
   read from its parse tree. `use("cookbook:roc/declared.shale")`
 - `roc/doc_names.shale` (library): the backticked names in a file's comments,
@@ -146,11 +143,12 @@ steps left for the writer.
   `shale cookbook:roc/find_deep_calls.shale min=4`
 - `roc/find_extra_parens.shale`: finds the parentheses and braceless `if`s a
   code emitter leaves, and with `write=1` rewrites them. `shale cookbook:roc/find_extra_parens.shale`
-- `roc/find_unclear_names.shale`: finds names and module docs that say less
-  than they should; the launcher of a Roc script
-  (`roc/find_unclear_names/find_unclear_names.roc`, on `roc_platform/`).
+- `roc/find_unclear_names.shale`: finds names and module docs that say too
+  little; the launcher of a Roc script
+  (`roc/find_unclear_names/find_unclear_names.roc`, on `roc_platform/`,
+  held to its goldens by that folder's `check_goldens.shale`).
   `shale cookbook:roc/find_unclear_names.shale`
-- `roc/find_unused_imports.shale`: finds imports a file never uses.
+- `roc/find_unused_imports.shale`: finds the imports a file leaves unused.
   `shale cookbook:roc/find_unused_imports.shale`
 - `roc/gate_recipe.shale` (library): what the recipes that gate a build
   share, their verdict and their plants' self-test. `use("cookbook:roc/gate_recipe.shale")`
@@ -158,31 +156,33 @@ steps left for the writer.
   `use("cookbook:roc/groups.shale")`
 - `roc/headers.shale` (library): which names a file's header dictates.
   `use("cookbook:roc/headers.shale")`
-- `roc/house.shale` (library): the checks that are only our house style.
+- `roc/house.shale` (library): the checks that are our house style alone.
   `use("cookbook:roc/house.shale")`
 - `roc/hunt_names.shale`: hunts for awkward names. `shale cookbook:roc/hunt_names.shale`
+- `roc/imports.shale` (library): a file's imports and the ones it leaves
+  unused. `use("cookbook:roc/imports.shale")`
 - `roc/member_uses.shale` (library): how the type printer resolves names and
   counts each member's uses. `use("cookbook:roc/member_uses.shale")`
+- `roc/method_text.shale` (library): rewrite_method_calls' reading and
+  writing of a file's tree. `use("./method_text.shale")`
 - `roc/module_family.shale` (library): how the type printer walks sibling
   modules as one family. `use("cookbook:roc/module_family.shale")`
 - `roc/naming_passes.shale` (library): `hunt_names`' checks judged over the
   whole tree once every file is read, and its census. `use("cookbook:roc/naming_passes.shale")`
 - `roc/naming_plants.shale` (library): `hunt_names`' self-test, which check
   each plant is for. `use("cookbook:roc/naming_plants.shale")`
-- `roc/parsed.shale` (library): parses a tree's .roc files and fails on the
-  ones that don't parse. `use("cookbook:roc/parsed.shale")`
+- `roc/parsed.shale` (library): parses a tree's .roc files and fails on any
+  that roc-ast refuses. `use("cookbook:roc/parsed.shale")`
 - `roc/pinned.shale` (library): the Roc compiler a repo's `roc-version`
   names. `use("cookbook:roc/pinned.shale")`
 - `roc/print_module_types.shale`: prints a module's types and every type they
-  depend on, without bodies. `shale cookbook:roc/print_module_types.shale module=Pigs`
+  depend on, signatures only. `shale cookbook:roc/print_module_types.shale module=Pigs`
 - `roc/rank_boundary_hints.shale`: ranks hints that one module does
   another's work. `shale cookbook:roc/rank_boundary_hints.shale root=safari`
 - `roc/rename.shale`: renames one identifier across a tree of Roc code.
   `shale cookbook:roc/rename.shale from=portion to=share module=Pie`
 - `roc/rewrite_method_calls.shale`: rewrites `List.map(xs, f)` calls as method
-  calls, judged by the compiler; a symmetric function's call (`U64.max(a, b)`,
-  from `roc/symmetric_functions.txt`) stays, and its method call is a
-  `peer_receiver` finding, which `peers=undo` turns back. `shale --undo-on-stop cookbook:roc/rewrite_method_calls.shale apply=1`
+  calls, judged by the compiler. `shale --undo-on-stop cookbook:roc/rewrite_method_calls.shale apply=1`
 - `roc/peer_calls.shale` and `roc/number_literals.shale` (libraries):
   rewrite_method_calls' peer calls and its number literals whose type defaults.
   `use("./peer_calls.shale")`
@@ -193,13 +193,13 @@ steps left for the writer.
 
 ## c/: Shale's own C
 
-There is no C parser on the box, and none is wanted: c/check_discipline.shale
-holds Shale's C to a shape a line reader can trust (each line at column 0
-opens or closes an item, braces end their lines, one declaration a line,
-`//` comments), and the build fails when a file breaks it. So the dialect is
-the parser's contract: `c/items.shale` splits a file into its items on it,
-and stops, naming the file and line, at a line it can't account for. The C
-finders are built on it. It reads Shale's C, not C at large.
+These read Shale's own C with a line reader in place of a C parser.
+c/check_discipline.shale holds Shale's C to a shape a line reader can trust
+(each line at column 0 opens or closes an item, braces end their lines, one
+declaration a line, `//` comments), and the build fails when a file breaks
+it. So the dialect is the parser's contract: `c/items.shale` splits a file
+into its items on it, and stops, naming the file and line, at a line it
+can't account for. The C finders are built on it.
 
 - `c/items.shale` (library): a file's top-level items, each with its kind,
   name, lines, head, body and the names its body uses, and the masker that
@@ -215,14 +215,12 @@ finders are built on it. It reads Shale's C, not C at large.
   95th percentile, with the distribution. `shale cookbook:c/list_long_functions.shale over=60`
 - `c/list_deep_nesting.shale`: ranks the functions by their deepest nesting of
   braced blocks (the body is depth 1; strings and comments masked), those at
-  depth 4 or past, deepest first, with the count at each depth: functions to
-  look at, never a gate. `shale cookbook:c/list_deep_nesting.shale min=5`
+  depth 4 or past, deepest first: functions to look at, for a reader. `shale cookbook:c/list_deep_nesting.shale min=5`
 - `c/find_clones.shale`: finds twin functions, of one shape once every name,
   number and string is masked, and runs of six or more lines alike in two
   places, each pair with its spans and a score. `shale cookbook:c/find_clones.shale`
 - `c/hunt_names.shale`: hunts for names that break c/docs/style.md's "Names"
-  (case, `_MAX` last and not Zig's `MOST`) or say too little (vague words,
-  `do`, container types, an abbreviation the tree also spells out).
+  or say too little.
   `shale cookbook:c/hunt_names.shale`
 
 ## go/: Go code ([README](go/README.md))
@@ -266,10 +264,10 @@ finders are built on it. It reads Shale's C, not C at large.
 - `zig/hunt_alignment_math.shale`: hunts a compiler for copied alignment
   arithmetic. `shale cookbook:zig/hunt_alignment_math.shale`
 - `zig/hunt_names.shale`: hunts for awkward names. `shale cookbook:zig/hunt_names.shale`
-- `zig/judge_move.shale`: judges that a move of declarations changed
-  nothing. `shale cookbook:zig/judge_move.shale mode=baseline bin=zig-out/bin/x`
+- `zig/judge_move.shale`: judges that a move of declarations kept the
+  behaviour. `shale cookbook:zig/judge_move.shale mode=baseline bin=zig-out/bin/x`
 - `zig/list_long_files.shale`: lists the .zig files over a thousand lines in
-  the repos. `cd ~/showell_repos && shale cookbook:zig/list_long_files.shale`
+  the repos. `cd <repos> && shale cookbook:zig/list_long_files.shale`
 - `zig/map_file.shale`: prints a map of a file's declarations and tests.
   `shale cookbook:zig/map_file.shale path=src/x.zig`
 - `zig/plan_function_cut.shale`: says what a piece of a long function would
@@ -286,9 +284,9 @@ finders are built on it. It reads Shale's C, not C at large.
 ## zig17/: the Zig 0.16 to 0.17 upgrade ([README](zig17/README.md))
 
 - `zig17/count_upgrade_changes.shale`: counts what each repo uses that 0.17
-  changed. `cd ~/showell_repos && shale cookbook:zig17/count_upgrade_changes.shale`
-- `zig17/find_hidden_decls.shale`: finds declarations 0.17's `@hasDecl` no
-  longer sees. `shale cookbook:zig17/find_hidden_decls.shale dir=.`
+  changed. `cd <repos> && shale cookbook:zig17/count_upgrade_changes.shale`
+- `zig17/find_hidden_decls.shale`: finds declarations 0.17's `@hasDecl`
+  misses, since it sees only `pub`. `shale cookbook:zig17/find_hidden_decls.shale dir=.`
 - `zig17/rewrite_array_mult.shale`: rewrites array multiplication as
   `@splat`. `shale cookbook:zig17/rewrite_array_mult.shale dir=src`
 - `zig17/rewrite_renamed_calls.shale`: rewrites the calls 0.17 renamed or

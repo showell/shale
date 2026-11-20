@@ -2,204 +2,131 @@
 
 **Long-lived Shale recipes may be written in Roc**, on this platform: typed,
 compiled, tested, and confined exactly as a Shale script is. One-offs stay
-in Shale. It began as a spike (branch `roc-spike`, 2026-11-19); it is now a
-component of Shale, and its surface is generated from Shale's builtin table.
+in Shale. Its surface is generated from Shale's builtin table.
 
 ## How it works
 
-- **The platform** (`platform/`) gives a Roc app Shale's effects
-  (`Shale.roc`): `read!`, `write!`, `exists!`, `list!`, `glob!`,
-  `grep_all!`, `run!`, `print!`, `arg!`, `fail!` and `roc_tree!` (Roc's
-  own parser's tree of each file, through roc-ast: a node is a record, its
-  attributes a list of name and value). A Roc app has no FFI and makes no
-  system call, so every effect it makes goes through one of these. **Only
-  effects are exported:** what Roc does itself (lines, sorting, text) is
-  Roc's. **The one exception is the regular expressions**, which Roc has
-  none of: `re_find!`, `re_find_all!`, `re_lines!`, `re_match!` and
-  `re_replace!`, Shale's own, a match a record (`at`, `text`, `groups`) and
-  no match `NoMatch`. A hosted function is effectful in Roc, so a Roc
-  function that calls one is effectful too.
+- **The platform** (`platform/Shale.roc`) gives a Roc app Shale's effects:
+  files, globs, `run!`, `print!`, `arg!`, `fail!`, `roc_tree!` and the
+  rest, each listed there with its type. A Roc app reaches the system only
+  through the platform, so every effect it makes goes through one of
+  these. **Only effects are exported:** lines, sorting and text are Roc's
+  own. **The one exception is the regular expressions** (`re_find!` and
+  its kin), which Shale supplies because Roc has none. A hosted function is
+  effectful in Roc, so a Roc function that calls one is effectful too.
 - **The host** (`host/host.c`) is C Shale itself: it includes `c/shale.c`
   whole, so the command line, the mounts, the preludes, the budgets, the
-  report and the exit code are `shale`'s. What it runs is a small Shale
-  driver, a loop that asks the Roc for its next effect
-  (`host("roc_step", answer)`), does it with Shale's own builtin and hands
-  the answer back. Each hosted function is a shim: it writes its arguments,
-  switches to Shale's stack (the Roc runs on a ucontext stack of its own),
-  and returns the answer when Shale switches back. So the builtins written
-  in Shale (`run`, `glob`, `grep_all`) keep their policy in one home, the
-  preludes.
-- **A refusal is a stop, and an outcome is a value.** A path out of the root,
-  a program `run` refuses or a budget run out stops the run, in Shale's own
-  words, and the Roc gets no answer. A missing file is `Missing`, and a
-  program's exit code is a field. A keep is a tag (`Head(n)`, `Tail(n)`,
-  `Whole(n)`), and `run!`'s timeout is required.
+  report and the exit code are `shale`'s. It runs a small Shale driver, a
+  loop that asks the Roc for its next effect (`host("roc_step", answer)`),
+  does it with Shale's own builtin and hands the answer back. Each hosted
+  function is a shim: it writes its arguments, switches to Shale's stack
+  (the Roc runs on a ucontext stack of its own), and returns the answer
+  when Shale switches back. So the builtins written in Shale (`run`,
+  `glob`, `grep_all`) keep their policy in one home, the preludes.
+- **A refusal is a stop, and an outcome is a value.** A path out of the
+  root, a program `run` refuses or a budget run out stops the run, in
+  Shale's own words. A missing file is `Missing`, and a program's exit code
+  is a field. A keep is a tag (`Head(n)`, `Tail(n)`, `Whole(n)`), and
+  `run!`'s timeout is required.
 - **Roc's memory is an arena of Shale's** (`c/foundation/arena.h`), held to
   the run's `arena_bytes`: `roc_dealloc` frees nothing, and a refusal stops
   the run as `budget arena`. `roc_crashed` stops it with Roc's message.
-- **The Roc's own computation has a budget of CPU time**, `roc_cpu_ms`
-  (5000 unset; `## budget: roc_cpu_ms=N` in the script, or `--budget
-  roc_cpu_ms=N`). Steps count Shale's work, and the Roc's is no Shale step,
-  so it is timed: the thread's CPU clock is read as the Roc starts and as it
-  hands Shale each request, and a timer on that clock, armed while the Roc
-  runs, takes a loop that never calls Shale off its stack. A runaway stops
-  as `budget cpu`, at its own line, and the `── used:` line says the Roc's
-  part (`, 400 of 400 Roc CPU ms`). CPU time, not wall time, as `run`'s
-  `cpu_budget_ms` is: a busy box doubles a wall time.
+- **The Roc's own computation has a CPU budget**, `roc_cpu_ms` (`## budget:
+  roc_cpu_ms=N` in the script, or `--budget roc_cpu_ms=N`). Steps count
+  Shale's work, so the Roc's is timed instead: a timer on the thread's CPU
+  clock, armed while the Roc runs, stops a loop that never calls Shale. A
+  runaway stops as `budget cpu`, at its own line, and the `── used:` line
+  gives the Roc's part.
 - **A stop made while the Roc waits names the Roc's line**: a hosted call
   Shale refused, a `fail!`, a budget run out answering one, the CPU budget:
   `` ── stopped at roc_platform/examples/escape.roc:25:8 (in `Shale.read!`):
   argument: ... ``. Each shim keeps its return address; the launcher links
   the program with a table of the script's lines (`app.sites`, from the
-  pinned Roc's DWARF line table, `objdump --dwarf=decodedline`), and the
-  address's line is the stop's. Roc's table gives the line; the column is
-  the call's own text on that line, found in the script, else the line's
-  first. An address outside the script's own lines (Roc's builtins: a
-  `crash`, which reaches the host through them, or an allocation inside
-  `Str.repeat`) leaves the stop at the driver's line.
-- **A value no `Shale.arg!` reads is refused**, before anything is built,
-  naming the ones the script reads, as Shale refuses a value no `arg` of a
-  script reads. The launcher names its values by value, so Shale's own check
-  cannot see them; it reads what it was given with `arg_names()`, and the
-  arg call's Roc name comes from the table (`surface.gen.shale`).
+  pinned Roc's DWARF line table), and the address's line is the stop's. The
+  column is the call's own text on that line, else the line's first.
+- **A value no `Shale.arg!` reads stops the run** before anything is built,
+  naming the ones the script reads, as Shale does for a script's `arg`.
 
 ## Generated from the builtin table
 
-`c/builtins.txt` is the one home of Shale's builtins (`c/docs/builtin-table.md`).
-An effect it exports says its Roc signature, which outcomes are values and
-its driver clause, and `c/gen_builtins.shale` writes from it:
-- `platform/Shale.roc`, and the hosted block of `platform/main.roc`;
-- `host/hosted.gen.c`: the driver, each shim (`shale_<name>`), its request
-  as a Shale map, its answer as Roc's value, and its Roc name;
-- `surface.gen.shale`: the Roc names the launcher finds in a script's text.
+`c/builtins.txt` is the one home of Shale's builtins
+(`c/docs/builtin-table.md`). An effect it exports gives its Roc signature,
+which outcomes are values and its driver clause, and
+`c/gen_builtins.shale` writes from it `platform/Shale.roc`, the hosted
+block of `platform/main.roc`, `host/hosted.gen.c` and `surface.gen.shale`.
 
-Never edit those four: change the table and run `shale c/gen_builtins.shale`.
-The C types are `roc glue`'s (`host/roc_platform_abi.h`, written by
-`tools/glue.shale` with the pinned Roc), so a change to what is exported is
-three runs: `gen_builtins`, `tools/glue.shale`, `gen_builtins` again (glue
-names some types by their order in Shale.roc). The fast tier
-(`c/build/builtin_table.shale`) holds the generated files and glue's
-prototypes to the table, and has GCC read `host.c` with `-Werror`.
+Change the table and run `shale c/gen_builtins.shale`; leave those four
+files to the generator. The C types are `roc glue`'s
+(`host/roc_platform_abi.h`, written by `tools/glue.shale` with the pinned
+Roc), so a change to what is exported is three runs: `gen_builtins`,
+`tools/glue.shale`, `gen_builtins` again (glue names some types by their
+order in Shale.roc). The fast tier (`c/build/builtin_table.shale`) holds
+the generated files and glue's prototypes to the table, and has GCC read
+`host.c` with `-Werror`.
 
 ## Running a script
 
     shale roc_platform/run.shale script=roc_platform/examples/count_lines.roc file=README.md
 
 Run this from the shale checkout's root. `run.shale` builds the script with
-the pinned Roc (`roc-version`, `--opt=dev`, or `--opt=speed` with
-`opt=speed`) into an archive and links it
-with the host's object. The host's object is all of C Shale, compiled once
-with `gcc -O2` (about 25 s). The launcher then runs the program in this
-root, or rooted at `in=` (an absolute folder). The object and each script's
-program are cached by content hash under `out/`, each built in a job of its
-own (`out/jobs/`): runs at once build a key once, the others waiting for
-that job, and a run that is stopped leaves the build to finish for the
-next. `timing=1` prints each phase's time. A `## budget: NAME=N ...` line
-in the script sets its budgets.
+the pinned Roc (`roc-version`; `opt=speed` for `--opt=speed`) into an
+archive and links it with the host's object, which is all of C Shale
+compiled once with `gcc -O2`. The launcher then runs the program in this
+root, or rooted at `in=` (an absolute folder). The object and each
+script's program are cached by content hash under `out/`, each built in a
+job of its own (`out/jobs/`), so concurrent runs build a key once. A
+`## budget: NAME=N ...` line in the script sets its budgets. `run.shale`'s
+header has the rest of its arguments.
 
-The examples:
-- `examples/count_lines.roc` reads a file, counts its lines and prints them.
-- `examples/check_module_size.roc` is `cookbook/roc/check_module_size.shale`
-  in Roc, with the same output on the same input (`self_test` left out).
-  `tools/compare.shale` holds the two to each other, line for line.
-- `examples/escape.roc` tries each guard (`try=climb|absolute|bash|write|crash|arena|loop|spin|missing|ok`).
-  Each reach stops with Shale's own refusal.
+The examples in `examples/`: `count_lines.roc`, the smallest app;
+`check_module_size.roc`, a cookbook recipe in Roc, held line for line to
+its Shale original by `tools/compare.shale`; and `escape.roc`, which tries
+each guard and stops with Shale's own refusal.
 
 **`shale roc_platform/self_test.shale`** is the policy proofs: each of
-escape.roc's tries held to Shale's own stop (or, for `spin`, `missing` and
-`ok`, to its output), then count_lines.roc given a misspelled value and a
-right one. `shale=c/out/tcc/shale` runs the launcher with a checkout's own
-build. It needs the pinned Roc and builds the
-host's object, so it runs when a Roc build is asked for, not in the tiers.
+escape.roc's tries held to Shale's own stop or output, then a misspelled
+argument and a right one. `shale=c/out/tcc/shale` runs the launcher with a
+checkout's own build. It needs the pinned Roc and builds the host's
+object, so it runs when a Roc build is asked for, outside the tiers.
 
 `tools/measure.shale` times the builds and the runs.
 
 ## The ports
 
-**`cookbook/roc/find_unclear_names/find_unclear_names.roc`** is the first
-real port, and the recipe itself: cookbook/roc/find_unclear_names.shale is
-now its launcher, so every caller launches it as before. The launcher hands
-its values to `run.shale` in the checkout its cookbook is in (the `cookbook`
-mount's parent) with `in=` its own root, so the build is the checkout's and
-the program runs rooted where the caller is (the host takes `--root`).
-`check_goldens.shale`, in the same folder, holds it line for line and exit
-code for exit code to goldens written from the Shale original's output on
-the plants (each plant row and `self_test=1`), and the full tier runs it and
-the recipe's self-test with the cookbook's (`cookbook-test`). The port had
-matched the original in all 31 cases of the comparison before it (those 27,
-the port's own self-test, and three trees of other repositories), and the
-original was then deleted.
+**`cookbook/roc/find_unclear_names/find_unclear_names.roc`** is a recipe
+in Roc: `cookbook/roc/find_unclear_names.shale` is its launcher. The
+launcher hands its values to `run.shale` in the checkout its cookbook is in
+(the `cookbook` mount's parent) with `in=` its own root, so the build is
+the checkout's and the program runs where the caller is. That folder's
+`check_goldens.shale` holds it, output and exit code, to goldens written
+from the Shale original on the plants, and the full tier runs it with the
+cookbook's self-tests.
 
-Measured on 2026-11-19 (2 cores; the fastest of 3; the launcher's whole
-wall time, the original's as `shale` runs it), before the launcher moved
-into the recipe's place:
+## Pitfalls
 
-| tree | Shale | Roc, dev | Roc, `--opt=speed` |
-|---|---|---|---|
-| roc-chat app (153 files) | 0.73 to 0.76 s | 0.79 s | 0.55 s |
-| roc-markdown package (28 files) | 0.17 to 0.18 s | 0.20 s | 0.13 s |
-| roc-apps Safari (212 files) | 1.27 to 1.37 s | 1.35 s | 0.93 s |
-| a plant (one file) | 10 to 15 ms | 30 to 40 ms | |
-
-The port's own builds: 1.2 to 1.3 s for `--opt=dev` (cold or after a
-one-line edit), 17 s for `--opt=speed`, beside the host's object once per
-change to `c/` (25 to 50 s).
-
-Through the launcher, cached, one file (roc-apps' Safari.roc) takes 28 to
-42 ms of wall and CPU a run, against the original's 10 to 12 ms: two
-`shale`s and three `git`s (the keys) before the program. A tree is within a
-few percent of the original (Safari's 212 files, 1.30 s against 1.27 s).
-The first run after a change to `c/` waits about 25 s for the host's object
-and 1 to 3 s for the script's build, in jobs whose CPU is no caller's: a
-cold run under quality's `cpu_budget_ms = 7000` used 1.35 s of CPU.
-
-## What the spike measured
-
-The measurements below are from 2026-11-19, on a box with 2 cores, with
-builds at `nice 19`. Each time is the launcher's whole wall time.
-
-| what | wall | notes |
-|---|---|---|
-| host object, once per change to `c/` or host.c | 25 to 49 s (21 to 32 s CPU) | `gcc -O2` of all of C Shale |
-| count_lines: first build | 0.17 to 0.20 s | `roc build` 50 to 70 ms, link 80 to 95 ms |
-| count_lines: cached run | 15 ms | the program 4 ms |
-| count_lines: after a one-line edit | 0.16 s | |
-| check_module_size: first build (Roc's cache cold) | 1.9 s | `roc build` 1.7 s |
-| check_module_size: first build (Roc's cache warm) | 1.1 s | |
-| check_module_size: cached run | 48 to 64 ms | the program 34 to 40 ms |
-| check_module_size: after a one-line edit | 1.5 s | |
-| check_module_size, the program alone, on roc-chat (147 files) | dev 36 to 47 ms; `--opt=speed` 12 to 14 ms | the Shale original 9 to 11 ms |
-| `--opt=speed` build | 18 s | the archive is not PIE: link with `-no-pie` |
-| peak memory of a cold `roc build` | 116 MB | GNU time |
-
-**What held:** every layout. That includes a 72-byte record passed by
-value, a tag union with payloads as an argument and as an answer, and a
-`List` of records. The compiler did not crash once.
-
-**Surprises:**
 - `RocStr` is `bytes, capacity, length`, while `RocList` is `elements,
   length, capacity`.
-- `roc build` refuses an absolute platform path, so the launcher writes a
-  relative one.
-- The dev archive's object has no `.note.GNU-stack`, so it is linked with
-  `-z noexecstack`.
+- `roc build` takes only a relative platform path, so the launcher writes
+  one.
+- The dev archive's object lacks `.note.GNU-stack`, so it is linked with
+  `-z noexecstack`; the `--opt=speed` archive is not PIE, so it is linked
+  with `-no-pie`.
 - Shale's `run_new_table` makes a table of no kind, which Shale reads as
   empty. A host-made list must set `TABLE_LIST`.
-- TCC cannot read glue's header (`__int128`), so the host is GCC's alone.
+- TCC can't read glue's header (`__int128`), so the host is built by GCC.
 
-## What is left
+## Open edges
 
-- **A crash names the driver's line**: `roc_crashed` is called through
-  Roc's builtins, so its return address is theirs, not the script's.
-- A stop names the hosted call and its line, not the Roc function it is in
-  (Roc's DWARF names its functions by hash), nor the Roc calls that led
-  there.
+- A crash names the driver's line: `roc_crashed` is called through Roc's
+  builtins, so its return address is theirs. So does any stop at an
+  address outside the script's own lines.
+- A stop names the hosted call and its line, but neither the Roc function
+  it is in (Roc's DWARF names its functions by hash) nor the Roc calls
+  that led there.
 - The launcher's own `fail` adds a second stop line after the program's.
 - The Roc's arena has its own budget, set to the run's `arena_bytes`,
   beside the values' arena.
 - The host's cache key ignores uncommitted edits under `c/`.
-- A script is one file, with its own text helpers: there is no helper
-  module.
-- A caller's cache key (roc-apps' tools/quality_keys.shale) follows a
-  recipe's `use`s, so it does not see a change to the Roc script a launcher
-  runs, nor to the platform.
+- A script is one file, with its own text helpers.
+- A caller's cache key that follows a recipe's `use`s misses a change to
+  the Roc script a launcher runs, or to the platform.

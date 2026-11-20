@@ -1,107 +1,74 @@
 # bench: Shale's speed baseline
 
-`bench/baseline.shale` measures C Shale where its speed matters, so each
-change can be judged against the last baseline, on the same inputs:
+`bench/baseline.shale` measures C Shale where its speed matters, so a
+change can be judged against the last baseline on the same inputs. Its
+header lists the arguments.
 
-- **the runtime:** ten workloads in `bench/workloads/`, each run as a fresh
-  process of the binary under test, five times, with the median wall and
-  CPU time kept. These are cross-file greps (a literal and a regex over
-  seven repos, about 3,300 files), the Roc name hunt, `edits_all` over
-  about 500 files, `re_lines` over 16 MB, `json_read` and `json_write` of
-  a 7.5 MB document, startup (50 launches), `run` overhead (200 runs of
-  `true`) and a pure interpreter loop;
-- **the build:** release, debug and the tests' build, each **cold** and
-  **incremental** (one comment line appended to a core file, then the same
-  command again), as `c/build.shale` makes them:
-  - **release:** `c/shale.c` at GCC `-O2`, by the command block's own
-    compile line (`shale c/build.shale binary=release`, which runs
-    `c/build/binary.shale`: the preludes generated, then the compile), into
-    `<prefix>/bin/shale`, the binary the runtime workloads then run;
-  - **debug:** the same under TCC (`binary=tcc`);
-  - **test:** the fast tier (`shale c/build.shale`), which builds and runs
-    every C test.
+- **The runtime:** the workloads in `bench/workloads/` and the Roc name
+  hunt, each run as a fresh process of the binary under test, with the
+  median wall and CPU time of its repetitions kept.
+- **The build:** release (GCC), debug (TCC) and the fast tier's test build,
+  each cold and incremental (after one comment line appended to `touch`'s
+  file), as `c/build.shale` makes them. C keeps no build cache, so the two
+  are the same compile from scratch.
 
-  **C has no build cache**, so its cold and incremental builds are the same
-  compile from nothing. Both rows are kept, with the same command (the
-  incremental one after a comment line in `c/script/vm.c`).
-
-Each run writes one TSV, `bench/baselines/<date>-<commit>-<label>-<part>-<clean|notclean>.tsv`, where `<label>` is `label=`, or `built-c` for a binary the run built, or the binary under test's folder and name, so two binaries measured at one commit never share a file (a file already there stops the run).
-Its `#` lines say what the box was (its load before and after, heavy
-processes, the CPU, the kernel, the compilers, the
-source's commit and whether it was dirty), and each row gives a workload's
-medians. For a
-workload that runs programs, `shale_*` is Shale's own part and `child_*`
-the programs': `run_true` adds up `run`'s own measure of each `true`, and
-`hunt_names` takes roc-ast's wall time from its `--verbose` report and
-roc-ast's CPU from a separate run of roc-ast alone over the same files.
+Each run writes one TSV under `bench/baselines/`, named for the date, the
+commit, the label and the part, and stamped `clean` or `notclean`. Its `#`
+lines describe the box (its load before and after, heavy processes, the
+CPU, the kernel, the compilers, the source's commit and whether it was
+dirty), and each row gives a workload's medians. For a workload that runs
+programs, `shale_*` is Shale's own part and `child_*` the programs'.
 `json_write` parses the document, then writes it twice, so one write is
-(json_write - json_read) / 2. In `run_true`, `run`'s wall time per program
-is mostly Shale's own spawn and wait, and `true`'s CPU rounds to 0 ms a
-run, so its `child_cpu_ms` is 0 and its `shale_cpu_ms` is everything.
+(json_write - json_read) / 2.
 
-**Fail, never record.** Every workload prints a line of what it found,
-which must be the same in each repetition and equal to what Zig Shale
-printed on the pinned inputs, which the C matches (`EXPECT` in the
-harness). A workload that
-exits nonzero, prints no such line or answers differently stops the run,
-and no TSV is written. The same applies to a build that fails.
+**A wrong answer stops the run.** Every workload prints a `bench-ok` line
+that must match in each repetition and equal the expected answer on the
+pinned inputs (`EXPECT` in the harness). A workload or build that fails or
+answers differently stops the run, and no TSV is written.
 
-**The inputs are pinned.** The seven repos are cloned at the revisions in
-`PINS`, and the large text file and the JSON document are made from them,
-all under `<build>/bench/inputs` (outside the repo, `<build>` being the `build:` mount). The workloads run with
-a mounts file of their own (`cookbook` is the pinned Shale's, `tools` the
-box's) and no user prelude. So a run months later reads the same bytes. The
-build clones the source's HEAD under `<build>/bench/src` and never builds
-in the checkout. A fresh clone has
-all the C build needs: `c/out/gen/preludes.h` is not tracked, and the build
-writes it from `c/preludes/`.
+**The inputs are pinned.** The repos in `PINS` are cloned at fixed
+revisions under the `build:` mount's `bench/inputs`, and the large text
+file and JSON document are made from them. The workloads run with a mounts
+file of their own and no user prelude, so a run months later reads the
+same bytes. The build clones the source's HEAD under `bench/src` there and
+leaves the checkout alone.
 
 ## A dry run
 
-    cd ~/showell_repos/shale && shale bench/baseline.shale
+    cd <shale> && shale bench/baseline.shale
 
-This runs on a busy box, stamps every row `not clean`, and prints the
-reasons a clean run would be refused. For C Shale on the busy box on
-2026-11-17, the builds took about 80 seconds (the two release compiles
-most of it) and the runtime half about a minute. Its numbers show that the
-harness works; they are not a baseline.
+This runs on a busy box, stamps every row `not clean`, and lists what a
+clean run would wait for. Its numbers show the harness works; a baseline
+comes from a quiet box.
 
-## Taking the real baseline on a clean box
+## The real baseline, on a quiet box
 
-`clean=1` refuses to start unless the box is quiet: the 1-minute load at
-or below 0.30, and none of `zig`, `roc`, `roc-ast`, `roc-types`, `node`,
-`chrome`, `cc`, `make`, `claude` or another `shale` running (an idle
-`shale --reap` for a job is counted and listed, not refused). So, first:
+`clean=1` starts only when the box is quiet: the 1-minute load at or
+below 0.30 and none of the heavy programs in `HEAVY` running. So, first:
 
-1. **Stop the agents.** End every Claude Code session but the one that will
-   start the run, and every cloud or lane agent working on the box. The
-   session that starts it should do nothing else until it ends.
-2. **Stop the services and the browser:** the essay surface's server,
-   Chrome (the browser automation's), any `zig build serve` or dev server,
-   and any quality gate or tier still running in a lane.
-3. **Wait for the load to fall.** `uptime` should show the 1-minute load
-   at or below 0.30; it takes a few minutes after a build.
-4. **Run it,** from a Shale checkout at the commit to measure:
+1. **Stop the other agents and sessions**, and keep the one that starts
+   the run idle until it ends.
+2. **Stop the services and the browser**: dev servers, browser automation,
+   and any tier still running.
+3. **Wait for the load to fall** (`uptime`); it takes a few minutes after
+   a build.
+4. **Run it** from a Shale checkout at the commit to measure:
 
-        cd ~/showell_repos/shale && shale bench/baseline.shale clean=1
+        cd <shale> && shale bench/baseline.shale clean=1
 
-   It refuses, naming why, if the box is not quiet. Otherwise it builds,
-   runs every workload five times and writes
-   `bench/baselines/<date>-<commit>-<label>-<part>-clean.tsv`. Commit that file.
+   It names what is busy if the box isn't quiet. Otherwise it builds, runs
+   every workload and writes a `clean` TSV. Commit that file.
 5. **Restart** the services and the agents.
 
 ## The build's commands
 
-`BUILD` in the harness holds the build's defaults, and every one is an
-argument too, so a build is changed with no edit to the harness. Values
-with spaces go on stdin:
+`BUILD` in the harness holds the build's defaults, and each is an argument
+too. Values with spaces go on stdin:
 
-    cd ~/showell_repos/shale && shale bench/baseline.shale --args-stdin <<'ARGS'
+    cd <shale> && shale bench/baseline.shale --args-stdin <<'ARGS'
     build_test=shale c/build.shale full=1
     ARGS
 
-`{src}` and `{prefix}` are filled in for each build. `built=` is the
-release binary (`<prefix>/bin/shale`), which the runtime workloads then
-run; `shale=<path>` with `part=runtime` measures a binary already built
-instead, and `part=build` builds only. Compare two TSVs row by row: the
-inputs are the same, so a row's check is the same too.
+`shale=<path>` with `part=runtime` measures a binary already built;
+`part=build` builds only. Two TSVs compare row by row, since the inputs
+are the same.

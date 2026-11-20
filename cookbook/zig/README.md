@@ -3,39 +3,36 @@
 Recipes for finding a Zig file's structure and moving code along it,
 written in Shale over its Zig builtins (`zig_decls`, `zig_tokens`,
 `zig_move`, `zig_rename`, `zig_renames`, `zig_imports`: Zig's own
-tokenizer and parser). They are recipes, not builtins: read one, copy it,
-change it for the job in front of you. Each is held to parse and compile
-(`shale --check`) by C's full tier, `shale c/build.shale full=1`.
+tokenizer and parser). They are recipes to read, copy and change for the
+job in front of you. Each script's header is its full documentation, its
+arguments included. Each is held to parse and compile (`shale --check`) by
+C's full tier, `shale c/build.shale full=1`.
 
-Run one from the checkout it works on. `<shale>` is the shale checkout
-; `<repo>` is the repo the recipe works on, its
-root the current directory:
+Run one from the checkout it works on. `<shale>` is the shale checkout;
+`<repo>` is the repo the recipe works on, its root the current directory:
 
     cd <repo> && shale <shale>/cookbook/zig/find_seams.shale path=src/x.zig
 
-**A recipe says the room it needs.** The tree-wide recipes (`find_smells`,
-`find_dead_code`, `find_bool_flags`, `find_repeated_params`, `find_clones`) hold each file's tokens for
-the run, far past the CLI's defaults (5,000,000 steps). Each says its
-budgets in a line among its opening comments,
+**A recipe says the room it needs.** The tree-wide recipes hold each
+file's tokens for the run, far past the CLI's default budgets. Each states
+its budgets in a line among its opening comments,
 
     -- budget: steps=900000000 arena_bytes=4000000000
 
-which `shale` takes and prints before the run (`── budgets from the
-script's header: ...`), so the cost is in sight. A `--budget` on the
-command line still wins.
+which `shale` takes and prints before the run, so the cost is in sight. A
+`--budget` on the command line still wins.
 
-**A value a plain word cannot carry goes on stdin.** The gate passes only
-a plain launch (SHALE-AGENTS.md, "The gate"), so a glob
-(`glob=src/**/*.zig`), a doc, a test's name or a `|` goes on stdin after
-`--args-stdin`, one `NAME=VALUE` a line, raw. Every tree-wide recipe's
-`glob=` defaults to `src/**/*.zig`; another is given this way:
+**A value with a glob, a space or a `|` goes on stdin**, after
+`--args-stdin`, one `NAME=VALUE` a line, raw, since the gate passes plain
+words alone. Every tree-wide recipe's `glob=` defaults to `src/**/*.zig`;
+another is given this way:
 
     cd <repo> && shale <shale>/cookbook/zig/find_smells.shale --args-stdin <<'ARGS'
     glob=probe/**/*.zig
     ARGS
 
 A recipe that changes several files runs with `--undo-on-stop`, so a stop
-leaves them as they were:
+puts them back:
 
     cd <repo> && shale --undo-on-stop <shale>/cookbook/zig/split_file.shale --args-stdin <<'ARGS'
     from=src/x.zig
@@ -47,174 +44,101 @@ leaves them as they were:
 
 ## Finding the seams
 
-- `find_seams.shale` (`path=`, `container=Name` for a struct's members,
-  `hub=N` (a declaration N use; an eighth of the file's, at least 4),
-  `out=N` (one that uses N; a sixth, at least 6), `min=120` (lines each
-  side of a gap), `show=10` (gaps), `names=12` (each group's names)): the
-  file's reference graph (`zig_decls`' `uses`), the largest declarations,
-  the hubs set aside (what much uses, and what uses much), the cut profile
-  in file order (the gaps the fewest edges cross), and **each declaration
-  grouped by the hubs that reach it**: the structure by caller, which is
-  where a hidden seam shows.
-- `plan_function_cut.shale` (`path= fn= first= last=`): what a cut of a long
-  function would take (the locals it reads), write and give back: the
-  parameters an extracted function would need.
-- `map_file.shale` (`path=`): a file's top-level declarations and tests,
-  with their lines.
-- `list_long_files.shale` (`over=N`): every `.zig` file over a thousand lines in
-  the repos it names (its list is one box's; change it). It runs from the
-  folder holding them (`cd ~/showell_repos`), not from a repo.
+- `find_seams.shale`: the file's reference graph (`zig_decls`' `uses`),
+  its hubs, the cut profile in file order, and **each declaration grouped
+  by the hubs that reach it**: the structure by caller, which is where a
+  hidden seam shows.
+- `plan_function_cut.shale`: what a cut of a long function would read,
+  write and give back: the parameters an extracted function would need.
+- `map_file.shale`: a file's top-level declarations and tests, with their
+  lines.
+- `list_long_files.shale`: every `.zig` file over a thousand lines in the
+  repos it names (edit its list for your box). It runs from the folder that
+  holds the repos.
 
 ## Smells: where a tree may want a second look
 
-Lists, not verdicts, read from Zig's tokenizer (never a comment's or a
-string's text). Each says its budgets in its `-- budget:` line:
+Lists for a reader, read from Zig's tokenizer, so comments and strings are
+skipped:
 
-- `check_stacking.shale` (`glob=`, `width=`, `write=1`, `self_test=1`): **three
-  or more, one a line**: a struct, tuple or array literal, a call's or a
-  function's arguments, a container or error set of three or more items on
-  one line, and any line over 100 columns. `write=1` gives each a trailing
-  comma, outermost first, and runs `zig fmt` until nothing changes. Unlike
-  the lists here it reads characters, not the tokenizer, as the Roc twin
-  must; strings, `'x'`, `\\` lines and comments are stepped over, and
-  `plants/check_stacking/clean.zig` holds each. A `for`'s operands and a capture are
-  no group.
-- `find_smells.shale` (`glob=`, `tests=yes`, `long=`, `params=`, `top=`): long
-  functions (a `fn X(...) type` marked a type, not a function to cut),
-  long parameter lists, `bool` parameters and fields, `catch {}` (one in
-  another error's handler, a cleanup, said apart) and `catch unreachable`
-  by file, and numbered steps in comments (a function's own order is
-  fine; a caller's is a protocol that wants to be code).
-- `hunt_names.shale` (`glob=`, `glob2=`, `self_test=1`): **awkward names, a
-  question each**: an effect named as a state (`heldRaw(io, ...)`), a
-  question that returns no bool, a name of vague words only, a `*count`
-  or `*path` of the wrong type, a negative flag. Heuristic: a finding is
-  for a reader. One plant a check in `plants/hunt_names/`.
-- `find_bool_flags.shale` (`glob=`, `glob2=`): each function with a `bool`
-  parameter and the calls that pass it a bare `true` or `false`, the ones
-  a named enum would make read; **a bool every call passes the same
-  literal is no parameter at all** (`ONE VALUE`). A name declared by more
-  than one function is said, as its calls cannot be told apart.
-- `find_dead_code.shale` (`glob=`, `also=`, `drop=yes`): declarations nothing uses,
-  which Zig never reports (its analysis is lazy). Dead: not `pub`, and no
-  other identifier in its file names it, which is certain. Unreached: `pub`,
-  and nothing in the tree names it, which is a question (another repo, a
-  build, `@field`). `drop=yes` removes the dead, each by its own bytes; run it
-  under `--undo-on-stop`, again until none is left, and let the tests
-  judge.
-- `find_repeated_params.shale` (`glob=`, `min=`, `longest=`, `skip=`, `top=`): a run
-  of parameter names that several functions declare in a row, plumbing
-  (`io`, `alloc`, ...) passed by: a struct with its users already, where a
-  long list is only a question. Each run once, at its longest.
-- `find_clones.shale` (`glob=`, `tests=yes`, `window=`, `top=`): the same code
-  in two places, runs of 6 or more alike lines (trimmed; blank lines,
-  comments, imports, one-name aliases and brackets alone passed by), in
-  one file or two. A find is a question, not a verdict: code may be alike
-  on purpose.
-- `count_comments.shale` (`dir=`, `files=`, `top=`): per Zig file, its
-  code, doc and plain comment lines, comment lines per 100 of code, words
-  a comment line, and the loud and dated comments.
-- `hunt_alignment_math.shale` (`glob=`, `self_test=1`): where a compiler copies
-  alignment arithmetic instead of asking the one place that knows it,
-  in seven named checks (a word or a literal 8 or 16 as an allocation's
-  alignment, a string backing copied with no `strings.alignment`, header
-  formulas and argument-layout sorts copied, a dealloc that drops its
-  alignment, an unchecked `@alignCast` of base plus offset, the host's
-  `usize` in target code): `path:line: <check>: <why>`, then a count per
-  check. Written for the Roc compiler (roc-lang/roc#12641 is its
-  archetype); `self_test=1`, from this checkout, runs the plants in
-  `plants/hunt_alignment_math/`, one a check and a clean one, then PASS or FAIL.
+- `check_stacking.shale`: **three or more, one a line**: a literal, a
+  call's or a function's arguments, a container or error set of three or
+  more items on one line, and any line over 100 columns. `write=1` gives
+  each a trailing comma and runs `zig fmt` until the file settles. Like its
+  Roc twin, it reads characters, stepping over strings, `\\` lines and
+  comments.
+- `find_smells.shale`: long functions, long parameter lists, `bool`
+  parameters and fields, `catch {}` and `catch unreachable` by file, and
+  numbered steps in comments (a caller's numbered protocol wants to be
+  code).
+- `hunt_names.shale`: **awkward names, a question each**: an effect named
+  as a state, a question that returns some other type than bool, a name of
+  vague words only, a `*count` or `*path` of the wrong type, a negative
+  flag. One plant a check in `plants/hunt_names/`.
+- `find_bool_flags.shale`: each function with a `bool` parameter and the
+  calls that pass it a bare `true` or `false`, where a named enum would
+  read better; a bool every call passes the same literal is marked `ONE
+  VALUE`, a parameter to drop.
+- `find_dead_code.shale`: the declarations nothing uses, which Zig's lazy
+  analysis keeps quiet about. Dead: private, and named nowhere else in its
+  file, which is certain. Unreached: `pub` and named nowhere in the tree,
+  which is a question (another repo, a build, `@field`). `drop=yes` removes
+  the dead; run it under `--undo-on-stop`, again until none is left, and
+  let the tests judge.
+- `find_repeated_params.shale`: a run of parameter names that several
+  functions declare in a row (`io`, `alloc`, ...), plumbing that may want
+  to be a struct.
+- `find_clones.shale`: the same code in two places, runs of alike lines in
+  one file or two. Code may be alike on purpose: each find is a question.
+- `count_comments.shale`: per Zig file, its code, doc and plain comment
+  lines, the ratio, and the loud and dated comments.
+- `hunt_alignment_math.shale`: where a compiler copies alignment
+  arithmetic instead of asking the one place that knows it. Written for the
+  Roc compiler (roc-lang/roc#12641 is its archetype).
 
 ## Moving along them
 
-- `rename_member.shale` (`file= from= to= [container=] [glob=]`): a
-  declaration, or a container's member, renamed in its file and through
-  every importing file's `alias.from` (`alias.C.from`) across the tree;
-  what reaches it another way is said by line, never guessed.
-- `split_file.shale` (on stdin: `from= to= as= names=a|b doc=`, and
-  optionally `after=<import> uses=alias from_as=X reexport=yes into=yes`):
-  declarations moved to a new file and the old one made to use them:
-  `zig_move`, `pub` where the old file still uses one (a member through
-  its container), the new file's doc and imports, the old file's uses
-  qualified or aliased (`uses=alias`; a `var` always qualified), the
-  import after the last top-level one (or after the one `after=` names),
-  the new file in the old one's `test {}` block. `from_as=X`: the moved
-  code reaches what it needs of the old file through it. `reexport=yes`: each moved `pub`
-  declaration stays the old file's too, for a module whose surface is the
-  file itself. `into=yes` joins a file already there. Refuses an import
-  name the old file already uses (by `zig_tokens`).
-- `add_missing_pubs.shale` (`build=<step>`): builds, and puts `pub` where the
-  compiler says a method called through a value needs it, until it builds.
-- `rewrite_call_args.shale` (`name= template= [glob=] [count=]`): every call of a
-  function, its arguments regrouped by a template of `$N`s (`$1,
-  .{ .dir = $2, .key = $3 }`), the call sites' half of a new signature.
-  Arguments split at the call's own commas, past brackets, strings and
-  characters. A call that runs past its line, or has other than the
-  template's count of arguments, is refused by place, and then nothing is
-  written. The declaration is yours to change. Run it before a body's
-  own call is changed by hand: a call already in the new shape has the
-  wrong count and refuses the run. Its body's half, when
-  parameters become one struct's fields, is a builtin, no recipe:
-  `zig_renames(path, {stream = "w.stream", ...}, {lines = {first,
-  last}})` over the body's lines, by Zig's tokenizer (never a field, a
-  string or a comment). It stops at a declaration of a name, so change
-  the signature first.
-- `tidy_file.shale` (`path=`): an alias moved after the import it names;
-  section banners with nothing under them removed.
-
+- `rename_member.shale`: a declaration, or a container's member, renamed
+  in its file and through every importing file's `alias.from` across the
+  tree; what reaches it another way is listed by line for you to judge.
+- `split_file.shale`: declarations moved to a new file and the old one made
+  to use them: `zig_move`, `pub` where needed, the new file's doc and
+  imports, the old file's uses qualified or aliased, and the new file added
+  to the old one's `test {}` block.
+- `add_missing_pubs.shale`: builds, and puts `pub` where the compiler says
+  a method called through a value needs it, until it builds.
+- `rewrite_call_args.shale`: every call of a function, its arguments
+  regrouped by a template of `$N`s (`$1, .{ .dir = $2, .key = $3 }`), the
+  call sites' half of a new signature. The declaration is yours to change.
+  Run it before changing any call by hand: a call already in the new shape
+  has the wrong count and stops the run. The body's half, when parameters
+  become one struct's fields, is the builtin `zig_renames` over the body's
+  lines; change the signature first.
+- `tidy_file.shale`: an alias moved after the import it names; empty
+  section banners removed.
 
 ## Judging a test suite
 
-- `flip_bools.shale` (`glob=`, `build=test`, `most=40`,
-  `timeout_ms=600000` a test run): each bare `true`
-  or `false` a production call passes, flipped alone, and the build's tests
-  run; a flip that survives is a decision no test checks. A test run per
-  flip: a hunt, run detached, never a gate. Read each survivor: code the
-  step never runs survives too.
+- `flip_bools.shale`: each bare `true` or `false` a production call
+  passes, flipped alone, and the build's tests run; a flip that survives is
+  a decision the tests leave open. It runs a test suite per flip, so run it
+  detached, as a hunt. Read each survivor: code the step never runs
+  survives too.
 
 ## Judging a move
 
-- `judge_move.shale` (`mode=baseline|check bin=a,b [build=step]
-  [flags=-Dstamp=off] [test=none] [clean=yes] [same=old,new,...]
-  [new_files=...]`): a
-  pure move changed nothing: the tests by name and the runner's count,
-  each binary's symbols by name and size (the file part left out, Zig's
-  type numbers and coverage sites' hashes normalized). `new_files=`
-  excuses exactly one file-name string per new file that holds a coverage
-  site, and nothing else. `clean=yes` refuses a tree with changes (a
-  stamped build says `+dirty`). A large file's moves need room, which
-  its `-- budget:` line gives.
-- `check_same_tests.shale` (`mode=baseline|check`): a checkout's suite again,
-  against a baseline of test names, wherever a moved test now lives.
-  `mode=baseline` runs `zig build test` before the refactor and writes the
-  names to `zig-out/refactor-baseline.txt`; `mode=check` runs it after and
-  holds every test passing and the same names.
-- `check_const_unchanged.shale` (`path= name= [rev=HEAD]`): a top-level `const` or
-  `pub const` as `rev` had it and as the file has it now, compiled side by side in a
-  throwaway test and compared by Zig, byte for byte: for a page's text
-  spliced from a shared part (`a ++ shared ++ b`), which a symbol
-  judge cannot see. A planted one-character change fails it.
-- `check_comments_only.shale` (`rev=HEAD`, `files=`): a change that touches
-  comments only, by Zig's tokenizer, each file against `rev`; for one
-  that does not, the first token that differs.
+- `judge_move.shale`: a pure move kept the behaviour: the tests by name
+  and the runner's count, and each binary's symbols by name and size.
+- `check_same_tests.shale`: a checkout's suite against a baseline of test
+  names, wherever a moved test now lives.
+- `check_const_unchanged.shale`: a top-level `const` as `rev` had it and as
+  the file has it now, compiled side by side and compared by Zig, byte for
+  byte: for a page's text spliced from a shared part (`a ++ shared ++ b`),
+  which a symbol judge can't see.
+- `check_comments_only.shale`: a change that touches comments only, by
+  Zig's tokenizer; otherwise the first token that differs.
 
 ## Writing a recipe
 
-What a recipe's author meets first, each in `docs/SHALE.md`:
-
-- One name a `local`: `local a, b = ...` is refused ("Refused, each by
-  name").
-- No `local function` or nested function: a function is `function
-  name(...)`, at the top level ("Statements").
-- A function sees its parameters, its locals and the `const`s above it,
-  never the script's `local`s: what functions share is a top-level `const`
-  ("Names").
-- Integers only: no floats and no `/`; `//` divides, flooring
-  ("Operators").
-- `print` takes scalars: a list or a map goes through `join`, `table` or
-  its fields ("The host and output").
-- `sort` sorts in place and gives the list back ("Lists and maps").
-- A regular expression has at most one capture group, `m.group`
-  ("Regular expressions").
-- A long string always has a level, `[=[ ... ]=]`; one holding `]=]` takes
-  `[==[ ... ]==]` ("Values").
+docs/SHALE.md's "Before you send a script: the author's checklist" lists
+what a recipe's author meets first.
