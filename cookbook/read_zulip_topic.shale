@@ -1,7 +1,7 @@
 -- This script prints the newest messages of a Zulip topic, oldest first, each
 -- with its sender and its markdown as written.
 --
---   shale cookbook:read_zulip_topic.shale site=roc.zulipchat.com email=you@example.com key=keys:roc_zulip_api_key stream=beginners topic=style num=20
+--   shale cookbook:read_zulip_topic.shale site=roc.zulipchat.com email=you@example.com key=keys:<file> stream=beginners topic=style num=20
 --
 -- `site` is the Zulip server's host, `email` the account the key belongs to,
 -- and `num` how many messages to read, 100 unless given. A value with a space

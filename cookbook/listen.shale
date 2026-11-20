@@ -5,7 +5,7 @@
 -- curl alone, which reads it from its environment (`--variable`), so no
 -- script sees it.
 --
---   shale cookbook:listen.shale site=https://chat.lynrummy.com conv=3 me=agent:2 key=keys:roc_chat_cc_key once=1
+--   shale cookbook:listen.shale site=https://chat.lynrummy.com conv=3 me=agent:2 key=keys:<file> once=1
 --   shale cookbook:listen.shale site=... conv=3 me=agent:2 key=keys:... log=listen.log after=12
 --   shale cookbook:listen.shale site=... conv=all me=agent:2 key=keys:... log=listen.log
 --

@@ -6,11 +6,10 @@
 --   cd ~/build/lanes && shale cookbook:remove_lane.shale dir=apps-list
 --   shale cookbook:remove_lane.shale self_test=1
 --
--- Why it exists: twice on 2026-11-16 a finished lane was removed with a bare
--- `git worktree remove`, with no `retire_checkout` run first. Nothing
--- was lost those times, but nothing would have stopped an unpushed commit or
--- a link into the lane from going with it. This recipe makes the check and
--- the removal one launch, so the check can't be skipped.
+-- The rule: a lane is removed only after `retire_checkout` clears it. A bare
+-- `git worktree remove` lets an unpushed commit or a link into the lane go
+-- with it. This recipe makes the check and the removal one launch, so the
+-- check can't be skipped.
 --
 -- In order:
 --

@@ -6,13 +6,9 @@
 --   cd ~/showell_repos && shale cookbook:retire_checkout.shale dir=roc
 --   shale cookbook:retire_checkout.shale self_test=1
 --
--- Why it exists: a box cleanup once deleted an upstream clone that looked
--- disposable. It had no uncommitted work and no unpushed branch, which was
--- checked, and it was load-bearing all the same: build files in two sibling
--- repos defaulted to it by a relative path, a build script named it through
--- the `repos:` mount, a symbolic link in a lanes folder pointed at it, and a
--- memory note said so. Nothing checked those, so the mistake was the
--- system's, not the agent's. This recipe makes the check one launch, and its
+-- Why it exists: a clean checkout with no unpushed branch can still be
+-- load-bearing. A sibling's build file, a script through a mount, a link or
+-- a note may name it. This recipe makes the check one launch, and its
 -- verdict the thing to quote before any `rm -rf`.
 --
 -- `dir` is a folder in the root, the folder that holds the repos (run it

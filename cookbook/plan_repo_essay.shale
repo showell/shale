@@ -1,5 +1,5 @@
--- This recipe is the playbook for one ask of Steve's: "give me an essay on
--- our local repos" (a repo map, how the repos fit together). It gathers what
+-- This recipe is the playbook for one ask: an essay on the local repos (a
+-- repo map, how the repos fit together). It gathers what
 -- the essay is written from, checks first that the world still looks the way
 -- this playbook expects, and prints the steps left. Choosing what the
 -- diagrams show and writing the prose stay the writer's job.
@@ -22,14 +22,14 @@
 -- (folders added and removed, folders with new commits, titles that changed),
 -- the older repo notes still on the surface (their diagrams are the place to
 -- start), the age table as a pipe table to paste, the README mentions to draw
--- from, and the steps left: write the note, pass the gate, prune, hand Steve
+-- from, and the steps left: write the note, pass the gate, prune, hand over
 -- the link. Then it saves today's survey as the baseline for the next map, in
 -- `<data>/state/repo_survey-<today>.json`; the last map is the newest saved
 -- before today.
 --
---   cd /home/steve && shale cookbook:plan_repo_essay.shale
---   cd /home/steve && shale cookbook:plan_repo_essay.shale fresh=1
---   cd /home/steve && shale cookbook:plan_repo_essay.shale self_test=1
+--   cd ~ && shale cookbook:plan_repo_essay.shale
+--   cd ~ && shale cookbook:plan_repo_essay.shale fresh=1
+--   cd ~ && shale cookbook:plan_repo_essay.shale self_test=1
 --
 -- `repos=` is the folder of checkouts (default `showell_repos`) and `data=`
 -- the essay surface's data folder (default `essays`), both relative to

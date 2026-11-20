@@ -7,7 +7,7 @@
 --   shale cookbook/roc/find_unclear_names/check_goldens.shale self_test=1
 --   shale cookbook/roc/find_unclear_names/check_goldens.shale write=1
 --
--- The goldens were written on 2026-11-19 from the Shale original's output,
+-- The goldens were written from the Shale original's output,
 -- the recipe before it was ported, once the port matched it in all 31 cases
 -- of the comparison this replaces (the original's 26 plant rows, both
 -- self-tests, and three trees of other repositories). The original is gone,

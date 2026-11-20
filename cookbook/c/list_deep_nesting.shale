@@ -9,9 +9,9 @@
 --   shale cookbook:c/list_deep_nesting.shale self_test=1
 --
 -- It ranks functions to look at, never a rule or a gate: it fails on no
--- finding and exits 0 with them. Be aware of the opposite smell too (Steve):
--- "It's occasionally useful to have a single workhorse function that does a
--- lot, rather than scattering complexity around the codebase."
+-- finding and exits 0 with them. Be aware of the opposite smell too:
+-- one workhorse function that does a lot is sometimes better than complexity
+-- scattered around the codebase.
 --
 -- How depth is counted: a function's own body is depth 1, and each block a
 -- `{` opens inside it is one deeper, so `if (x) {` in the body makes depth 2.

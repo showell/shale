@@ -24,7 +24,7 @@
 --              `cookbook/roc/plants/check_module_size/` (run from the shale
 --              checkout's root).
 --
--- Tests have no limit (Steve, 2026-11-19), so a file of a test root is
+-- Tests have no limit, so a file of a test root is
 -- left out of the check by rule, not by an exemption line: a Spec is where a
 -- module's extensive tests go once they would crowd it, and what someone
 -- takes whole is the module, not its tests. A module's own expects count,
