@@ -431,48 +431,57 @@ static void roc_entry(void) {
 // script's stop names its own: a hosted call Shale refused, a `fail!`, a
 // budget run out answering it, a crash, the Roc's arena or CPU budget. The
 // site (`req_site`) is an address in the Roc's code; the launcher hands the
-// program a table of the script's lines (`--roc-sites FILE`, made from the
-// pinned Roc's DWARF line table, `objdump --dwarf=decodedline`, when it
-// links the program), and the address's line there is the stop's. Roc's
-// line table gives the line; the column is the call's own text on that line
-// (`Shale.read!`, `crash`), which the launcher finds in the script, else the
+// program a table of the lines of the script's files, its app's root and
+// its modules (`--roc-sites FILE`, made from the pinned Roc's DWARF line
+// table, `objdump --dwarf=decodedline`, when it links the program), and the
+// address's file and line there are the stop's. Roc's line table gives the
+// module and the line; the column is the call's own text on that line
+// (`Shale.read!`, `crash`), which the launcher finds in the file, else the
 // line's first. A site that is not in the script's own lines (Roc's
 // builtins, the platform) leaves the stop at the driver's line, as before.
 //
 // The table's lines, each a record:
-//   script PATH           the script, as the stop names it
-//   base HEX              roc_main's address in the table's terms
-//   row HEX LINE          from this address on, the script's LINE (0: none)
-//   call LINE COLUMN NAME a call's text in the script
-//   line LINE COLUMN      the line's first column that is not a blank
+//   file K PATH            the script's file K (from 1), as a stop names it:
+//                          the app's root, or a module of its own or of a
+//                          package it imports
+//   base HEX               roc_main's address in the table's terms
+//   row HEX K LINE         from this address on, file K's LINE (K 0: none)
+//   call K LINE COLUMN NAME a call's text in file K
+//   line K LINE COLUMN     the line's first column that is not a blank
 
 typedef struct {
     uint64_t addr;
+    uint32_t file;
     uint32_t line;
     uint32_t order;
 } RocRow;
 
 typedef struct {
+    uint32_t file;
     uint32_t line;
     uint32_t column;
     char name[48];
 } RocCall;
 
+// A file's path, by its number less one.
+typedef struct {
+    char path[4096];
+} RocFile;
+
 static struct {
     bool loaded;
-    char script[4096];
+    RocFile *files;
+    size_t files_len;
     uint64_t base;
     RocRow *rows;
     size_t rows_len;
+    // The `call` records, then the `line` records (`name` empty).
     RocCall *calls;
     size_t calls_len;
-    // Indexed by line: its first column, 0 for no entry.
-    uint32_t *first;
-    size_t first_len;
 } roc_sites;
 
-// Whether a stop was put at the Roc's line, so the report names its script.
-static bool roc_stop_named;
+// The file a stop was put at, so the report names it; NULL for none.
+static const char *roc_stop_file;
 
 static int roc_row_order(const void *a, const void *b) {
     const RocRow *x = a;
@@ -481,8 +490,23 @@ static int roc_row_order(const void *a, const void *b) {
     return x->order < y->order ? -1 : (x->order > y->order ? 1 : 0);
 }
 
+static void roc_sites_bad(const char *l) {
+    fprintf(stderr, "roc platform: a sites table line it does not read: %s\n", l);
+    exit(2);
+}
+
+static void *roc_sites_grow(void *items, size_t len, size_t *cap, size_t size) {
+    if (len < *cap) return items;
+    *cap = *cap == 0 ? 64 : *cap * 2;
+    void *grown = realloc(items, *cap * size);
+    if (grown == NULL) c_bug("roc platform: no memory for the sites table");
+    return grown;
+}
+
 // The table at `path`, read once at the start, before the run: the host's own
-// file, not the script's, so no budget of the run's is spent on it.
+// file, not the script's, so no budget of the run's is spent on it. A file's
+// number is its place among the `file` records, and a record naming a file
+// not yet listed is refused.
 static void roc_sites_load(const char *path) {
     FILE *f = fopen(path, "r");
     if (f == NULL) {
@@ -490,46 +514,34 @@ static void roc_sites_load(const char *path) {
         exit(2);
     }
     char l[4200];
-    size_t rows_cap = 0, calls_cap = 0;
+    size_t files_cap = 0, rows_cap = 0, calls_cap = 0;
     uint32_t order = 0;
     while (fgets(l, sizeof l, f) != NULL) {
         size_t n = strlen(l);
         if (n > 0 && l[n - 1] == '\n') l[--n] = 0;
         unsigned long long a = 0;
-        unsigned line = 0, col = 0;
+        unsigned file = 0, line = 0, col = 0;
+        int used = 0;
         char name[48];
-        if (strncmp(l, "script ", 7) == 0) {
-            snprintf(roc_sites.script, sizeof roc_sites.script, "%s", l + 7);
+        if (sscanf(l, "file %u %n", &file, &used) == 1 && used > 0) {
+            if (file != roc_sites.files_len + 1) roc_sites_bad(l);
+            roc_sites.files = roc_sites_grow(roc_sites.files, roc_sites.files_len, &files_cap, sizeof *roc_sites.files);
+            snprintf(roc_sites.files[roc_sites.files_len].path, sizeof roc_sites.files[0].path, "%s", l + used);
+            roc_sites.files_len++;
         } else if (sscanf(l, "base %llx", &a) == 1) {
             roc_sites.base = a;
-        } else if (sscanf(l, "row %llx %u", &a, &line) == 2) {
-            if (roc_sites.rows_len == rows_cap) {
-                rows_cap = rows_cap == 0 ? 256 : rows_cap * 2;
-                roc_sites.rows = realloc(roc_sites.rows, rows_cap * sizeof *roc_sites.rows);
-                if (roc_sites.rows == NULL) c_bug("roc platform: no memory for the sites table");
-            }
-            roc_sites.rows[roc_sites.rows_len++] = (RocRow){a, line, order++};
-        } else if (sscanf(l, "call %u %u %47s", &line, &col, name) == 3) {
-            if (roc_sites.calls_len == calls_cap) {
-                calls_cap = calls_cap == 0 ? 64 : calls_cap * 2;
-                roc_sites.calls = realloc(roc_sites.calls, calls_cap * sizeof *roc_sites.calls);
-                if (roc_sites.calls == NULL) c_bug("roc platform: no memory for the sites table");
-            }
-            RocCall c = {line, col, {0}};
-            snprintf(c.name, sizeof c.name, "%s", name);
+        } else if (sscanf(l, "row %llx %u %u", &a, &file, &line) == 3) {
+            if (file > roc_sites.files_len) roc_sites_bad(l);
+            roc_sites.rows = roc_sites_grow(roc_sites.rows, roc_sites.rows_len, &rows_cap, sizeof *roc_sites.rows);
+            roc_sites.rows[roc_sites.rows_len++] = (RocRow){a, file, line, order++};
+        } else if (sscanf(l, "call %u %u %u %47s", &file, &line, &col, name) == 4 || sscanf(l, "line %u %u %u", &file, &line, &col) == 3) {
+            if (file == 0 || file > roc_sites.files_len) roc_sites_bad(l);
+            RocCall c = {file, line, col, {0}};
+            if (l[0] == 'c') snprintf(c.name, sizeof c.name, "%s", name);
+            roc_sites.calls = roc_sites_grow(roc_sites.calls, roc_sites.calls_len, &calls_cap, sizeof *roc_sites.calls);
             roc_sites.calls[roc_sites.calls_len++] = c;
-        } else if (sscanf(l, "line %u %u", &line, &col) == 2) {
-            if (line >= roc_sites.first_len) {
-                size_t len = (size_t)line + 1;
-                roc_sites.first = realloc(roc_sites.first, len * sizeof *roc_sites.first);
-                if (roc_sites.first == NULL) c_bug("roc platform: no memory for the sites table");
-                for (size_t k = roc_sites.first_len; k < len; k++) roc_sites.first[k] = 0;
-                roc_sites.first_len = len;
-            }
-            roc_sites.first[line] = col;
         } else {
-            fprintf(stderr, "roc platform: a sites table line it does not read: %s\n", l);
-            exit(2);
+            roc_sites_bad(l);
         }
     }
     fclose(f);
@@ -537,9 +549,9 @@ static void roc_sites_load(const char *path) {
     roc_sites.loaded = true;
 }
 
-// The script's line and column of the site, for the call `call` ("" for
-// none): false when the site is not in the script's own lines.
-static bool roc_site_place(uintptr_t site, Str call, uint32_t *line, uint32_t *column) {
+// The file (from 1), line and column of the site, for the call `call` (""
+// for none): false when the site is not in the script's own lines.
+static bool roc_site_place(uintptr_t site, Str call, uint32_t *file, uint32_t *line, uint32_t *column) {
     if (!roc_sites.loaded || site == 0 || roc_sites.rows_len == 0) return false;
     // The table's address of the site: roc_main moved by as much as it.
     uint64_t addr = (uint64_t)site - (uint64_t)(uintptr_t)roc_main + roc_sites.base;
@@ -553,16 +565,20 @@ static bool roc_site_place(uintptr_t site, Str call, uint32_t *line, uint32_t *c
         }
     }
     if (lo == 0) return false;
-    uint32_t at_line = roc_sites.rows[lo - 1].line;
-    if (at_line == 0) return false;
+    const RocRow *at = &roc_sites.rows[lo - 1];
+    if (at->file == 0 || at->line == 0) return false;
     uint32_t col = 0;
     for (size_t k = 0; k < roc_sites.calls_len && col == 0; k++) {
         const RocCall *c = &roc_sites.calls[k];
-        if (c->line == at_line && call.len > 0 && strlen(c->name) == call.len && memcmp(c->name, call.ptr, call.len) == 0) col = c->column;
+        if (c->file == at->file && c->line == at->line && c->name[0] != 0 && call.len > 0 && strlen(c->name) == call.len && memcmp(c->name, call.ptr, call.len) == 0) col = c->column;
     }
-    if (col == 0 && at_line < roc_sites.first_len) col = roc_sites.first[at_line];
+    for (size_t k = 0; k < roc_sites.calls_len && col == 0; k++) {
+        const RocCall *c = &roc_sites.calls[k];
+        if (c->file == at->file && c->line == at->line && c->name[0] == 0) col = c->column;
+    }
     if (col == 0) col = 1;
-    *line = at_line;
+    *file = at->file;
+    *line = at->line;
     *column = col;
     return true;
 }
@@ -577,16 +593,16 @@ static Str roc_doing(void) {
 
 static STATUS_MUST_USE Status roc_run_ended(RunCtx *r, Status s) {
     if (s == STOP && r->stopped && roc_started && req_kind != REQ_DONE) {
-        uint32_t line = 0, column = 0;
+        uint32_t file = 0, line = 0, column = 0;
         Str doing = roc_doing();
-        if (roc_site_place(req_site, doing, &line, &column)) {
+        if (roc_site_place(req_site, doing, &file, &line, &column)) {
             r->stop.line = line;
             r->stop.column = column;
             // The hosted call it stopped in, as a Shale stop names the
             // function: the driver's own calls are no place of the script's.
             r->stop.function = str_eq(doing, S("crash")) ? S("") : doing;
             r->stop.trail = (Calls){NULL, 0};
-            roc_stop_named = true;
+            roc_stop_file = roc_sites.files[file - 1].path;
         }
     }
     return run_ended(r, s);
@@ -596,12 +612,12 @@ static uint64_t roc_cpu_ms_used(void) {
     return roc_cpu_ns / 1000000u;
 }
 
-// The report: the Roc's script named for a stop put at its line, and the
+// The report: the Roc's file named for a stop put at its line, and the
 // Roc's CPU time on the `── used:` line (`, 12 of 5000 Roc CPU ms`), which
 // is there too when the Roc used past half of its budget.
 static STATUS_MUST_USE Status roc_write_report(Buf *w, Str name, Preludes preludes, bool verbose, Names effects, Names records, const Stop *s, RunUsed u, const Budgets *b, const StepsTop *steps) {
     Str named = name;
-    if (roc_stop_named && s != NULL) named = (Str){roc_sites.script, strlen(roc_sites.script)};
+    if (roc_stop_file != NULL && s != NULL) named = (Str){roc_stop_file, strlen(roc_stop_file)};
     size_t from = w->len;
     TRY(cli_write_report(w, named, preludes, verbose, effects, records, s, u, b, steps));
     Buf said = buf_make(w->arena);

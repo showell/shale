@@ -11,12 +11,23 @@
 ##   shale roc_platform/run.shale script=roc_platform/examples/escape.roc try=ok        a run Shale lets through
 ##   shale roc_platform/run.shale script=roc_platform/examples/escape.roc try=loop      a pure loop that never ends
 ##   shale roc_platform/run.shale script=roc_platform/examples/escape.roc try=spin      a pure loop inside its budget
+##   shale roc_platform/run.shale script=roc_platform/examples/escape.roc try=module    a path out of the root, from a module
+##   shale roc_platform/run.shale script=roc_platform/examples/escape.roc try=package   a package's function, a value
+##
+## It is a script of three files and a package: this root, Reach.roc beside
+## it (its own module, which reaches the system through the platform as this
+## file does) and kit/ (a package by a relative path, which reaches nothing).
 ##
 ## The Roc's CPU budget is small here, so `loop` stops soon.
 ## budget: roc_cpu_ms=400
-app [main!] { pf: platform "../platform/main.roc" }
+app [main!] {
+	kit: "kit/main.roc",
+	pf: platform "../platform/main.roc",
+}
 
 import pf.Shale
+import Reach
+import kit.Plural
 
 main! : {} => {}
 main! = |{}| {
@@ -58,6 +69,8 @@ main! = |{}| {
 			}
 			Shale.print!("spun ${U64.to_str($n)} times, inside the budget")
 		}
+		"module" => Reach.climb!({})
+		"package" => Shale.print!("a package's value: ${Plural.of(3, "file")}")
 		"missing" =>
 			match Shale.read!("no/such/file.txt") {
 				Found(_) => Shale.print!("found a file that is not there")

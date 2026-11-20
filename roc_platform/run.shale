@@ -10,24 +10,43 @@
 -- hash of what goes into it, under roc_platform/out/cache: a script run
 -- again unchanged is linked and built no more.
 --
+-- **A script is its app's root and the files it reaches**: the modules it
+-- imports bare (`import Words`: Words.roc beside the file that imports it,
+-- each module's own imports followed in turn), and the packages its header
+-- names by a relative path (`lib: "../lib/main.roc"`: that `package [A, B]
+-- {}` file and the modules it exposes, theirs followed the same way). A
+-- package of a script's imports no package of its own. Every one of them is
+-- read through Shale's store, so a path out of the root stops the launch;
+-- each goes into the build's key, and two of them with one module name are
+-- refused, since a stop names its file by the module's name in Roc's line
+-- table.
+--
 -- `in=DIR` (an absolute folder) runs the program rooted there instead, with
 -- the build still this checkout's: a cookbook launcher's way to run a Roc
 -- recipe in another repository's root (cookbook/roc/find_unclear_names.shale).
 --
--- A `name=value` is handed to the script when it reads `name`
--- (`Shale.arg!("name", ...)`, found in its text, the call's name from
--- surface.gen.shale): any other stops the launch before anything is built,
--- naming the ones the script reads, as Shale refuses a value no `arg` of a
--- script's reads. (This launcher names its values by value, so Shale's own
--- check cannot see them: it reads them with `arg_names()`.) A `## budget:
--- NAME=N ...` line in the script is its budgets, as `-- budget:` is a Shale
--- script's, `roc_cpu_ms` among them (the Roc's own CPU time, the host's).
--- `timing=1` says each phase's time. `opt=speed` builds with Roc's
--- `--opt=speed` (`dev` unset): slower to build, faster to run.
+-- `reads=inputs` builds and runs nothing: it prints the real path of each
+-- file the program is built from, one a line (the script's files, the
+-- platform, the launcher, the host and the code git tracks in c/, as the
+-- host's key reads it, prose aside), for a caller that keys its own cache
+-- on them. A launcher hands it on, so `shale <launcher> reads=inputs` asks it
+-- of a recipe.
 --
--- With the program it links a table of the script's lines (`app.sites`,
--- host.c's "where in the Roc a stop is"), from the Roc's DWARF line table,
--- so a stop made while the Roc waits names the script's line.
+-- A `name=value` is handed to the script when it reads `name`
+-- (`Shale.arg!("name", ...)`, found in the text of any of its files, the
+-- call's name from surface.gen.shale): any other stops the launch before
+-- anything is built, naming the ones the script reads, as Shale refuses a
+-- value no `arg` of a script's reads. (This launcher names its values by
+-- value, so Shale's own check cannot see them: it reads them with
+-- `arg_names()`.) A `## budget: NAME=N ...` line in the app's root is its
+-- budgets, as `-- budget:` is a Shale script's, `roc_cpu_ms` among them (the
+-- Roc's own CPU time, the host's). `timing=1` says each phase's time.
+-- `opt=speed` builds with Roc's `--opt=speed` (`dev` unset): slower to
+-- build, faster to run.
+--
+-- With the program it links a table of the lines of the script's files
+-- (`app.sites`, host.c's "where in the Roc a stop is"), from the Roc's DWARF
+-- line table, so a stop made while the Roc waits names the file and line.
 --
 -- **A build is a job of its own** (`job_start`, this launcher again with
 -- `build=script`, which starts `build=host` for the host's object when it is
@@ -41,9 +60,15 @@
 -- rename), so a run never starts a program half linked; the host's object is
 -- compiled beside its place and renamed in (`mv -T`).
 --
--- The script is one file whose header names the platform by any path
--- (`pf: platform "../platform/main.roc"`): it is copied into the cache with
--- that path made this checkout's, relative (Roc refuses an absolute one).
+-- **A script's build prunes what no current key reaches**, once it is
+-- linked: every host object but the current one, every build linked with
+-- another host's, this script's own builds at other keys (an edit's), and the
+-- job logs of what is gone. A build whose job still runs is never touched,
+-- so concurrent runs keep theirs.
+--
+-- The files are copied into the cache: the root as main.roc, its modules
+-- beside it, each package under pkg/<its name>/, and the header's paths made
+-- this checkout's, relative (Roc refuses an absolute one).
 -- budget: programs=20 steps=50000000 arena_bytes=268435456 output_bytes=4000000
 
 use("./surface.gen.shale")
@@ -54,6 +79,8 @@ const SCRIPT = arg("script", "")
 const IN = arg("in", "")
 const BUILD = arg("build", "")
 if BUILD ~= "" and BUILD ~= "host" and BUILD ~= "script" then fail("run: build=host or build=script (a build job's own), not " .. BUILD) end
+const READS = arg("reads", "")
+if READS ~= "" and READS ~= "inputs" then fail("run: reads=inputs (the files the program is built from), not " .. READS) end
 const TIMING = arg("timing", 0) == 1
 const OPT = arg("opt", "dev")
 if OPT ~= "dev" and OPT ~= "speed" then fail("run: opt=dev (the default) or opt=speed, not " .. OPT) end
@@ -76,17 +103,132 @@ function hash_of(phase, text)
   return trim(r.out)
 end
 
-const source = read(SCRIPT)
+-- ── The script's files ──────────────────────────────────────────────────
+-- Each `{path, at, name, text, made}`: its path here, the one a stop names;
+-- its place in the cache's folder; its module's name in Roc's line table
+-- (`main` for the root, "" for a package's header, which holds no code); its
+-- text; and the text copied, its header's paths made the cache's.
+
+-- `name` in folder `dir`, the root's folder being "".
+function beside(dir, name)
+  if dir == "" or dir == "." then return name end
+  return dir .. "/" .. name
+end
+
+-- The modules a file imports bare (`import Words`, `import Words as W`,
+-- `import Words exposing [..]`): its own, beside it. A dotted import is a
+-- package's or the platform's.
+function bare_imports(text)
+  local out = {}
+  for l in lines(text) do
+    local m = re_find(l, "^import[ \t]+([A-Za-z_][A-Za-z0-9_.]*)")
+    if m ~= nil and find(m.group, ".") == nil then push(out, m.group) end
+  end
+  return out
+end
+
+-- Module `name` of folder `dir`, imported by `who`, and each module it
+-- imports in turn, put in `files` once (`seen` the paths so far). `at_dir`
+-- is the folder's place in the cache.
+function add_module(files, seen, dir, at_dir, name, who)
+  local path = beside(dir, name .. ".roc")
+  if has_key(seen, path) then return nil end
+  seen[path] = true
+  if not exists(path) then fail("run: " .. who .. " imports " .. name .. ", and there is no " .. path .. " (a script's own module is a file beside the one that imports it)") end
+  local text = read(path)
+  push(files, {path = path, at = beside(at_dir, name .. ".roc"), name = name, text = text, made = text})
+  for n in bare_imports(text) do add_module(files, seen, dir, at_dir, n, path) end
+  return nil
+end
+
+-- A text with its comment lines left out.
+function code_of(text)
+  local kept = {}
+  for l in lines(text) do
+    if not starts_with(trim(l), "#") then push(kept, l) end
+  end
+  return join(kept, "\n")
+end
+
+-- Package `short` of `script`'s header, at `rel` from the script's folder:
+-- its header file and its modules put in `files`; the header's path in the
+-- cache, relative to the root's copy.
+function add_package(files, seen, script, short, rel)
+  local main = path_normal(beside(dirname(script), rel))
+  if main == nil then fail("run: " .. script .. "'s package `" .. short .. "` is \"" .. rel .. "\", which climbs out of the root") end
+  if basename(main) ~= "main.roc" then fail("run: " .. script .. "'s package `" .. short .. "` is " .. main .. ": a package is named by its main.roc") end
+  if not exists(main) then fail("run: " .. script .. "'s package `" .. short .. "` is " .. main .. ", which is not there") end
+  local text = read(main)
+  local head = re_find(code_of(text), "^[ \t\n]*package[ \t\n]*\\[([^\\]]*)\\][ \t\n]*\\{([^}]*)\\}")
+  if head == nil then fail("run: " .. main .. " (`" .. short .. "` of " .. script .. ") has no `package [...] {}` header") end
+  if trim(head.groups[2]) ~= "" then fail("run: " .. main .. " (`" .. short .. "` of " .. script .. ") imports packages of its own, which a script's package may not (roc_platform/README.md)") end
+  local at_dir = "pkg/" .. short
+  push(files, {path = main, at = at_dir .. "/main.roc", name = "", text = text, made = text})
+  for exposed in split(head.groups[1], ",") do
+    if trim(exposed) ~= "" then add_module(files, seen, dirname(main), at_dir, trim(exposed), main) end
+  end
+  return at_dir .. "/main.roc"
+end
+
+-- The script's files, the root first.
+function script_files(script)
+  local source = read(script)
+  local header = re_find(source, "\\bapp[ \t\n]*\\[[^\\]]*\\][ \t\n]*\\{[^}]*\\}")
+  if header == nil then fail("run: " .. script .. " has no app header (`app [main!] { pf: platform \"...\" }`)") end
+  local root = {path = script, at = "main.roc", name = "main", text = source, made = source}
+  local files = {root}
+  local seen = {}
+  seen[script] = true
+  local made_header = header.text
+  local platforms = re_find_all(header.text, "[a-z_][a-z_0-9]*[ \t\n]*:[ \t\n]*platform[ \t\n]+(\"[^\"]*\")")
+  if #platforms ~= 1 then fail("run: " .. script .. " names no platform (`pf: platform \"...\"`)") end
+  -- Roc takes no absolute platform path: the cache's folder is three below
+  -- roc_platform/.
+  made_header = substitute(made_header, platforms[1].text, substitute(platforms[1].text, platforms[1].group, "\"../../../platform/main.roc\""))
+  for p in re_find_all(header.text, "([a-z_][a-z_0-9]*)[ \t\n]*:[ \t\n]*\"([^\"]*)\"") do
+    local at = add_package(files, seen, script, p.groups[1], p.groups[2])
+    made_header = substitute(made_header, p.text, p.groups[1] .. ": \"" .. at .. "\"")
+  end
+  root.made = substitute(source, header.text, made_header)
+  for n in bare_imports(source) do add_module(files, seen, dirname(script), "", n, script) end
+  -- A stop names its file by the module's name in Roc's line table.
+  local named = {}
+  for f in files do
+    if f.name ~= "" then
+      if has_key(named, f.name) then fail("run: " .. script .. " has two modules named " .. f.name .. " (" .. named[f.name] .. ", " .. f.path .. "): a stop names its file by the module's name, so one name is one file") end
+      named[f.name] = f.path
+    end
+  end
+  return files
+end
+
+const files = script_files(SCRIPT)
+const source = files[1].text
+
+-- ── What the program is built from, for a caller's key ──────────────────
+
+if READS == "inputs" then
+  local paths = {}
+  for f in files do push(paths, f.path) end
+  for p in glob(DIR .. "/platform/*.roc") do push(paths, p) end
+  for p in {DIR .. "/roc-version", DIR .. "/run.shale", DIR .. "/surface.gen.shale", DIR .. "/host/host.c", DIR .. "/host/hosted.gen.c", DIR .. "/host/roc_platform_abi.h"} do push(paths, p) end
+  for p in git_ls_files("c") do
+    if not ends_with(p, ".md") then push(paths, p) end
+  end
+  for p in paths do print(real(p)) end
+end
 
 -- ── The values: each one given, one the script reads ────────────────────
 
 -- The launcher's own values, never the script's.
-const OWN = {"script", "timing", "opt", "in", "build"}
+const OWN = {"script", "timing", "opt", "in", "build", "reads"}
 local names = {}
 local reads = {}
-for g in re_find_all(source, substitute(ROC_ARG_CALL, ".", "\\.") .. [=[\("([a-z_0-9]+)"]=]) do
-  if not has_key(names, g.group) then push(reads, g.group) end
-  names[g.group] = true
+for f in files do
+  for g in re_find_all(f.text, substitute(ROC_ARG_CALL, ".", "\\.") .. [=[\("([a-z_0-9]+)"]=]) do
+    if not has_key(names, g.group) then push(reads, g.group) end
+    names[g.group] = true
+  end
 end
 for given in arg_names() do
   if not has_item(OWN, given) and not has_key(names, given) then
@@ -101,53 +243,111 @@ end
 const host_key = hash_of("host key", read(DIR .. "/host/host.c") .. read(DIR .. "/host/hosted.gen.c") .. read(DIR .. "/host/roc_platform_abi.h") .. must(run({"git", "rev-parse", "HEAD:c"}, {timeout_ms = 10000, whole = 100})).out)
 const host_o = OUT .. "/host/" .. host_key .. ".o"
 
-local m = re_find(source, [=[platform "([^"]*)"]=])
-if m == nil then fail("run: " .. SCRIPT .. " names no platform (`pf: platform \"...\"`)") end
--- Roc takes no absolute platform path: the cache's folder is three below
--- roc_platform/.
-const made = substitute(source, m.text, "platform \"../../../platform/main.roc\"")
+local copied = ""
+for f in files do copied = copied .. "== " .. f.at .. "\n" .. f.made end
 local platform = ""
 for p in glob(DIR .. "/platform/*.roc") do platform = platform .. read(p) end
-const key = hash_of("script key", made .. platform .. pin .. host_key .. OPT)
+const key = hash_of("script key", copied .. platform .. pin .. host_key .. OPT)
 const cache = OUT .. "/cache/" .. key
 const exe = cache .. "/app"
 const sites = cache .. "/app.sites"
+-- What a build is for, written into its folder first: what pruning reads.
+const built_for = "script " .. SCRIPT .. "\nopt " .. OPT .. "\nhost " .. host_key .. "\n"
 
 -- ── The script's lines, for a stop's place ──────────────────────────────
 
--- `app.sites`: the program's rows of the script's lines (DWARF's file
--- `main`, the cache's main.roc; every other file's row, and a sequence's
--- end, are line 0), roc_main's address, and each line's calls and first
--- column. host.c's "where in the Roc a stop is" reads it.
-function sites_of(exe_path, dir, text)
-  local out = {"script " .. SCRIPT}
+-- `app.sites`: the script's files, numbered from 1; the program's rows of
+-- their lines (DWARF's file is a module's name: `main` is the cache's
+-- main.roc; a row of any other file, and a sequence's end, are file 0),
+-- roc_main's address, and each line's calls and first column. host.c's
+-- "where in the Roc a stop is" reads it.
+function sites_of(exe_path, dir, files)
+  local out = {}
+  local number = {}
+  for k = 1, #files do
+    push(out, "file " .. k .. " " .. files[k].path)
+    if files[k].name ~= "" then number[files[k].name] = k end
+  end
   local nm = said("nm", must(run({"nm", exe_path}, {timeout_ms = 20000, tail = 5, re = " T roc_main$"})))
   local base = re_find(nm.out, "([0-9a-f]+) T roc_main")
   if base == nil then fail("run: " .. exe_path .. " has no roc_main") end
   push(out, "base " .. base.group)
   -- The whole table goes to a file, read whole: a keep of its lines would
-  -- hold them in the arena twice.
+  -- hold them in the arena twice. `--wide` keeps a long module name on its
+  -- row's line.
   local table_log = dir .. "/lines.txt"
-  said("line table", must(run({"objdump", "--dwarf=decodedline", exe_path}, {timeout_ms = 60000, tail = 1, log = table_log})))
+  said("line table", must(run({"objdump", "--dwarf=decodedline", "--wide", exe_path}, {timeout_ms = 60000, tail = 1, log = table_log})))
   for l in lines(read(table_log)) do
     local w = words(l)
     if #w >= 3 and starts_with(w[3], "0x") then
-      local line = "0"
-      if w[1] == "main" and w[2] ~= "-" then line = w[2] end
-      push(out, "row " .. sub(w[3], 3, #w[3]) .. " " .. line)
+      local at = "0 0"
+      if w[2] ~= "-" and has_key(number, w[1]) then at = number[w[1]] .. " " .. w[2] end
+      push(out, "row " .. sub(w[3], 3, #w[3]) .. " " .. at)
     end
   end
-  local n = 0
-  for l in lines(text) do
-    n = n + 1
-    local first = re_find(l, "[^ \t]")
-    if first ~= nil then push(out, "line " .. n .. " " .. first.at) end
-    for c in ROC_CALLS do
-      for at in find_all(l, c .. "(") do push(out, "call " .. n .. " " .. at .. " " .. c) end
+  for k = 1, #files do
+    local n = 0
+    for l in lines(files[k].text) do
+      n = n + 1
+      local first = re_find(l, "[^ \t]")
+      if first ~= nil then push(out, "line " .. k .. " " .. n .. " " .. first.at) end
+      for c in ROC_CALLS do
+        for at in find_all(l, c .. "(") do push(out, "call " .. k .. " " .. n .. " " .. at .. " " .. c) end
+      end
+      for m in re_find_all(l, "\\bcrash\\b") do push(out, "call " .. k .. " " .. n .. " " .. m.at .. " crash") end
     end
-    for m in re_find_all(l, "\\bcrash\\b") do push(out, "call " .. n .. " " .. m.at .. " crash") end
   end
   return join(out, "\n") .. "\n"
+end
+
+-- ── Pruning: what no current key reaches ────────────────────────────────
+
+-- Whether the build job named `name` (its log OUT/jobs/<name>.log) runs.
+function job_runs(name)
+  local record = OUT .. "/jobs/" .. name .. ".log.job"
+  return exists(record) and job_alive(record)
+end
+
+-- After this script's build: every host object but the current one; every
+-- build linked with another host's, made before builds said what they were
+-- for, or this script's and opt's at another key; and the logs of the jobs
+-- that made what is gone. A build whose job runs is left alone. The count
+-- removed, said on a `--` line.
+function prune_out()
+  local gone = 0
+  for n in ls(OUT .. "/host") do
+    if ends_with(n, ".o") and n ~= host_key .. ".o" and not job_runs("host-" .. sub(n, 1, #n - 2)) then
+      remove(OUT .. "/host/" .. n)
+      gone = gone + 1
+    end
+  end
+  for k in ls(OUT .. "/cache") do
+    local d = OUT .. "/cache/" .. k
+    if k ~= key and not job_runs(k) then
+      local stale = true
+      if exists(d .. "/built_for") then
+        local was = read(d .. "/built_for")
+        stale = was == built_for or not contains(was, "\nhost " .. host_key .. "\n")
+      end
+      if stale then
+        remove_tree(d)
+        gone = gone + 1
+      end
+    end
+  end
+  for n in ls(OUT .. "/jobs") do
+    if ends_with(n, ".log") then
+      local name = sub(n, 1, #n - 4)
+      local made = OUT .. "/cache/" .. name
+      if starts_with(name, "host-") then made = OUT .. "/host/" .. sub(name, 6, #name) .. ".o" end
+      if not exists(made) and not job_runs(name) then
+        remove(OUT .. "/jobs/" .. n)
+        if exists(OUT .. "/jobs/" .. n .. ".job") then remove(OUT .. "/jobs/" .. n .. ".job") end
+      end
+    end
+  end
+  push(phases, "pruned " .. gone .. " builds no current key reaches")
+  return nil
 end
 
 -- ── The build, under the lock ───────────────────────────────────────────
@@ -163,17 +363,23 @@ function build_host()
   return nil
 end
 
--- The script's archive, its program and, last, its sites table.
+-- The script's files copied, its archive, its program and, last, its sites
+-- table.
 function build_script()
   mkdir(cache)
-  replace(cache .. "/main.roc", made)
+  replace(cache .. "/built_for", built_for)
+  for f in files do
+    mkdir(dirname(cache .. "/" .. f.at))
+    replace(cache .. "/" .. f.at, f.made)
+  end
   must(said("roc build", run({roc, "build", real(cache .. "/main.roc"), "--target=x64musl", "--opt=" .. OPT, "--output=" .. real(cache) .. "/app.a"}, {timeout_ms = 300000, tail = 30, nice = 19})))
   -- A speed archive is not PIE (README, "What the spike measured").
   local link = {"gcc", "-z", "noexecstack"}
   if OPT == "speed" then push(link, "-no-pie") end
   for a in {host_o, cache .. "/app.a", "-o", exe} do push(link, a) end
   must(said("link", run(link, {timeout_ms = 120000, tail = 20, nice = 19})))
-  replace(sites, sites_of(real(exe), cache, source))
+  replace(sites, sites_of(real(exe), cache, files))
+  prune_out()
   return nil
 end
 
@@ -218,7 +424,9 @@ function built_in_job(name, what, done)
   fail("run: another run's build job (" .. log .. ") ended without " .. done)
 end
 
-if BUILD == "host" then
+if READS ~= "" then
+  -- Printed above: nothing is built or run.
+elseif BUILD == "host" then
   build_host()
   for p in phases do print("-- " .. p) end
 elseif BUILD == "script" then
@@ -258,7 +466,7 @@ end
 
 -- The stop is the script's own, at its top level, so it has no `called
 -- from` line under it.
-if BUILD == "" then
+if BUILD == "" and READS == "" then
   local code = run_program(reads)
   if code ~= 0 then fail("run: " .. SCRIPT .. " stopped (exit " .. code .. ")") end
 end

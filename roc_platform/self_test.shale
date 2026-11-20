@@ -13,7 +13,10 @@
 --     `try=spin`, a loop inside the budget, ends;
 --   - a stop names the Roc's line: `try=climb`'s refused read names
 --     escape.roc's line and column of its `Shale.read!` call, found in the
---     file here, so an edit there moves the plant with it;
+--     file here, so an edit there moves the plant with it; `try=module`'s
+--     names Reach.roc's, a module of escape.roc's beside it, and
+--     `try=package` runs a function of kit/, a package it names by a
+--     relative path;
 --   - a value no `Shale.arg!` reads is refused: count_lines.roc given
 --     `fiel=` stops before anything is built, naming `file`; given `file=`,
 --     it runs.
@@ -25,24 +28,27 @@
 
 const SHALE = arg("shale", "shale")
 const ESCAPE = "roc_platform/examples/escape.roc"
+const REACH = "roc_platform/examples/Reach.roc"
 
--- `ESCAPE`'s line and column of `text`'s first character, as a stop names
+-- `file`'s line and column of `text`'s first character, as a stop names
 -- them (`25:8`).
-function place_of(text)
-  for m in grep(ESCAPE, text) do return m.line .. ":" .. find(m.text, text) end
-  fail("self_test: " .. ESCAPE .. " has no `" .. text .. "`: re-aim the plant")
+function place_of(file, text)
+  for m in grep(file, text) do return m.line .. ":" .. find(m.text, text) end
+  fail("self_test: " .. file .. " has no `" .. text .. "`: re-aim the plant")
 end
 
 -- Each try, and the literals its output must hold. A stop's is Shale's own
 -- class and words.
 const TRIES = {
-  {try = "climb", stops = true, holds = {"── stopped at " .. ESCAPE .. ":" .. place_of("Shale.read!(\"../outside.txt\")") .. " (in `Shale.read!`): argument: `exists`: \"../outside.txt\" climbs out of the root"}},
+  {try = "climb", stops = true, holds = {"── stopped at " .. ESCAPE .. ":" .. place_of(ESCAPE, "Shale.read!(\"../outside.txt\")") .. " (in `Shale.read!`): argument: `exists`: \"../outside.txt\" climbs out of the root"}},
   {try = "absolute", stops = true, holds = {"argument: `exists`: \"/etc/passwd\" is absolute"}},
   {try = "bash", stops = true, holds = {"refused: `run` of `bash`: a shell or an interpreter"}},
   {try = "write", stops = true, holds = {"argument: `replace`: \"../escaped.txt\" climbs out of the root"}},
   {try = "crash", stops = true, holds = {"the Roc crashed: a promise the script broke"}},
   {try = "arena", stops = true, holds = {"budget arena: the arena budget ran out"}},
   {try = "loop", stops = true, holds = {"── stopped at " .. ESCAPE .. ":", "budget cpu: the Roc's CPU time is past its budget (400 ms)", "of 400 Roc CPU ms"}},
+  {try = "module", stops = true, holds = {"── stopped at " .. REACH .. ":" .. place_of(REACH, "Shale.read!(\"../outside.txt\")") .. " (in `Shale.read!`): argument: `exists`: \"../outside.txt\" climbs out of the root"}},
+  {try = "package", stops = false, holds = {"a package's value: 3 files"}},
   {try = "spin", stops = false, holds = {"spun 200000 times, inside the budget"}},
   {try = "missing", stops = false, holds = {"Missing, as a value: the script goes on"}},
   {try = "ok", stops = false, holds = {"git ran, exit 0: git version"}},
