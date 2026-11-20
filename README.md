@@ -5,28 +5,28 @@ whole repo. A short script refactors one. Every run is budgeted, confined,
 readable. Agents write it in place of bash, in place of Python.
 
 The code here was written by AI coding agents (Claude), with human supervision.
+Point an agent at this repo to extend it.
 
 Shale scripts look like Lua. A C runtime reads each one, compiles it to
 bytecode and runs it on a small virtual machine. Its builtins cover the
 common Linux work: reading, editing and searching files, walking folders,
 running programs and background jobs, git, text and JSON. The whole runtime
 builds as one C file, links only the C library, and weighs under a
-megabyte. It currently runs on Linux x86-64, as the only shell on our
-development box: every command our agents issue goes through it, and a hook
-refuses anything else.
+megabyte. It runs on Linux x86-64, as the only shell on our development
+box: every command our agents issue goes through it.
 
 ## Why use it instead of bash or Python
 
-Every script runs inside guard rails that a shell does not have:
+Every script runs inside guard rails:
 
-- **`run` never hangs or floods.** A program runs only with a timeout and a
-  keep (`head`, `tail` or `whole`), so a hung test is stopped and a
-  megabyte of build log comes back as its last 40 lines.
+- **`run` is bounded.** A program runs with a timeout and a keep (`head`,
+  `tail` or `whole`), so a hung test is stopped and a megabyte of build log
+  comes back as its last 40 lines.
 - **Every run has budgets**: steps, reads, bytes read and bytes printed
   (64 KiB unset). A run that hits one stops and says which; `--budget
   NAME=N` raises it.
 - **A stop is one line** that says where and why, with a class (`type`,
-  `index`, `refused`, `budget reads`), not a traceback.
+  `index`, `refused`, `budget reads`).
 - **It is confined.** A script reads and writes only under the folder it
   runs in and the mounts you name (`name:path`): no `..`, no absolute
   paths.
@@ -34,33 +34,26 @@ Every script runs inside guard rails that a shell does not have:
   path git does not track (a script just written, not yet read), a shell or
   an interpreter (`bash`, `python3`, `node`), and a text tool Shale already
   has (`grep`, `sed`); `{want = "tag: why"}` runs one anyway, logged. A
-  `name=value` the script never reads stops the run before it starts, so a
-  misspelled argument is caught.
+  misspelled `name=value` argument, one the script never reads, stops the
+  run before it starts.
 - **Changes are undoable.** Work in a git checkout and `git diff` shows
   what a run did. `--undo-on-stop` puts back every file a stopped run
   changed. `git_merge` that hits a conflict aborts the merge and stops,
-  naming the paths, so a checkout is never left half merged.
+  naming the paths, so the checkout stays whole.
 
 ## Install
-**The source is C, in [c/](c/)**, the only Shale since 2026-11-17: the
-runtime (`c/shale.c`, `c/script`, `c/host`, `c/foundation`), the gate
-(`c/shale_gate.c`, `c/gate`) and the preludes (`c/preludes`). It needs
-Linux on x86-64, GCC and TCC.
 
-- **Build and install:** `shale c/install.shale` from a clean checkout
-  builds the release binary, runs the fast tier and a smoke test, copies it
-  to `~/tools/shale/bin/shale` and points `~/.local/bin/shale` at it (a
-  `localbin = ~/.local/bin` mount line is needed). The hook runs the gate
-  it installs beside it. [c/docs/building.md](c/docs/building.md) has the
-  whole ladder.
-- **Test:** `shale c/build.shale` is the fast tier, in seconds; `shale
-  c/build.shale full=1` adds the GCC release build, ASan and the planted
-  faults. `shale tests/golden.shale` holds a build to every golden case.
+**The source is C, in [c/](c/)**: the runtime (`c/shale.c`, `c/script`,
+`c/host`, `c/foundation`), the gate (`c/shale_gate.c`, `c/gate`) and the
+preludes (`c/preludes`). It needs Linux on x86-64, GCC and TCC.
 
-C Shale's build scripts are themselves Shale, so a first install on a
-machine with no `shale` builds one by hand, with TCC and GCC alone:
-[c/docs/building.md](c/docs/building.md), "First install on a new
-machine".
+`shale c/install.shale` from a clean checkout builds the release binary,
+runs the fast tier and a smoke test, copies it to `~/tools/shale/bin/shale`
+and points `~/.local/bin/shale` at it (given a `localbin = ~/.local/bin`
+mount line). The hook runs the gate it installs beside it. The build
+scripts are themselves Shale, so the first install on a new machine builds
+one by hand with TCC and GCC: [c/docs/building.md](c/docs/building.md),
+"First install on a new machine". The tests are under "Checks", below.
 
 ## Run a script
 
@@ -75,8 +68,8 @@ A script's root is the folder `shale` runs in. Three ways to start one:
     shale -e 'print(1 + 1)'               # a one-liner (refused by the gate: outside it only)
 
 A script reads an argument as `arg("pattern", "TODO")`, the second value
-its default. A value that cannot be a plain word (a space, `*`, `|`) goes
-on stdin, one `name=value` a line, after `--args-stdin`.
+its default. A value with a space, `*` or `|` goes on stdin, one
+`name=value` a line, after `--args-stdin`.
 
 **Mounts:** a folder outside the root is a mount, listed as `name =
 /abs/path` in `~/.config/shale/mounts` and reached as `name:file`. Add `
@@ -109,8 +102,7 @@ Run in this checkout,
 
     shale find.shale pattern=job_alive dir=c/host
 
-prints lines like `c/host/host_jobs.c:487:     if (str_eq(name,
-S("job_alive"))) {`, then `7 lines hold job_alive`. (`shale
+prints each hit as `c/host/host_jobs.c:LINE: ...`, then the count. (`shale
 cookbook:look.shale find=job_alive in=c/host ext=c` is the same search as a
 ready recipe.)
 
@@ -120,16 +112,16 @@ Running a program and keeping its tail:
 print(must(run({"git", "log", "--oneline"}, {timeout_ms = 10000, tail = 3})).out)
 ```
 
-prints `… 216 lines left out …` and the three oldest commits. `run`
-returns `{code, out, ms, ...}` and does not fail on a non-zero exit;
-`must(r)` does, printing the output and naming the program.
+prints `… N lines left out …` and the three oldest commits. `run` returns
+`{code, out, ms, ...}` whatever the exit; `must(r)` stops on a non-zero
+one, printing the output and naming the program.
 
 ## The traps a newcomer hits first
 
-Each is a one-line stop, so it costs a retry, not a wrong answer:
+Each is a one-line stop, so it costs a retry, never a wrong answer:
 
 - **`run` needs `timeout_ms` and a keep**: `run({"zig", "build"},
-  {timeout_ms = 600000, tail = 40})`. Without either it refuses to start.
+  {timeout_ms = 600000, tail = 40})`.
 - **A function is declared above where it is called.** `print(f(1))` before
   `function f(x)` stops: "no function `f` above this line". Functions are
   top-level `function name(...)`; there are no closures.
@@ -152,16 +144,11 @@ expressions, not Lua's `%d`), are in
   habit (`grep -rn`, `sed -n`, `git`, `curl`, a build's errors), then the
   Linux prelude (`run`, jobs, git, http) and the traps.
 - **[cookbook/](cookbook/README.md)**, recipes to run or copy, one line
-  each in its README: `look.shale` (find,
-  or show line ranges), `run.shale` (a program's verdict and tail),
-  `run_zig_build.shale`, `rename_words.shale`, `check_syntax.shale`, `fetch_page.shale`.
-  Hunts over a Zig tree are in [cookbook/zig/](cookbook/zig/README.md)
-  (`find_seams`, `find_smells`, `find_dead_code`, `find_clones`, ...), Roc's in
-  [cookbook/roc/](cookbook/roc/README.md), and Go's in
-  [cookbook/go/](cookbook/go/README.md).
-- **[The tutorial](https://lynrummy.com/shale/tutorial.html)**: fifteen
-  lessons that run in the browser, the language from the start
-  (`legacy_zig/web/lessons.js`: the browser build is Zig Shale's).
+  each in its README, `look.shale` first. Hunts over a Zig, Roc or Go tree
+  are in its `zig/`, `roc/` and `go/` folders.
+- **[The tutorial](https://lynrummy.com/shale/tutorial.html)**: lessons
+  that run in the browser, the language from the start (Zig Shale's
+  browser build, `legacy_zig/web/`).
 - **[docs/SHALE.md](docs/SHALE.md)**, the reference: the language, every
   builtin with its cost and errors, the budgets, the runner's flags.
 
@@ -172,32 +159,24 @@ own project, and for working on Shale itself.
 
 ## Where it runs
 
-- **On the box:** the `shale` CLI, C Shale since 2026-11-17, is every
-  top-level shell call an agent makes (`tools/shale-gate.sh`, the hook; [docs/SHALE-AGENTS.md](docs/SHALE-AGENTS.md)),
-  with Zig's own parser behind `zig_decls`, `zig_move` and `zig_rename`:
-  zig-ast, a program of its own that the host asks, so the host imports no
-  `std.zig` parser. It is a repo of its own,
-  [zig-ast](https://github.com/showell/zig-ast), with its own build and
-  tests; `shale install.shale` in its checkout installs it where the host
-  looks, `~/tools/zig-ast/bin/zig-ast` under the `tools` mount.
-- **On a live site, until 2026-11-18:** Zig Shale ran signed scripts inside
-  [angry-gopher](https://github.com/showell/angry-gopher) (lynrummy.com),
-  on Linux and on
-  [zig-metal-unikernel](https://github.com/showell/zig-metal-unikernel),
-  through its `/admin/script` route. Shale's signer, `shale-sign`, was
-  removed on 2026-11-17, and the route on 2026-11-18, so no site runs Shale
-  now. [dog-park](https://github.com/showell/dog-park) ran it too, until
-  that repo was retired on 2026-11-16.
+On our development box, the `shale` CLI is every top-level shell call an
+agent makes (`tools/shale-gate.sh` is the hook;
+[docs/SHALE-AGENTS.md](docs/SHALE-AGENTS.md)). Zig's own parser stands
+behind `zig_decls`, `zig_move` and `zig_rename`:
+[zig-ast](https://github.com/showell/zig-ast), a program in a repo of its
+own that the host asks. `shale install.shale` in its checkout installs it
+where the host looks, `~/tools/zig-ast/bin/zig-ast` under the `tools` mount.
 
 ## Using Shale with Claude Code on your project
 
-Build it and set up the cookbook mount as above. The gate below covers only
-the shell: **Claude's own Read, Edit, Write and Grep tools are untouched.**
+Build it and set up the cookbook mount as above. The gate below covers the
+shell alone: **Claude's own Read, Edit, Write and Grep tools stay
+outside it.**
 Mount lines also take ` tools`, for a toolchain whose programs a script may
 run by path (a newer compiler, a project's `.venv`), a decision you make once,
-by hand; and ` secrets`, for a folder of tokens: no script reads its files,
-and only `run`'s `secrets` (and `http_get`'s `bearer`) hands one to a
-program.
+by hand; and ` secrets`, for a folder of tokens, whose files reach a program
+only through `run`'s `secrets` (and `http_get`'s `bearer`), never a
+script.
 
 ### Hook it into Claude Code
 
@@ -245,11 +224,10 @@ When Shale truly can't do it, escape with a first line
 | `<project>/node_modules/.bin/tsc`, `<project>/.venv/bin/pytest` | refused: a program by a path git does not track | `npx tsc`; for a venv, a ` tools` mount (`venv = <project>/.venv ro tools`, the path absolute) and `run({real("venv:bin/pytest")}, ...)` |
 | `npm`, `npx`, `git`, `pytest`, `cargo`, a compiler by name | allowed inside `run` | `run` needs `timeout_ms` and a keep: `head = N`, `tail = N` or `whole = BYTES` |
 
-**`run` returns, it does not print or fail:** its result holds `out` (what
-the program printed, as much as the keep keeps) and `code`. A failing test
-run does not stop the script unless you ask: `must(r)` gives `r` when the
-program exited 0, and otherwise prints its output and stops the run, naming
-the command and its exit. So `print(must(run(...)).out)` shows the tests'
+**`run` returns its result:** `out` (what the program printed, as much as
+the keep keeps) and `code`. A failing test run stops the script when you
+ask: `must(r)` gives `r` when the program exited 0, and otherwise prints its
+output and stops the run, naming the command and its exit. So `print(must(run(...)).out)` shows the tests'
 last lines and fails when they fail.
 
 Every gate escape (`# want:`) lands in `~/.local/state/shale/wants.tsv`: the
@@ -265,8 +243,8 @@ The cookbook's general recipes work on any language's files:
     shale cookbook:look.shale at=src/app.ts:40-80,README.md:1-20
     shale cookbook:rename_words.shale from=fetchUser to=loadUser ext=ts,tsx
 
-(`*` is not a plain word for the gate, so `ext=` names extensions; a full
-glob goes on stdin as `like=`, with `--args-stdin`.) The rename, written out
+(The gate takes plain words, so `ext=` names extensions; a full glob, with
+its `*`, goes on stdin as `like=`, with `--args-stdin`.) The rename, written out
 as a heredoc to change:
 
 ```lua
@@ -277,7 +255,7 @@ end
 
 `word` matches whole words only (`fetchUserName` is left), but in strings
 and comments too: read the summary, then `git diff`. `glob("**/*.ts")`
-enters `node_modules`; `walk_all` with `skip` does not. The `zig/` and
+enters `node_modules`; `walk_all` with `skip` passes it by. The `zig/` and
 `roc/` cookbooks are for those languages only.
 
 ## Checks
@@ -287,7 +265,7 @@ enters `node_modules`; `walk_all` with `skip` does not. The `zig/` and
     shale tests/golden.shale      # a build held to every golden case, from the outside
 
 [c/docs/building.md](c/docs/building.md) says what each tier runs and
-costs. The full tier also runs on GitHub, on demand only, never on a push:
+costs. The full tier also runs on GitHub, on demand:
 `shale cookbook:build_on_github.shale workflow=c-full.yml ref=my-branch`
 dispatches [.github/workflows/c-full.yml](.github/workflows/c-full.yml) and
 returns, and `run=<id>` reads its verdict later. The golden tests are the one judge of behaviour
@@ -296,10 +274,8 @@ bench/baseline.shale` is the whole program's baseline, the runtime on an
 agent's workloads and the build's time, one TSV a run
 ([bench/README.md](bench/README.md)).
 
-**Zig Shale**, the first implementation, is kept in
-[legacy_zig/](legacy_zig/README.md), deprecated and frozen: its modules,
-its `zig build` steps (the unit tests, the hunt, the coverage floor, the
-browser build) and their tools are there, and get no fixes.
+**Zig Shale**, the first implementation, is frozen in
+[legacy_zig/](legacy_zig/README.md), with its `zig build` steps and tools.
 
 ## Docs
 
@@ -320,7 +296,7 @@ browser build) and their tools are there, and get no fixes.
   implementation, deprecated and frozen.
 - [cookbook/zig/README.md](cookbook/zig/README.md): recipes for finding a
   Zig file's seams, moving code along them and judging the move, each
-  tested to parse. Recipes, not builtins: copy one and change it.
+  tested to parse. Copy one and change it.
 - [cookbook/roc/README.md](cookbook/roc/README.md): recipes for a Roc
   tree: long lines laid out by `roc fmt`, and two archives judged the same
   machine code.
@@ -330,30 +306,13 @@ browser build) and their tools are there, and get no fixes.
 - [docs/designs/DESIGN-shale-stream.md](docs/designs/DESIGN-shale-stream.md):
   a background run's output streamed as it runs; proposed, parked.
 
-## Status
-
-| | |
-|---|---|
-| Source | C, in `c/`; Zig Shale, frozen, in `legacy_zig/`, its history before this repo [zig-webbox](https://github.com/showell/zig-webbox)'s (its log of src/script) |
-| Runs | C Shale on the box, as every agent's shell (since 2026-11-17); Zig Shale, the first implementation, matched byte for byte by the C, ran in angry-gopher until 2026-11-18 |
-| Tests | the golden tests (`shale tests/golden.shale`, 1,128 cases), the one judge of behaviour; C's own (`shale c/build.shale`); the Zig's unit tests, frozen with it in `legacy_zig/`; the request-edge harness for its number parses runs in angry-gopher |
-
 ## Lineage
 
-Shale began on 2026-10-13 inside zig-webbox, the Zig web stack behind
-lynrummy.com, as a small Lua-like language for one narrow job: letting a
-signed script change a live site's data through its store, confined to
-the store's root and held to budgets, on Linux and on a bare-metal
-unikernel alike. A Linux runner came the same day, and the box's agents
-started using it to read and change their own files. Within days it had
-grown `run`, jobs, git, mounts and the Zig tools, and it moved into a repo
-of its own on 2026-10-18. Soon after, it became the only shell on the box:
-a hook refuses every other command, so the language grew from what agents
-actually reached for (`docs/SHALE-WANTS.md` is that ledger). By November
-its design had settled enough to freeze, and on 2026-11-17 it was
-rewritten in C in about a day, against the Zig as its oracle, for faster
-builds and a substrate that needs no LLVM. The golden tests
-([tests/harness/README.md](tests/harness/README.md)), each input frozen
-with its output, became the one judge of its behaviour. The bare-metal site
-ran the Zig, the implementation Shale was born in, until angry-gopher
-stopped running scripts on 2026-11-18; every `shale` on the box is C.
+Shale began inside [zig-webbox](https://github.com/showell/zig-webbox), the
+Zig web stack behind lynrummy.com, as a confined, budgeted language for a
+live site's data, on Linux and on a bare-metal unikernel alike. As the only
+shell on our box, it grew from what agents reached for
+([docs/SHALE-WANTS.md](docs/SHALE-WANTS.md) is that ledger). The C runtime
+was written against the Zig as its oracle, and the golden tests
+([tests/harness/README.md](tests/harness/README.md)), each input frozen with
+its output, judge its behaviour.
