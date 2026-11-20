@@ -4,6 +4,8 @@ Shale is a small scripting language for working on code. One line greps a
 whole repo. A short script refactors one. Every run is budgeted, confined,
 readable. Agents write it in place of bash, in place of Python.
 
+The code here was written by AI coding agents (Claude), with human supervision.
+
 Shale scripts look like Lua. A C runtime reads each one, compiles it to
 bytecode and runs it on a small virtual machine. Its builtins cover the
 common Linux work: reading, editing and searching files, walking folders,
