@@ -55,8 +55,6 @@ checkouts, and `<lanes>` the one that holds your lanes.
   file. `shale cookbook:check_seals.shale dir=src seals=id_seal:src/player.zig`
 - `check_syntax.shale`: checks each file's syntax by its kind (Zig, Roc, JS,
   Shale, Python, shell). `shale cookbook:check_syntax.shale files=src/a.zig,roc/Walk.roc`
-- `color_shale.shale`: colors Shale source as HTML pages.
-  `shale cookbook:color_shale.shale files=cookbook/look.shale out=colored`
 - `count_shale_stops.shale`: counts how an agent's Shale launches went, from
   a Claude Code transcript. `shale cookbook:count_shale_stops.shale` (`since=`, `transcript=`)
 - `fetch_page.shale`: fetches a page and prints its status and the lines that
