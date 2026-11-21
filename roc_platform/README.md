@@ -155,6 +155,16 @@ folder by folder, from `Shale.glob!` and `Shale.read!` and plain Roc.
 `folders=`, since run.shale's own `in=` is the root. Its
 `check_goldens.shale` runs it on a copy of `cookbook/roc/plants/count_roc/`.
 
+**`cookbook/zig/list_long_files/`**, **`cookbook/zig/count_comments/`** and
+**`cookbook/roc/find_unused_imports/`** are ported the same way: the
+launcher keeps the recipe's name and arguments, the goldens were written
+from the Shale original on plants, and `check_goldens.shale` holds them.
+count_comments' launcher builds with `opt=speed`, since its byte-by-byte
+scan runs about 60 times slower in Roc's dev build.
+**`cookbook/roc/EXAMPLES.txt`** lists every port, a line each: its Roc, its
+Shale original's path and the commit that replaced it, so a page can show
+the two side by side.
+
 ## Pitfalls
 
 - `RocStr` is `bytes, capacity, length`, while `RocList` is `elements,
