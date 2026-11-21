@@ -1,7 +1,8 @@
--- Lists Shale's C functions past a length, longest first, from
--- cookbook/c/items.shale's splitter. A function's length is its body's lines
--- of code; its comment lines and blank lines are counted beside it, never in
--- it, so a well-commented function is not taken for a long one.
+-- Lists Shale's C functions past a length, longest first, from the
+-- splitter the C recipes share (cookbook/c/items/, a Roc package). A
+-- function's length is its body's lines of code; its comment lines and
+-- blank lines are counted beside it, never in it, so a well-commented
+-- function is not taken for a long one.
 --
 --   shale cookbook:c/list_long_functions.shale             over c/, past its 95th percentile
 --   shale cookbook:c/list_long_functions.shale over=60     past 60 lines of code
@@ -27,117 +28,40 @@
 -- default threshold, an `over=` that a function's comments and blank lines
 -- would pass but its code does not, and `tests=1`.
 --
--- budget: steps=200000000 arena_bytes=1000000000 kept_bytes=268435456
+-- It is written in Roc, the app
+-- cookbook/c/list_long_functions/list_long_functions.roc and the modules
+-- beside it (Length, the measure and the listing; SelfTest, the plants'
+-- check), over the splitter package cookbook/c/items/, on Shale's Roc
+-- platform (roc_platform/README.md); this file is its launcher. It hands
+-- every value it is given to roc_platform/run.shale in the checkout this
+-- cookbook is in (the `cookbook` mount's parent), which builds the Roc there
+-- (cached; the first build after a change to C Shale compiles the platform's
+-- host, 25 to 50 s) and runs the program rooted here, so `dir=` is this
+-- root's path. A value the Roc reads no `Shale.arg!` of stops the run before
+-- anything is built. `reads=inputs` builds and runs nothing, and prints the
+-- real path of each file the program is built from (run.shale's header). It
+-- is built with `opt=speed`, as map_file is: the splitter's masker reads a
+-- line a byte at a time, which Roc's dev build does several times slower
+-- than the Shale original's regular expressions; a stop in a speed build
+-- names the platform's driver, not the Roc's line. Its goldens, the Shale
+-- original's output on the plants, are held by
+-- cookbook/c/list_long_functions/check_goldens.shale.
+-- budget: programs=10 output_bytes=8000000
 
-use("./items.shale")
+const SCRIPT = "cookbook/c/list_long_functions/list_long_functions.roc"
+const CHECKOUT = dirname(dirname(real("cookbook:README.md")))
+const HERE = real(".")
 
-const PLANTS = "cookbook/c/plants/list_long_functions"
-
--- The C files under `dir`, sorted, c/out (the build's output) left out.
-function c_files_under(dir)
-  local files = {}
-  for e in walk_all(dir, {kind = "file", skip = "out"}) do
-    if ends_with(e.path, ".c") or ends_with(e.path, ".h") then push(files, e.path) end
-  end
-  sort(files)
-  return files
+-- `self_test` is read here by name, as the cookbook's full tier finds the
+-- recipes it runs `self_test=1` of. `arg_names()` is every value given; the
+-- rest are read by a name made as the run goes, so Shale's own check cannot
+-- see them: run.shale holds them to the script's reads.
+const SELF_TEST = arg("self_test", "")
+local values = {"script=" .. SCRIPT, "in=" .. HERE, "opt=speed"}
+if SELF_TEST ~= "" then push(values, "self_test=" .. SELF_TEST) end
+for name in arg_names() do
+  if name ~= "self_test" then push(values, name .. "=" .. arg(name, "")) end
 end
-
--- Each function's body under `dir` (and each test's, `tests`), measured:
--- `{path, line, name, code, comment, blank}`.
-function measure(dir, tests)
-  local got = {}
-  for p in c_files_under(dir) do
-    local all = lines(read(p))
-    for it in c_items(p) do
-      if (it.kind == "function" or (tests and it.kind == "test")) and it.body_first ~= 0 then
-        local m = {path = p, line = it.first, name = it.name, code = 0, comment = 0, blank = 0}
-        if it.body_first == it.sig_last then
-          m.code = 1
-        else
-          local k = it.body_first
-          while k <= it.body_last do
-            local t = trim(all[k])
-            if t == "" then
-              m.blank = m.blank + 1
-            elseif starts_with(t, "//") then
-              m.comment = m.comment + 1
-            else
-              m.code = m.code + 1
-            end
-            k = k + 1
-          end
-        end
-        push(got, m)
-      end
-    end
-    yield()
-  end
-  return got
-end
-
--- The value at percentile `pct` of `sorted`, ascending: rank ceil(pct n / 100).
-function percentile(sorted, pct)
-  local rank = (pct * #sorted + 99) // 100
-  if rank < 1 then rank = 1 end
-  return sorted[rank]
-end
-
--- The listing of `measured` past `over` (nil: the 95th percentile), as
--- `{summary, threshold, lines}`.
-function list_long(measured, over)
-  local lens = {}
-  for m in measured do push(lens, m.code) end
-  sort(lens)
-  if #lens == 0 then fail("list_long_functions: no function to measure") end
-  local summary = #lens .. " functions: median " .. percentile(lens, 50) .. ", p75 " .. percentile(lens, 75) .. ", p90 " .. percentile(lens, 90) .. ", p95 " .. percentile(lens, 95) .. ", p99 " .. percentile(lens, 99) .. ", max " .. lens[#lens] .. " code lines"
-  local threshold = over
-  if threshold == nil then threshold = percentile(lens, 95) end
-  local long = {}
-  for m in measured do
-    if m.code > threshold then push(long, m) end
-  end
-  sort(long, {{key = "code", desc = true}, "path", "line"})
-  local out = {}
-  for m in long do push(out, m.path .. ":" .. m.line .. ": long: " .. m.name .. ": " .. m.code .. " code lines (" .. m.comment .. " comment, " .. m.blank .. " blank)") end
-  return {summary = summary, threshold = threshold, lines = out}
-end
-
--- `got` equal to `want`, or the self-test fails, naming `what`.
-function same_or_fail(what, got, want)
-  if got ~= want then fail("list_long_functions self-test: " .. what .. " is\n" .. got .. "\nit should be\n" .. want) end
-  return nil
-end
-
-function self_test()
-  local P = PLANTS .. "/lengths.c"
-  local fns = measure(PLANTS, false)
-  local d = list_long(fns, nil)
-  same_or_fail("the distribution", d.summary, "4 functions: median 2, p75 4, p90 6, p95 6, p99 6, max 6 code lines")
-  same_or_fail("the default threshold", "" .. d.threshold, "6")
-  same_or_fail("the list past the 95th percentile", join(d.lines, "\n"), "")
-  same_or_fail("the list past 3", join(list_long(fns, 3).lines, "\n"), join({
-    P .. ":25: long: six_lines: 6 code lines (1 comment, 0 blank)",
-    P .. ":13: long: four_with_comments: 4 code lines (3 comment, 2 blank)"}, "\n"))
-  -- Nine lines of body, four of them code: not past 4.
-  same_or_fail("the list past 4", join(list_long(fns, 4).lines, "\n"), P .. ":25: long: six_lines: 6 code lines (1 comment, 0 blank)")
-  same_or_fail("the list past 6 with the tests", join(list_long(measure(PLANTS, true), 6).lines, "\n"), P .. ":35: long: a_long_test: 8 code lines (0 comment, 0 blank)")
-  print("PASS list_long_functions self-test: 6 checks, the distribution, the default threshold and three lists over the plants")
-  return nil
-end
-
-if arg("self_test", 0) == 1 then
-  self_test()
-else
-  local dir = arg("dir", "c")
-  local tests = arg("tests", 0) == 1
-  local over = arg("over", 0)
-  local given = nil
-  if over > 0 then given = over end
-  local r = list_long(measure(dir, tests), given)
-  print("list_long_functions: " .. dir .. (tests and ", tests included" or ", tests left out") .. ": " .. r.summary)
-  for l in r.lines do print(l) end
-  local how = "the 95th percentile"
-  if given ~= nil then how = "over=" end
-  print("list_long_functions: " .. #r.lines .. " functions past " .. r.threshold .. " code lines (" .. how .. ")")
-end
+local r = run({"shale", "--root", CHECKOUT, CHECKOUT .. "/roc_platform/run.shale", "--args-stdin"}, {stdin = join(values, "\n") .. "\n", timeout_ms = 1800000, whole = 8000000})
+print(trim_end(r.out))
+if r.code ~= 0 then fail("list_long_functions: the Roc program stopped (exit " .. r.code .. ")") end
