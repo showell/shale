@@ -75,7 +75,13 @@ question):
   line.
 - [check_stacking.shale](check_stacking.shale): groups laid out against
   the stacking rule, both ways, and lines wider than `width=`. With
-  `write=1` it adds trailing commas and runs `roc fmt`.
+  `write=1` it adds trailing commas and runs `roc fmt`. It is written in
+  Roc, a root,
+  [check_stacking/check_stacking.roc](check_stacking/check_stacking.roc),
+  with the rule in the Roc library's `Groups.roc` and `Stacking.roc`
+  (cookbook/roc/lib/);
+  [check_goldens.shale](check_stacking/check_goldens.shale) holds it to
+  its goldens.
 
 **For a gate** (a run with findings exits nonzero; a project's own words
 are passed in):
@@ -217,8 +223,10 @@ beside them). Each header lists its functions.
 - [pinned.shale](pinned.shale): the path of the Roc compiler a repo's
   `roc-version` names.
 - [groups.shale](groups.shale): the stacking rule and the bracket groups,
-  shared by `wrap_long_lines` and `check_stacking` so the two read a group
-  the same way.
+  as `wrap_long_lines` reads them. `check_stacking`'s Roc reads them the
+  same way, ported line for line to the Roc library's `Groups.roc`,
+  `Stacking.roc` and `Packed.roc`, so after `wrap_long_lines` it finds no
+  group to stack: a change to the rule is made in both.
 - [types.shale](types.shale): runs
   [roc-types](https://github.com/showell/roc-types) for one app or several.
 - [declared.shale](declared.shale): what the naming recipes read out of a

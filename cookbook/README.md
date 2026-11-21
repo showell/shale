@@ -130,7 +130,9 @@ checkouts, and `<lanes>` the one that holds your lanes.
   held to its goldens by that folder's `check_goldens.shale`).
   `shale cookbook:roc/check_name_types.shale table=name_types.txt`
 - `roc/check_stacking.shale`: finds groups laid out against the stacking
-  rule, and with `write=1` lays them out by it. `shale cookbook:roc/check_stacking.shale`
+  rule, and with `write=1` lays them out by it; the launcher of a Roc script
+  (`roc/check_stacking/`, on `roc_platform/`, held to its goldens by that
+  folder's `check_goldens.shale`). `shale cookbook:roc/check_stacking.shale`
 - `roc/check_vocabulary.shale`: holds a project to the words it has decided
   on; the launcher of a Roc script (`roc/check_vocabulary/`, on
   `roc_platform/`, held to its goldens by that folder's `check_goldens.shale`).

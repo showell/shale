@@ -1,7 +1,8 @@
 -- This library reads the bracket groups of Roc, their items and their
--- tokens, as check_stacking.shale finds them and wrap_long_lines.shale
--- rewrites them. Both use this one reading, so a group one rewrites is a
--- group the other no longer reports.
+-- tokens, as wrap_long_lines.shale rewrites them. check_stacking.shale, now
+-- Roc, reads them the same way, ported line for line to cookbook/roc/lib/'s
+-- Groups.roc, Stacking.roc and Packed.roc, so a group one rewrites is a group
+-- the other no longer reports: a change here is made there too.
 --
 -- The stacking rule's home is here: a group of three or more items and
 -- STACK_TOKENS or more tokens stacks, and any other group sits on one line
