@@ -224,7 +224,8 @@ goldens by that folder's `check_goldens.shale`.
   name, lines, head, body and the names its body uses, and the masker that
   blanks strings and comments. `use("cookbook:c/items.shale")`
 - `c/items/` (a Roc package): the same splitter in Roc, for the Roc
-  recipes. `items: "../items/main.roc"`, then `import items.Split`
+  recipes, whose headers name its `main.roc` as `items`, then
+  `import items.Split`
 - `c/map_file.shale`: prints a file's items, one `first-last kind name` a
   line; `tree=c` splits every file and accounts for each line (in Roc).
   `shale cookbook:c/map_file.shale file=c/script/vm.c`
