@@ -1,0 +1,2 @@
+{"type":"assistant","timestamp":"2026-11-21T08:00:00.000Z","message":{"role":"assistant","content":[{"type":"tool_use","id":"s1","name":"Bash","input":{"command":"shale <<'EOF'\nprint(1)\nEOF"}}]}}
+{"type":"user","message":{"content":[{"tool_use_id":"s1","type":"tool_result","content":{"text":"x"}}]}}

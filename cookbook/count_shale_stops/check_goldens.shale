@@ -1,0 +1,167 @@
+-- cookbook/count_shale_stops/check_goldens.shale: count_shale_stops (the Roc
+-- script beside this, count_shale_stops.roc, through its launcher
+-- cookbook/count_shale_stops.shale) held to its goldens, goldens.txt beside
+-- this, line for line and exit code for exit code. From the shale
+-- checkout's root:
+--
+--   shale cookbook/count_shale_stops/check_goldens.shale self_test=1
+--   shale cookbook/count_shale_stops/check_goldens.shale write=1
+--
+-- The launcher builds in the checkout the `cookbook` mount names, so from a
+-- lane's worktree the mount is pointed at the worktree first: a mounts file
+-- that is the box's with its `cookbook` line changed, named by SHALE_MOUNTS
+-- for the call (the full tier's cookbook tests make one the same way).
+--
+-- The cases are planted transcripts, cookbook/plants/count_shale_stops/
+-- (its README says what each plants): every outcome, heredocs and script
+-- launches, calls with no answer, answers to calls that are no launch, a
+-- line's escapes and numbers, at several `most`s and `since`s; an empty and
+-- a quiet transcript; and each way a line stops the run (malformed JSON, a
+-- field missing), with a missing transcript. The goldens were written from
+-- the Shale original's output on them. A stop on a line is held by its exit
+-- code alone (`=== <name> (exit 1)` and nothing under it): the Roc stops on
+-- every line the original stopped on, in its own words (`fail:
+-- count_shale_stops: line N: ...`, the words of `json_read` or of the
+-- missing field after it), where the original's was Shale's own class.
+-- The port matched the original on real transcripts too, which are left
+-- out because they are private and they grow. The newest transcript, what
+-- the launcher picks with no `transcript=`, needs a `projects` mount, so no
+-- case here asks for it.
+--
+-- What is held: the exit code, and the output with each runner's own lines
+-- left out: Shale's `──` report lines (budgets, used, steps, time), the
+-- `called from` lines, and the launchers' own stops (run.shale's `run: ...`,
+-- this recipe's launcher's). A stop's line is held by its words, not its
+-- place (`── stop: <words>`). `write=1` writes the goldens again from the
+-- launcher, for a change meant to move them: `git diff` shows what moved.
+-- budget: programs=100 steps=200000000 output_bytes=1000000
+
+const LAUNCHER = "cookbook/count_shale_stops.shale"
+const GOLDENS = "cookbook/count_shale_stops/goldens.txt"
+const AT = "cookbook:plants/count_shale_stops/"
+const SELF_TEST = arg("self_test", "") == "1"
+const WRITE = arg("write", "") == "1"
+if SELF_TEST == WRITE then fail("check_goldens: self_test=1 holds the goldens, write=1 writes them; one of the two") end
+
+-- The plants that stop the run on a line, held by their exit codes.
+const STOPS = {
+  "bad_escape",
+  "bad_json",
+  "big_integer",
+  "control_byte",
+  "deep",
+  "lone_surrogate",
+  "map_content",
+  "no_command",
+  "no_message",
+  "no_type",
+  "null_in_array",
+  "twice",
+}
+
+-- A run's output with each runner's own lines left out, and a stop's line
+-- cut to its words.
+function body(out)
+  local kept = {}
+  for l in lines(out) do
+    if starts_with(l, "── stopped at ") then
+      local place = "^── stopped at (the [A-Za-z]+ prelude|the prelude|[^ ]+)(:[0-9]+:[0-9]+)?( \\(in `[^`]*`\\))?: "
+      local words_of = re_replace(re_replace(l, " \\([0-9]+ steps\\)$", ""), place, "")
+      if not starts_with(words_of, "fail: run: ") and not starts_with(words_of, "fail: count_shale_stops: the Roc program stopped") then push(kept, "── stop: " .. words_of) end
+    elseif not starts_with(l, "── ") and not starts_with(l, "   called from") then
+      push(kept, l)
+    end
+  end
+  return kept
+end
+
+-- Each case, `{name, values, words}`: the values on the launcher's stdin,
+-- one a line, and whether its output is held or its exit code alone.
+function cases()
+  local c = {}
+  local outcomes = "transcript=" .. AT .. "outcomes.jsonl"
+  local many = "transcript=" .. AT .. "many_calls.jsonl"
+  push(c, {name = "outcomes", values = {outcomes}, words = true})
+  for m in {"0", "1", "3", "-2"} do push(c, {name = "outcomes most=" .. m, values = {outcomes, "most=" .. m}, words = true}) end
+  for s in {"2026-11-20T09:30", "2026-11-20T09:31:00.000Z", "2026", "2099", "2026-11-20T09:01:03"} do
+    push(c, {name = "outcomes since=" .. s, values = {outcomes, "since=" .. s}, words = true})
+  end
+  push(c, {name = "outcomes since= most=2", values = {outcomes, "since=", "most=2"}, words = true})
+  push(c, {name = "many_calls", values = {many}, words = true})
+  push(c, {name = "many_calls most=25", values = {many, "most=25"}, words = true})
+  push(c, {name = "many_calls most=5", values = {many, "most=5"}, words = true})
+  push(c, {name = "empty", values = {"transcript=" .. AT .. "empty.jsonl"}, words = true})
+  push(c, {name = "quiet", values = {"transcript=" .. AT .. "quiet.jsonl"}, words = true})
+  push(c, {name = "missing", values = {"transcript=" .. AT .. "missing.jsonl"}, words = true})
+  for s in STOPS do push(c, {name = "stops/" .. s, values = {"transcript=" .. AT .. "stops/" .. s .. ".jsonl"}, words = false}) end
+  return c
+end
+
+-- One case's run, as its golden section: `=== <name> (exit N)` and its body,
+-- or the head alone for a case held by its exit code.
+function section(c)
+  local r = run({"shale", LAUNCHER, "--args-stdin"}, {stdin = join(c.values, "\n") .. "\n", timeout_ms = 900000, whole = 4000000})
+  local ls = {"=== " .. c.name .. " (exit " .. r.code .. ")"}
+  if c.words then
+    for l in body(r.out) do push(ls, l) end
+  end
+  return {text = join(ls, "\n"), ms = r.ms}
+end
+
+-- The goldens' sections by their first line.
+function golden_sections()
+  local by = {}
+  local head = nil
+  local ls = {}
+  for l in lines(read(GOLDENS)) do
+    if starts_with(l, "=== ") then
+      if head ~= nil then by[head] = join(ls, "\n") end
+      head = l
+      ls = {l}
+    else
+      push(ls, l)
+    end
+  end
+  if head ~= nil then by[head] = join(ls, "\n") end
+  return by
+end
+
+if WRITE then
+  local all = {}
+  for c in cases() do push(all, section(c).text) end
+  replace(GOLDENS, join(all, "\n") .. "\n")
+  print("check_goldens: wrote " .. #all .. " cases to " .. GOLDENS)
+else
+  local golden = golden_sections()
+  local wrong = 0
+  local n = 0
+  for c in cases() do
+    n = n + 1
+    local got = section(c)
+    local head = lines(got.text)[1]
+    local want = get(golden, head, nil)
+    if want == nil then
+      -- The head holds the exit code, so a changed code is a missing head.
+      print("FAIL " .. head .. ": no golden of that name and exit code")
+      wrong = wrong + 1
+    elseif want ~= got.text then
+      local a = lines(want)
+      local b = lines(got.text)
+      local shown = 0
+      print("FAIL " .. head)
+      for k = 1, max(#a, #b) do
+        local x = get(a, k, "<none>")
+        local y = get(b, k, "<none>")
+        if x ~= y and shown < 5 then
+          print("  line " .. k .. ":\n    golden: " .. x .. "\n    got:    " .. y)
+          shown = shown + 1
+        end
+      end
+      wrong = wrong + 1
+    else
+      print("ok   " .. c.name .. " (" .. got.ms .. " ms)")
+    end
+  end
+  if wrong > 0 then fail("check_goldens: " .. wrong .. " of " .. n .. " cases differ from " .. GOLDENS) end
+  print("check_goldens: all " .. n .. " cases match " .. GOLDENS)
+end

@@ -1,0 +1,518 @@
+=== outcomes (exit 0)
+cookbook:plants/count_shale_stops/outcomes.jsonl
+14 heredocs, 4 script launches
+
+n  what
+7  heredoc, stopped by Shale
+2  heredoc, ran
+2  script, ran
+2  script, stopped by Shale
+1  heredoc, stopped by its own `fail` (a check's verdict)
+1  heredoc, refused by the gate
+1  heredoc, denied by the harness
+1  heredoc, nonzero exit, no stop line
+
+Shale's stops, by kind (a script's own `fail` left out):
+n  what
+2  index
+2  argument
+1  budget steps
+1  file_system
+1  type
+1  name
+1
+
+Shale's stops, by message:
+n  what
+2  index: no key "…" in the map: `has_key(m, k)` asks first
+1  argument: `grep_tree`'s `skip` "…": cookbook/x.shale is not a folder
+1  budget steps: the step budget ran out after a long walk over a very large tree of folders and files that goes …
+1  file_system: `read("…")`: not found
+1  type: `print` takes scalars, not a list
+1  name: no function `foö` above this line
+1
+1  argument: "…" then "…" are both quoted, and this message runs long enough to be cut at its hundred and ten…
+
+calls in heredocs (builtins and the script's own functions):
+ n  what
+16  print
+ 2  glob
+ 2  run
+ 2  read
+ 1  count_lines
+ 1  get
+ 1  fail
+ 1  remove_tree
+ 1  must
+ 1  now
+ 1  trim
+
+programs heredocs run:
+n  what
+1  git
+1  zig
+=== outcomes most=0 (exit 0)
+cookbook:plants/count_shale_stops/outcomes.jsonl
+14 heredocs, 4 script launches
+
+n  what
+
+Shale's stops, by kind (a script's own `fail` left out):
+n  what
+
+Shale's stops, by message:
+n  what
+
+calls in heredocs (builtins and the script's own functions):
+n  what
+
+programs heredocs run:
+n  what
+=== outcomes most=1 (exit 0)
+cookbook:plants/count_shale_stops/outcomes.jsonl
+14 heredocs, 4 script launches
+
+n  what
+7  heredoc, stopped by Shale
+
+Shale's stops, by kind (a script's own `fail` left out):
+n  what
+2  index
+
+Shale's stops, by message:
+n  what
+2  index: no key "…" in the map: `has_key(m, k)` asks first
+
+calls in heredocs (builtins and the script's own functions):
+ n  what
+16  print
+
+programs heredocs run:
+n  what
+1  git
+=== outcomes most=3 (exit 0)
+cookbook:plants/count_shale_stops/outcomes.jsonl
+14 heredocs, 4 script launches
+
+n  what
+7  heredoc, stopped by Shale
+2  heredoc, ran
+2  script, ran
+
+Shale's stops, by kind (a script's own `fail` left out):
+n  what
+2  index
+2  argument
+1  budget steps
+
+Shale's stops, by message:
+n  what
+2  index: no key "…" in the map: `has_key(m, k)` asks first
+1  argument: `grep_tree`'s `skip` "…": cookbook/x.shale is not a folder
+1  budget steps: the step budget ran out after a long walk over a very large tree of folders and files that goes …
+
+calls in heredocs (builtins and the script's own functions):
+ n  what
+16  print
+ 2  glob
+ 2  run
+
+programs heredocs run:
+n  what
+1  git
+1  zig
+=== outcomes most=-2 (exit 0)
+cookbook:plants/count_shale_stops/outcomes.jsonl
+14 heredocs, 4 script launches
+
+n  what
+
+Shale's stops, by kind (a script's own `fail` left out):
+n  what
+
+Shale's stops, by message:
+n  what
+
+calls in heredocs (builtins and the script's own functions):
+n  what
+
+programs heredocs run:
+n  what
+=== outcomes since=2026-11-20T09:30 (exit 0)
+cookbook:plants/count_shale_stops/outcomes.jsonl
+6 heredocs, 1 script launches, since 2026-11-20T09:30
+
+n  what
+5  heredoc, stopped by Shale
+1  script, ran
+1  heredoc, ran
+
+Shale's stops, by kind (a script's own `fail` left out):
+n  what
+1  file_system
+1  type
+1  name
+1
+1  argument
+
+Shale's stops, by message:
+n  what
+1  file_system: `read("…")`: not found
+1  type: `print` takes scalars, not a list
+1  name: no function `foö` above this line
+1
+1  argument: "…" then "…" are both quoted, and this message runs long enough to be cut at its hundred and ten…
+
+calls in heredocs (builtins and the script's own functions):
+n  what
+7  print
+2  read
+1  trim
+1  glob
+
+programs heredocs run:
+n  what
+=== outcomes since=2026-11-20T09:31:00.000Z (exit 0)
+cookbook:plants/count_shale_stops/outcomes.jsonl
+6 heredocs, 1 script launches, since 2026-11-20T09:31:00.000Z
+
+n  what
+5  heredoc, stopped by Shale
+1  script, ran
+1  heredoc, ran
+
+Shale's stops, by kind (a script's own `fail` left out):
+n  what
+1  file_system
+1  type
+1  name
+1
+1  argument
+
+Shale's stops, by message:
+n  what
+1  file_system: `read("…")`: not found
+1  type: `print` takes scalars, not a list
+1  name: no function `foö` above this line
+1
+1  argument: "…" then "…" are both quoted, and this message runs long enough to be cut at its hundred and ten…
+
+calls in heredocs (builtins and the script's own functions):
+n  what
+7  print
+2  read
+1  trim
+1  glob
+
+programs heredocs run:
+n  what
+=== outcomes since=2026 (exit 0)
+cookbook:plants/count_shale_stops/outcomes.jsonl
+14 heredocs, 4 script launches, since 2026
+
+n  what
+7  heredoc, stopped by Shale
+2  heredoc, ran
+2  script, ran
+2  script, stopped by Shale
+1  heredoc, stopped by its own `fail` (a check's verdict)
+1  heredoc, refused by the gate
+1  heredoc, denied by the harness
+1  heredoc, nonzero exit, no stop line
+
+Shale's stops, by kind (a script's own `fail` left out):
+n  what
+2  index
+2  argument
+1  budget steps
+1  file_system
+1  type
+1  name
+1
+
+Shale's stops, by message:
+n  what
+2  index: no key "…" in the map: `has_key(m, k)` asks first
+1  argument: `grep_tree`'s `skip` "…": cookbook/x.shale is not a folder
+1  budget steps: the step budget ran out after a long walk over a very large tree of folders and files that goes …
+1  file_system: `read("…")`: not found
+1  type: `print` takes scalars, not a list
+1  name: no function `foö` above this line
+1
+1  argument: "…" then "…" are both quoted, and this message runs long enough to be cut at its hundred and ten…
+
+calls in heredocs (builtins and the script's own functions):
+ n  what
+16  print
+ 2  glob
+ 2  run
+ 2  read
+ 1  count_lines
+ 1  get
+ 1  fail
+ 1  remove_tree
+ 1  must
+ 1  now
+ 1  trim
+
+programs heredocs run:
+n  what
+1  git
+1  zig
+=== outcomes since=2099 (exit 0)
+cookbook:plants/count_shale_stops/outcomes.jsonl
+0 heredocs, 0 script launches, since 2099
+
+n  what
+
+Shale's stops, by kind (a script's own `fail` left out):
+n  what
+
+Shale's stops, by message:
+n  what
+
+calls in heredocs (builtins and the script's own functions):
+n  what
+
+programs heredocs run:
+n  what
+=== outcomes since=2026-11-20T09:01:03 (exit 0)
+cookbook:plants/count_shale_stops/outcomes.jsonl
+13 heredocs, 4 script launches, since 2026-11-20T09:01:03
+
+n  what
+7  heredoc, stopped by Shale
+2  script, ran
+2  script, stopped by Shale
+1  heredoc, stopped by its own `fail` (a check's verdict)
+1  heredoc, refused by the gate
+1  heredoc, denied by the harness
+1  heredoc, nonzero exit, no stop line
+1  heredoc, ran
+
+Shale's stops, by kind (a script's own `fail` left out):
+n  what
+2  index
+2  argument
+1  budget steps
+1  file_system
+1  type
+1  name
+1
+
+Shale's stops, by message:
+n  what
+2  index: no key "…" in the map: `has_key(m, k)` asks first
+1  argument: `grep_tree`'s `skip` "…": cookbook/x.shale is not a folder
+1  budget steps: the step budget ran out after a long walk over a very large tree of folders and files that goes …
+1  file_system: `read("…")`: not found
+1  type: `print` takes scalars, not a list
+1  name: no function `foö` above this line
+1
+1  argument: "…" then "…" are both quoted, and this message runs long enough to be cut at its hundred and ten…
+
+calls in heredocs (builtins and the script's own functions):
+ n  what
+14  print
+ 2  run
+ 2  read
+ 1  get
+ 1  fail
+ 1  remove_tree
+ 1  must
+ 1  now
+ 1  trim
+ 1  glob
+
+programs heredocs run:
+n  what
+1  git
+1  zig
+=== outcomes since= most=2 (exit 0)
+cookbook:plants/count_shale_stops/outcomes.jsonl
+14 heredocs, 4 script launches
+
+n  what
+7  heredoc, stopped by Shale
+2  heredoc, ran
+
+Shale's stops, by kind (a script's own `fail` left out):
+n  what
+2  index
+2  argument
+
+Shale's stops, by message:
+n  what
+2  index: no key "…" in the map: `has_key(m, k)` asks first
+1  argument: `grep_tree`'s `skip` "…": cookbook/x.shale is not a folder
+
+calls in heredocs (builtins and the script's own functions):
+ n  what
+16  print
+ 2  glob
+
+programs heredocs run:
+n  what
+1  git
+1  zig
+=== many_calls (exit 0)
+cookbook:plants/count_shale_stops/many_calls.jsonl
+3 heredocs, 0 script launches
+
+n  what
+3  heredoc, ran
+
+Shale's stops, by kind (a script's own `fail` left out):
+n  what
+
+Shale's stops, by message:
+n  what
+
+calls in heredocs (builtins and the script's own functions):
+ n  what
+18  run
+ 9  delta
+ 9  lam
+ 9  sigma
+ 6  mid_one
+ 6  gamma
+ 6  f
+ 6  iota
+ 6  mu
+ 6  omicron
+ 6  phi
+ 3  zeta
+ 3  alpha
+ 3  beta2
+ 3  _under
+ 3  eps
+ 3  g9
+ 3  h_h
+ 3  kappa
+ 3  nu
+
+programs heredocs run:
+n  what
+6  git
+6  zig
+3  roc
+=== many_calls most=25 (exit 0)
+cookbook:plants/count_shale_stops/many_calls.jsonl
+3 heredocs, 0 script launches
+
+n  what
+3  heredoc, ran
+
+Shale's stops, by kind (a script's own `fail` left out):
+n  what
+
+Shale's stops, by message:
+n  what
+
+calls in heredocs (builtins and the script's own functions):
+ n  what
+18  run
+ 9  delta
+ 9  lam
+ 9  sigma
+ 6  mid_one
+ 6  gamma
+ 6  f
+ 6  iota
+ 6  mu
+ 6  omicron
+ 6  phi
+ 3  zeta
+ 3  alpha
+ 3  beta2
+ 3  _under
+ 3  eps
+ 3  g9
+ 3  h_h
+ 3  kappa
+ 3  nu
+ 3  xi
+ 3  pi
+ 3  rho
+ 3  tau
+ 3  upsilon
+
+programs heredocs run:
+n  what
+6  git
+6  zig
+3  roc
+=== many_calls most=5 (exit 0)
+cookbook:plants/count_shale_stops/many_calls.jsonl
+3 heredocs, 0 script launches
+
+n  what
+3  heredoc, ran
+
+Shale's stops, by kind (a script's own `fail` left out):
+n  what
+
+Shale's stops, by message:
+n  what
+
+calls in heredocs (builtins and the script's own functions):
+ n  what
+18  run
+ 9  delta
+ 9  lam
+ 9  sigma
+ 6  mid_one
+
+programs heredocs run:
+n  what
+6  git
+6  zig
+3  roc
+=== empty (exit 0)
+cookbook:plants/count_shale_stops/empty.jsonl
+0 heredocs, 0 script launches
+
+n  what
+
+Shale's stops, by kind (a script's own `fail` left out):
+n  what
+
+Shale's stops, by message:
+n  what
+
+calls in heredocs (builtins and the script's own functions):
+n  what
+
+programs heredocs run:
+n  what
+=== quiet (exit 0)
+cookbook:plants/count_shale_stops/quiet.jsonl
+0 heredocs, 0 script launches
+
+n  what
+
+Shale's stops, by kind (a script's own `fail` left out):
+n  what
+
+Shale's stops, by message:
+n  what
+
+calls in heredocs (builtins and the script's own functions):
+n  what
+
+programs heredocs run:
+n  what
+=== missing (exit 1)
+── stop: file_system: `read_lines("cookbook:plants/count_shale_stops/missing.jsonl")`: not found (FileNotFound): `exists(p)` asks first
+=== stops/bad_escape (exit 1)
+=== stops/bad_json (exit 1)
+=== stops/big_integer (exit 1)
+=== stops/control_byte (exit 1)
+=== stops/deep (exit 1)
+=== stops/lone_surrogate (exit 1)
+=== stops/map_content (exit 1)
+=== stops/no_command (exit 1)
+=== stops/no_message (exit 1)
+=== stops/no_type (exit 1)
+=== stops/null_in_array (exit 1)
+=== stops/twice (exit 1)
