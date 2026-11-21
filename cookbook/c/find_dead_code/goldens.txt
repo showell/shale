@@ -1,0 +1,91 @@
+=== self_test=1 (exit 0)
+PASS find_dead_code self-test: 13 findings over the plants, exactly, and each near miss left alone
+=== dir=cookbook/c/plants/find_dead_code (exit 0)
+cookbook/c/plants/find_dead_code/lib.c:6: dead: Chars (a VEC_DEFINE generator)
+cookbook/c/plants/find_dead_code/lib.c:18: dead: lib_proto_only
+cookbook/c/plants/find_dead_code/lib.c:43: dead: lib_in_unused_macro (named only by unreached code: LIB_UNUSED_CALL)
+cookbook/c/plants/find_dead_code/lib.c:50: dead: lib_recursive
+cookbook/c/plants/find_dead_code/lib.c:56: dead: lib_by_dead (named only by unreached code: lib_recursive)
+cookbook/c/plants/find_dead_code/lib.c:61: dead: lib_in_comment
+cookbook/c/plants/find_dead_code/lib.c:66: dead: lib_member
+cookbook/c/plants/find_dead_code/lib.c:71: test_only: lib_tested
+cookbook/c/plants/find_dead_code/lib.h:11: dead: lib_header_dead
+cookbook/c/plants/find_dead_code/lib.h:14: test_only: lib_header_tested
+cookbook/c/plants/find_dead_code/test.h:14: dead: test_unused_kit
+cookbook/c/plants/find_dead_code/tests/test_lib.c:10: dead: test_lib_stray
+cookbook/c/plants/find_dead_code/tests/test_lib.c:16: dead: pick
+find_dead_code: 34 items under cookbook/c/plants/find_dead_code; 13 findings: 11 dead, 2 test_only
+  cookbook/c/plants/find_dead_code dead: 9
+  cookbook/c/plants/find_dead_code test_only: 2
+  cookbook/c/plants/find_dead_code/tests dead: 2
+=== dir=cookbook/c/plants/find_dead_code/tests (exit 0)
+cookbook/c/plants/find_dead_code/tests/test_lib.c:10: dead: test_lib_stray
+cookbook/c/plants/find_dead_code/tests/test_lib.c:16: dead: pick
+find_dead_code: 8 items under cookbook/c/plants/find_dead_code/tests; 2 findings: 2 dead
+  cookbook/c/plants/find_dead_code/tests dead: 2
+=== dir=cookbook/c/plants/find_dead_code_edges (exit 0)
+cookbook/c/plants/find_dead_code_edges/edges.c:6: dead: Bytes (a VEC_DEFINE generator) (named only by unreached code: edges_dead_two)
+cookbook/c/plants/find_dead_code_edges/edges.c:10: dead: edges_shared_callee (named only by unreached code: edges_dead_one, edges_dead_two)
+cookbook/c/plants/find_dead_code_edges/edges.c:14: dead: edges_dead_one
+cookbook/c/plants/find_dead_code_edges/edges.c:18: dead: edges_dead_two (named only by unreached code: edges_dead_one)
+cookbook/c/plants/find_dead_code_edges/kit.h:20: test_only: kit_for_tests
+cookbook/c/plants/find_dead_code_edges/sub/one.c:7: dead: sub_lonely
+cookbook/c/plants/find_dead_code_edges/sub/two.c:6: test_only: sub_test_only
+cookbook/c/plants/find_dead_code_edges/tests/main_test.c:7: dead: main_test_stray
+find_dead_code: 19 items under cookbook/c/plants/find_dead_code_edges; 8 findings: 6 dead, 2 test_only
+  cookbook/c/plants/find_dead_code_edges dead: 4
+  cookbook/c/plants/find_dead_code_edges test_only: 1
+  cookbook/c/plants/find_dead_code_edges/sub dead: 1
+  cookbook/c/plants/find_dead_code_edges/sub test_only: 1
+  cookbook/c/plants/find_dead_code_edges/tests dead: 1
+=== dir=cookbook/c/plants/find_clones (exit 0)
+cookbook/c/plants/find_clones/clones.c:6: dead: sum_weights
+cookbook/c/plants/find_clones/clones.c:18: dead: sum_prices
+cookbook/c/plants/find_clones/clones.c:31: dead: count_matches
+cookbook/c/plants/find_clones/clones.c:47: dead: write_header
+cookbook/c/plants/find_clones/clones.c:58: dead: write_trailer
+cookbook/c/plants/find_clones/clones.c:82: dead: write_banner
+cookbook/c/plants/find_clones/tests/test_clones.c:5: dead: oracle_weights
+find_dead_code: 7 items under cookbook/c/plants/find_clones; 7 findings: 7 dead
+  cookbook/c/plants/find_clones dead: 6
+  cookbook/c/plants/find_clones/tests dead: 1
+=== dir=cookbook/c/plants/list_deep_nesting (exit 0)
+cookbook/c/plants/list_deep_nesting/depths.c:6: test_only: depth_one
+cookbook/c/plants/list_deep_nesting/depths.c:10: test_only: braceless
+cookbook/c/plants/list_deep_nesting/depths.c:19: dead: braces_in_text
+cookbook/c/plants/list_deep_nesting/depths.c:28: dead: depth_three
+cookbook/c/plants/list_deep_nesting/depths.c:40: dead: depth_four
+cookbook/c/plants/list_deep_nesting/depths.c:52: dead: depth_five
+find_dead_code: 8 items under cookbook/c/plants/list_deep_nesting; 6 findings: 4 dead, 2 test_only
+  cookbook/c/plants/list_deep_nesting dead: 4
+  cookbook/c/plants/list_deep_nesting test_only: 2
+=== dir=cookbook/c/plants/list_long_functions (exit 0)
+cookbook/c/plants/list_long_functions/lengths.c:5: dead: one_line
+cookbook/c/plants/list_long_functions/lengths.c:7: dead: two_lines
+cookbook/c/plants/list_long_functions/lengths.c:13: dead: four_with_comments
+cookbook/c/plants/list_long_functions/lengths.c:25: dead: six_lines
+find_dead_code: 6 items under cookbook/c/plants/list_long_functions; 4 findings: 4 dead
+  cookbook/c/plants/list_long_functions dead: 4
+=== dir=cookbook/c/plants/hunt_names (exit 0)
+cookbook/c/plants/hunt_names/abbreviation.c:4: dead: bi_length (named only by unreached code: builtin_count)
+cookbook/c/plants/hunt_names/abbreviation.c:8: dead: builtin_count
+cookbook/c/plants/hunt_names/do_word.c:4: dead: store_do_write
+cookbook/c/plants/hunt_names/function_case.c:4: dead: readThing
+cookbook/c/plants/hunt_names/quiet_abbreviation.c:4: dead: msg_send (named only by unreached code: quiet_ptr_len)
+cookbook/c/plants/hunt_names/quiet_abbreviation.c:8: dead: quiet_ptr_len
+cookbook/c/plants/hunt_names/quiet_do_word.c:4: dead: store_done
+cookbook/c/plants/hunt_names/quiet_vague.c:4: dead: json_value
+cookbook/c/plants/hunt_names/quiet_vague.c:8: dead: run
+cookbook/c/plants/hunt_names/quiet_vague_local.c:4: dead: quiet_sum
+cookbook/c/plants/hunt_names/quiet_vague_local.c:11: dead: quiet_give
+cookbook/c/plants/hunt_names/quiet_zig_bound.c:8: dead: quiet_bounded
+cookbook/c/plants/hunt_names/vague.c:4: dead: handle_data
+cookbook/c/plants/hunt_names/vague_local.c:4: dead: vague_local_sum
+find_dead_code: 33 items under cookbook/c/plants/hunt_names; 14 findings: 14 dead
+  cookbook/c/plants/hunt_names dead: 14
+=== dir=cookbook/c/plants/map_file (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file/breaks (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
