@@ -108,6 +108,11 @@ are passed in):
   goldens.
 - [find_bare_floats.shale](find_bare_floats.shale): a bare `F64` in a
   signature or a type alias's field, against a table of named exceptions.
+  It is written in Roc, a root,
+  [find_bare_floats/find_bare_floats.roc](find_bare_floats/find_bare_floats.roc),
+  with its rule in `Floats.roc` beside it;
+  [check_goldens.shale](find_bare_floats/check_goldens.shale) holds it to
+  its goldens.
 - [find_unclear_names.shale](find_unclear_names.shale): names and module
   docs that say too little. It is written in Roc, a folder of modules whose
   root is

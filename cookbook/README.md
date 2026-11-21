@@ -144,7 +144,9 @@ checkouts, and `<lanes>` the one that holds your lanes.
   and whether each still names something (`hunt_names`' `stale_doc_name`).
   `use("cookbook:roc/doc_names.shale")`
 - `roc/find_bare_floats.shale`: finds bare `F64`s in declarations, against a
-  table of exceptions. `shale cookbook:roc/find_bare_floats.shale table=bare_floats.txt`
+  table of exceptions; the launcher of a Roc script (`roc/find_bare_floats/`,
+  on `roc_platform/`, held to its goldens by that folder's
+  `check_goldens.shale`). `shale cookbook:roc/find_bare_floats.shale table=bare_floats.txt`
 - `roc/find_deep_calls.shale`: finds calls nested three or more deep; the
   launcher of a Roc script (`roc/find_deep_calls/`, on `roc_platform/`,
   held to its goldens by that folder's `check_goldens.shale`).
