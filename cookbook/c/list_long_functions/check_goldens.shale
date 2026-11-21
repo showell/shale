@@ -13,8 +13,10 @@
 -- the Shale original's output on them, and the port matched the original on
 -- Shale's own C too (`dir=c` alone, with `tests=1` and with `over=40`,
 -- `dir=c/host`, and `dir=c/script tests=1 over=20`), which is left out
--- because that code moves. Cases left out: a value that is no integer and a
--- `dir=` that is not there, whose stops have the Roc's own words.
+-- because that code moves. A case left out: a value that is no integer,
+-- whose stop has the Roc's own words. A `dir=` that is not there stops the
+-- run, in the original walk's words as `fail` says them (`file_system: ...`
+-- was the original's class): its golden is the port's.
 --
 -- What is held: the exit code, and the output with each runner's own lines
 -- left out: Shale's `──` report lines, the `called from` lines, and the
@@ -37,6 +39,7 @@ function cases()
   for d in {"list_long_functions", "list_deep_nesting", "find_clones", "find_dead_code", "hunt_names", "map_file/breaks", "map_file"} do
     for v in {"", "\ntests=1", "\nover=3", "\nover=4", "\nover=6\ntests=1", "\nover=1000"} do push(c, "dir=" .. PLANTS .. d .. v) end
   end
+  push(c, "dir=" .. PLANTS .. "nowhere")
   return c
 end
 

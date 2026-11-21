@@ -130,9 +130,13 @@ split_or_stop! = |path, text|
 	}
 
 ## The C files under the folder, sorted, any folder named `out` (c/out, the
-## build's output) left out.
+## build's output) left out. A folder that is not there stops the run, in
+## the words of the Shale original's walk: a check that can't run fails.
 c_files_under! : Str => List(Str)
 c_files_under! = |folder| {
+	if Shale.list!(folder) == Missing {
+		Shale.fail!("`walk(\"${folder}\")`: not found (FileNotFound)")
+	}
 	paths = Shale.glob!("${folder}/**/*.c").concat(Shale.glob!("${folder}/**/*.h"))
 	paths.keep_if(|path| !(Paths.is_in_out_folder(folder, path))).sort_with(Words.byte_order)
 }

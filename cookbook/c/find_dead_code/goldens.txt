@@ -89,3 +89,5 @@ find_dead_code: 33 items under cookbook/c/plants/hunt_names; 14 findings: 14 dea
 ── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
 === dir=cookbook/c/plants (exit 1)
 ── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/nowhere (exit 1)
+── stop: fail: `walk("cookbook/c/plants/nowhere")`: not found (FileNotFound)

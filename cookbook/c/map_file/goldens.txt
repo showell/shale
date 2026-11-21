@@ -133,3 +133,5 @@ PASS c items: 20 files under cookbook/c/plants/hunt_names, 166 lines, each in on
 PASS c items: 1 files under cookbook/c/plants/list_deep_nesting, 77 lines, each in one item or between them; 9 items: 6 function, 1 include, 1 test, 1 test_list
 === tree=cookbook/c/plants/list_long_functions (exit 0)
 PASS c items: 1 files under cookbook/c/plants/list_long_functions, 48 lines, each in one item or between them; 7 items: 4 function, 1 include, 1 test, 1 test_list
+=== tree=cookbook/c/plants/nowhere (exit 1)
+── stop: fail: `walk("cookbook/c/plants/nowhere")`: not found (FileNotFound)

@@ -13,7 +13,10 @@
 -- output on them, and the port matched the original on Shale's own C too
 -- (`tree=c`, `tree=c/host`, and `file=` each of c/'s 99 files), which is left
 -- out because that code moves. A case left out: a `file=` that is not there,
--- whose stop has the Roc's own words (the original's was `read`'s).
+-- whose stop has the Roc's own words (the original's was `read`'s). A
+-- `tree=` that is not there stops the run, in the original walk's words as
+-- `fail` says them (`file_system: ...` was the original's class): its golden
+-- is the port's.
 --
 -- What is held: the exit code, and the output with each runner's own lines
 -- left out: Shale's `──` report lines, the `called from` lines, and the
@@ -42,6 +45,7 @@ function cases()
   for d in {"map_file", "map_file/breaks", "find_dead_code", "find_clones", "hunt_names", "list_deep_nesting", "list_long_functions"} do
     push(c, "tree=" .. PLANTS .. d)
   end
+  push(c, "tree=" .. PLANTS .. "nowhere")
   return c
 end
 

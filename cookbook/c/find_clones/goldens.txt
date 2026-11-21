@@ -142,3 +142,5 @@ find_clones: 13 functions under cookbook/c/plants/hunt_names, tests left out; 0 
 ── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
 === dir=cookbook/c/plants/map_file/breaks top=0 score=0 min=0 window=1 (exit 1)
 ── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/nowhere (exit 1)
+── stop: fail: `walk("cookbook/c/plants/nowhere")`: not found (FileNotFound)

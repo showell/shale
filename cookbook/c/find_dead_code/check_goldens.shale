@@ -14,8 +14,10 @@
 -- goldens were written from the Shale original's output on them, and the
 -- port matched the original on Shale's own C too (`dir=c`, `dir=c/host`,
 -- `dir=c/foundation` and `dir=c/tests`), which is left out because that
--- code moves. A case left out: a `dir=` that is not there, which the
--- original's walk stopped on and the port's glob finds empty.
+-- code moves. A `dir=` that is not there stops the run, in the original
+-- walk's words as `fail` says them (the original's stop was `file_system:
+-- ...`, the port's `fail: ...`, with no `exists(p)` hint): its golden is the
+-- port's.
 --
 -- What is held: the exit code, and the output with each runner's own lines
 -- left out: Shale's `──` report lines, the `called from` lines, and the
@@ -39,6 +41,7 @@ function cases()
     push(c, "dir=" .. PLANTS .. "/" .. d)
   end
   push(c, "dir=" .. PLANTS)
+  push(c, "dir=" .. PLANTS .. "/nowhere")
   return c
 end
 
