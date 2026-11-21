@@ -3,6 +3,7 @@
 ## annotation and definition, leaving out the names the file's header
 ## dictates, and along the way the facts (Facts) the checks judged over the
 ## whole tree need.
+import lib.Headers
 import lib.Text
 import lib.Tree
 import Facts
@@ -58,7 +59,7 @@ Reading := [].{
 	file_definitions : Reading.FileRead, Dict(U64, Str) -> { definitions : List(Reading.Definition), facts : Facts.Gathered }
 	file_definitions = |file, pattern_types| {
 		nodes = file.nodes
-		dictated = dictated_names(nodes)
+		dictated = Set.from_list(Headers.header_names(nodes).dictated)
 		is_kept = |definition| !(dictated.contains(definition.name) and definition.owner == "")
 		var $facts = Facts.keywords_of(file)
 		var $outer = []
@@ -160,37 +161,6 @@ with_definition = |above, definition| {
 		has_callback: above.has_callback or definition.has_callback,
 		parameters: definition.parameters,
 	}
-}
-
-## The names a file's header dictates (cookbook/roc/headers.shale's
-## `header_names`, its `dictated`): what an app provides, what a platform
-## requires of its app and what it provides to its host.
-dictated_names : List(Tree.Node) -> Set(Str)
-dictated_names = |nodes| {
-	var $dictated = Set.empty()
-	$place : U64
-	var $place = 2
-	while $place <= nodes.len() and Tree.node_at(nodes, $place).kind != "statements" {
-		node = Tree.node_at(nodes, $place)
-		if node.kind == "entrypoint" {
-			$dictated = $dictated.insert(Tree.attribute(node, "value"))
-		}
-		if node.kind == "symbol-map-entry" {
-			$dictated = $dictated.insert(Tree.attribute(node, "func"))
-		}
-		if node.kind == "text" and node.parent > 0 {
-			parent = Tree.node_at(nodes, node.parent)
-			match Tree.find_attribute(node, "value") {
-				Ok(value) if parent.kind == "exposed-lower-ident" =>
-					if Tree.node_at(nodes, parent.parent).kind == "provides" {
-						$dictated = $dictated.insert(value)
-					}
-				_ => {}
-			}
-		}
-		$place = $place + 1
-	}
-	$dictated
 }
 
 ## The line of the declaration that the record field at `at` belongs to, as
