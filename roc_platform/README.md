@@ -91,8 +91,8 @@ launcher takes with it:
   "../lib/main.roc"`, then `import lib.Plural`), as roc-chat imports
   roc-markdown: that `package [Plural] {}` file and the modules it
   exposes. This is how the recipes share their modules: the cookbook's
-  Roc ports name `cookbook/roc/lib/` (`lib: "../lib/main.roc"`, then
-  `import lib.Tree`), whose Tree, Declarations, Text and Finding were each
+  Roc ports name `cookbook/roc/lib/main.roc` in their headers as `lib`, then
+  `import lib.Tree`, and its Tree, Declarations, Text and Finding were each
   a copy in several recipes. A package reaches no effect, so what runs a
   program or reads a file (a self-test, a word list) stays in each recipe.
   A script's package imports no package of its own.
