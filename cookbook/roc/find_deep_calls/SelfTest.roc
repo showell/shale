@@ -6,7 +6,7 @@
 ## give a finding, no two findings may print the same line, and a
 ## `quiet_*.roc` plant may hold no mark.
 import pf.Shale
-import Finding
+import NestFinding
 
 SelfTest := [].{
 
@@ -16,7 +16,7 @@ SelfTest := [].{
 
 	## Each plant's marks held to the findings the run printed: every fault
 	## said, then a stop, or the PASS line.
-	run! : { paths : List(Str), findings : List(Finding) } => {}
+	run! : { paths : List(Str), findings : List(NestFinding) } => {}
 	run! = |{ paths, findings }| {
 		var $faults = []
 		var $mark_count = 0
@@ -81,7 +81,7 @@ read_mark! = |line| {
 }
 
 ## The findings on one line of a plant, left to right.
-findings_at_line : List(Finding), { path : Str, line : U64 } -> List(Finding)
+findings_at_line : List(NestFinding), { path : Str, line : U64 } -> List(NestFinding)
 findings_at_line = |findings, { path, line }|
 	findings
 		.keep_if(|finding| finding.path == path and finding.nest.line == line)
@@ -92,7 +92,7 @@ JudgedLine : {
 	place : Str,
 	path : Str,
 	mark : Mark,
-	line_findings : List(Finding),
+	line_findings : List(NestFinding),
 }
 
 ## What is wrong with one line: its findings against its mark.
@@ -111,7 +111,7 @@ line_faults = |{ place, path, mark, line_findings }| {
 				match span {
 					Says(says) =>
 						match line_findings.first() {
-							Ok(first) if Finding.head(first).contains(says) => []
+							Ok(first) if NestFinding.head(first).contains(says) => []
 							_ => ["${place}: the finding does not say `${says}`"]
 						}
 					Silent => []
@@ -136,9 +136,9 @@ line_faults = |{ place, path, mark, line_findings }| {
 }
 
 ## A fault for each line that two findings print alike.
-duplicate_line_faults : List(Finding) -> List(Str)
+duplicate_line_faults : List(NestFinding) -> List(Str)
 duplicate_line_faults = |findings| {
-	finding_lines = findings.map(Finding.finding_line)
+	finding_lines = findings.map(NestFinding.finding_line)
 	is_printed_twice = |line| finding_lines.count_if(|other| other == line) > 1
 	once_each = |seen, line| {
 		if seen.contains(line) {

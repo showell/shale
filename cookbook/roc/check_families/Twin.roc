@@ -7,9 +7,9 @@
 ## builds a type and declares none, and so does an alias of the twin
 ## (`Pose : Geom.Pose`). App files are left out by the caller, because every
 ## app declares what its platform asks for.
-import Declarations
-import Finding
-import Text
+import lib.Declarations
+import lib.Finding
+import lib.Text
 
 Twin := [].{
 
@@ -21,7 +21,7 @@ Twin := [].{
 	}
 
 	## A file's path and the types it declares.
-	FileTypes : { path : Str, types : List(Declarations.TypeDeclaration) }
+	FileTypes : { path : Str, types : List(Declarations.TypeDeclared) }
 
 	## The twins among the files' types, in the order the files were read.
 	## A name in `roles` is each module's own to declare, so it has no twin.
@@ -62,7 +62,7 @@ with_places = |places_by_name, file| {
 
 ## Whether the type declares nothing of its own: a namespace module, or an
 ## alias of a type of its own name.
-is_type_elsewhere : Declarations.TypeDeclaration -> Bool
+is_type_elsewhere : Declarations.TypeDeclared -> Bool
 is_type_elsewhere = |declared| {
 	shape = declared.shape
 	shape == "" or shape == "[]" or shape == declared.name

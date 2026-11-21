@@ -19,15 +19,16 @@
 ## (`Shale.glob!`), has Roc's parser read them (`Shale.roc_tree!`) and each
 ## one's text (`Shale.read!`), and prints the verdict (`Shale.print!`,
 ## `Shale.fail!`). Its modules are beside it: a module a check (NameType,
-## BareBesideUnit, NoValue), what they read (Declarations, Tree, Text,
-## Words), Finding, and SelfTest.
+## BareBesideUnit, NoValue), Words and SelfTest; what they read besides
+## (Declarations, Tree, Text) and Finding are the cookbook's Roc library,
+## cookbook/roc/lib/.
 ## budget: steps=800000000 arena_bytes=2000000000 output_bytes=4000000 programs=100
-app [main!] { pf: platform "../../../roc_platform/platform/main.roc" }
+app [main!] { lib: "../lib/main.roc", pf: platform "../../../roc_platform/platform/main.roc" }
 
 import pf.Shale
 import BareBesideUnit
-import Declarations
-import Finding
+import lib.Declarations
+import lib.Finding
 import NameType
 import NoValue
 import SelfTest
@@ -36,7 +37,7 @@ import Words
 main! : {} => {}
 main! = |{}| {
 	if Shale.arg!("self_test", "") == "1" {
-		SelfTest.run!({})
+		SelfTest.run!(checks)
 	} else {
 		run_check!({})
 	}
@@ -96,12 +97,14 @@ read_text! = |path|
 		}
 	}
 
+## The checks, in the order the summary counts them.
+checks : List(Str)
+checks = ["name_type", "bare_beside_unit", "no_value"]
+
 ## The counts, `check_name_types (Roc): N files; name_type N, ...`.
 summary_of : List(Finding), U64 -> Str
 summary_of = |findings, file_count| {
-	count_of = |check| findings.count_if(|finding| finding.check == check).to_str()
-	counts = Finding.checks.map(|check| "${check} ${count_of(check)}")
-	"check_name_types (Roc): ${file_count.to_str()} files; ${Str.join_with(counts, ", ")}"
+	"check_name_types (Roc): ${file_count.to_str()} files; ${Finding.counts_of(findings, checks)}"
 }
 
 ## The summary, each finding, then the summary again (cookbook/findings.shale):

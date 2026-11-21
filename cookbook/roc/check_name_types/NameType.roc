@@ -6,10 +6,10 @@
 ## question whether it is a fraction), so it is not judged. `none` means no
 ## name may end in the word, whatever its type or start, and `any` means the
 ## word holds no promise at all.
-import Declarations
-import Finding
-import Text
-import Tree
+import lib.Declarations
+import lib.Finding
+import lib.Text
+import lib.Tree
 import Words
 
 NameType := [].{
@@ -37,25 +37,6 @@ NameType := [].{
 		named_fields.concat(named_values).map(|named| name_findings(named, words)).join()
 	}
 
-	## A name's words, lowercased: split at its capitals (`NodeInfo` gives
-	## `node`, `info`) and at its underscores.
-	words_of : Str -> List(Str)
-	words_of = |name| {
-		var $words = []
-		var $current = []
-		for byte in name.to_utf8() {
-			if byte == '_' {
-				$words = with_word($words, $current)
-				$current = []
-			} else if Text.is_capital(byte) and !($current.is_empty()) {
-				$words = with_word($words, $current)
-				$current = [byte]
-			} else {
-				$current = $current.append(byte)
-			}
-		}
-		with_word($words, $current)
-	}
 }
 
 ## A name judged: a value's or a field's, where it is, and the type that
@@ -70,7 +51,7 @@ Named : {
 ## The finding of `named`, when its type disagrees with the table.
 name_findings : Named, Words -> List(Finding)
 name_findings = |named, words| {
-	name_words = NameType.words_of(named.name.drop_suffix("!"))
+	name_words = Text.name_words(named.name.drop_suffix("!"))
 	type_judged = named.type_judged
 	if type_judged == "" or type_judged == "_" {
 		return []
@@ -130,12 +111,3 @@ not_allowed = |said, allowed| {
 		what: "`${named.name}` is `${named.type_judged}`, and ${ending}",
 	}
 }
-
-## `words` with `bytes` after them as a lowercased word, when there are any.
-with_word : List(Str), List(U8) -> List(Str)
-with_word = |words, bytes|
-	if bytes.is_empty() {
-		words
-	} else {
-		words.append(Text.lower(Str.from_utf8_lossy(bytes)))
-	}

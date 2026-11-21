@@ -5,14 +5,13 @@
 ## running and judging of a row, on purpose, until the Roc recipes share a
 ## library.
 import pf.Shale
-import Finding
 
 SelfTest := [].{
 
-	## Each row run as a child of its own, through `launcher`; a check no row
-	## fires fails too, since it could be blind.
-	run! : {} => {}
-	run! = |{}| {
+	## Each row run as a child of its own, through `launcher`; a check of
+	## `checks` no row fires fails too, since it could be blind.
+	run! : List(Str) => {}
+	run! = |checks| {
 		var $wrong = 0.U64
 		var $fired = Set.empty()
 		for row in rows {
@@ -23,7 +22,7 @@ SelfTest := [].{
 				timeout_ms: 120000,
 				want: "",
 			})
-			faults = find_faults!(row, result)
+			faults = find_faults!(row, result, checks)
 			for (check, _) in row.counts {
 				$fired = $fired.insert(check)
 			}
@@ -35,7 +34,7 @@ SelfTest := [].{
 				Shale.print!(result.out)
 			}
 		}
-		for check in Finding.checks {
+		for check in checks {
 			if !($fired.contains(check)) {
 				Shale.print!("FAIL `${check}` has no plant")
 				$wrong = $wrong + 1
@@ -169,8 +168,8 @@ wanted_count = |row, check| {
 
 ## What is wrong with one row's run (cookbook/roc/gate_recipe.shale's
 ## `row_faults`).
-find_faults! : Row, { code : I64, out : Str } => List(Str)
-find_faults! = |row, result| {
+find_faults! : Row, { code : I64, out : Str }, List(Str) => List(Str)
+find_faults! = |row, result, checks| {
 	must_fail = row.stops or !(row.counts.is_empty())
 	var $faults = []
 	if must_fail and result.code == 0 {
@@ -179,7 +178,7 @@ find_faults! = |row, result| {
 	if !(must_fail) and result.code != 0 {
 		$faults = $faults.append("it exited ${result.code.to_str()}")
 	}
-	for check in Finding.checks {
+	for check in checks {
 		found = Shale.re_lines!(result.out, "^[^ ]+:[0-9]+: ${check}: ").len()
 		wanted = wanted_count(row, check)
 		if found != wanted {

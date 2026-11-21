@@ -2,7 +2,7 @@
 ## arguments, like `f(g(h(x)))`, with its depth and the names of its
 ## outermost and deepest calls. `Nest.nests_in` finds a file's nests from
 ## Roc's tree of it; the launcher's header says the rule.
-import Tree
+import lib.Tree
 
 Nest := {
 	line : U64,
@@ -21,7 +21,7 @@ Nest := {
 
 	## The file's nests at least the rule's `min` deep, in source order, each
 	## named by its outermost call.
-	nests_in : List(Tree.SyntaxNode), Nest.Rule -> List(Nest)
+	nests_in : List(Tree.Node), Nest.Rule -> List(Nest)
 	nests_in = |syntax_nodes, rule| {
 		reading = {
 			syntax_nodes,
@@ -44,7 +44,7 @@ Nest := {
 
 ## A tree read for nests: each node's call depth beside it, by place.
 Reading : {
-	syntax_nodes : List(Tree.SyntaxNode),
+	syntax_nodes : List(Tree.Node),
 	depths : List(U64),
 	strictness : Nest.Strictness,
 }
@@ -93,12 +93,12 @@ passes_depth_through = |kind, strictness|
 		Loose => pass_through_kinds.contains(kind) or loose_pass_through_kinds.contains(kind)
 	}
 
-is_call : Tree.SyntaxNode -> Bool
+is_call : Tree.Node -> Bool
 is_call = |node| node.kind == "e-apply" or node.kind == "e-method-call"
 
 ## Every node's call depth, by place. A node's depth is its kids', so the
 ## places are taken from the last, whose kids come after them all.
-call_depths : List(Tree.SyntaxNode), Nest.Strictness -> List(U64)
+call_depths : List(Tree.Node), Nest.Strictness -> List(U64)
 call_depths = |syntax_nodes, strictness| {
 	var $depths = List.repeat(0, syntax_nodes.len())
 	var $place = syntax_nodes.len()
@@ -139,7 +139,7 @@ depth_from_kids = |reading, place| {
 	}
 }
 
-method_call_depth : Reading, Tree.SyntaxNode -> U64
+method_call_depth : Reading, Tree.Node -> U64
 method_call_depth = |reading, node| {
 	var $receiver_depth = 0
 	var $deepest_argument = 0
@@ -156,7 +156,7 @@ method_call_depth = |reading, node| {
 }
 
 ## A tuple of one item, which is a pair of parentheses.
-is_parenthesized : Tree.SyntaxNode -> Bool
+is_parenthesized : Tree.Node -> Bool
 is_parenthesized = |node| node.kind == "e-tuple" and node.kids.len() == 1
 
 deepest_of : Reading, List(U64) -> U64
@@ -174,7 +174,7 @@ depth_at = |reading, place|
 
 ## Whether a call nested under this node still belongs to the nest of the
 ## call above it.
-continues_nest : Tree.SyntaxNode, Nest.Strictness -> Bool
+continues_nest : Tree.Node, Nest.Strictness -> Bool
 continues_nest = |node, strictness| {
 	is_part = node.kind == "args" or node.kind == "e-tuple"
 	is_call(node) or is_part or passes_depth_through(node.kind, strictness)
@@ -235,19 +235,19 @@ deepest_call = |reading, top| {
 
 ## A call's name: an apply's function as written (`List.concat`, else its
 ## name, else its kind), or a method call's method (`.concat`).
-call_name : List(Tree.SyntaxNode), U64 -> Str
+call_name : List(Tree.Node), U64 -> Str
 call_name = |syntax_nodes, place| {
 	node = Tree.node_at(syntax_nodes, place)
 	if node.kind == "e-method-call" {
-		match Tree.attribute(node, "method") {
+		match Tree.find_attribute(node, "method") {
 			Ok(method) => method
 			Err(_) => crash "find_deep_calls: a method call with no method"
 		}
 	} else {
 		function = Tree.node_at(syntax_nodes, Tree.first_kid(node))
-		match Tree.attribute(function, "raw") {
+		match Tree.find_attribute(function, "raw") {
 			Ok(raw) => raw
-			Err(_) => Tree.attribute(function, "name") ?? function.kind
+			Err(_) => Tree.find_attribute(function, "name") ?? function.kind
 		}
 	}
 }

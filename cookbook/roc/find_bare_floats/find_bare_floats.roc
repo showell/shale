@@ -17,22 +17,23 @@
 ## This root reads the table (`Shale.read!`), globs the files
 ## (`Shale.glob!`), has Roc's parser read them (`Shale.roc_tree!`), and
 ## prints the verdict (`Shale.print!`, `Shale.fail!`). Its modules are
-## beside it: the rule (Floats), what it spares (TestHelpers, Exceptions),
-## what they read (Tree, Text), Finding and SelfTest.
+## beside it: the rule (Floats), what it spares (TestHelpers, Exceptions)
+## and SelfTest; what they read (Tree, Text) and Finding are the cookbook's
+## Roc library, cookbook/roc/lib/.
 ## budget: steps=800000000 arena_bytes=2000000000 output_bytes=4000000 programs=100
-app [main!] { pf: platform "../../../roc_platform/platform/main.roc" }
+app [main!] { lib: "../lib/main.roc", pf: platform "../../../roc_platform/platform/main.roc" }
 
 import pf.Shale
 import Exceptions
-import Finding
+import lib.Finding
 import Floats
 import SelfTest
-import Tree
+import lib.Tree
 
 main! : {} => {}
 main! = |{}| {
 	if Shale.arg!("self_test", "") == "1" {
-		SelfTest.run!({})
+		SelfTest.run!(checks)
 	} else {
 		run_check!({})
 	}
@@ -90,13 +91,15 @@ run_check! = |{}| {
 	}
 }
 
+## The checks, in the order the summary counts them.
+checks : List(Str)
+checks = ["bare_float", "unused_exception"]
+
 ## The counts, `find_bare_floats (Roc): N files; bare_float N,
 ## unused_exception N`.
 summary_of : List(Finding), U64 -> Str
 summary_of = |findings, file_count| {
-	count_of = |check| findings.count_if(|finding| finding.check == check).to_str()
-	counts = Finding.checks.map(|check| "${check} ${count_of(check)}")
-	"find_bare_floats (Roc): ${file_count.to_str()} files; ${Str.join_with(counts, ", ")}"
+	"find_bare_floats (Roc): ${file_count.to_str()} files; ${Finding.counts_of(findings, checks)}"
 }
 
 ## The summary, each finding, then the summary again (cookbook/findings.shale):

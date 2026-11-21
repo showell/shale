@@ -18,24 +18,25 @@
 ## This root globs the files (`Shale.glob!`), has Roc's parser read them
 ## (`Shale.roc_tree!`) and each one's text (`Shale.read!`), reads the roles
 ## file, and prints the verdict (`Shale.print!`, `Shale.fail!`). Its modules
-## are beside it: a module a check (Family, Twin), what they read (Tree,
-## Declarations, Text), Finding, and SelfTest.
+## are beside it, a module a check (Family, Twin) and SelfTest; what they read
+## (Tree, Declarations, Text) and Finding are the cookbook's Roc library,
+## cookbook/roc/lib/.
 ## budget: steps=800000000 arena_bytes=2000000000 output_bytes=4000000 programs=100
-app [main!] { pf: platform "../../../roc_platform/platform/main.roc" }
+app [main!] { lib: "../lib/main.roc", pf: platform "../../../roc_platform/platform/main.roc" }
 
 import pf.Shale
-import Declarations
+import lib.Declarations
+import lib.Finding
+import lib.Text
+import lib.Tree
 import Family
-import Finding
 import SelfTest
-import Text
-import Tree
 import Twin
 
 main! : {} => {}
 main! = |{}| {
 	if Shale.arg!("self_test", "") == "1" {
-		SelfTest.run!({})
+		SelfTest.run!(checks)
 	} else {
 		run_check!({})
 	}
@@ -54,10 +55,11 @@ run_check! = |{}| {
 	var $refused = []
 	for file in Shale.roc_tree!(paths) {
 		if file.err == "" {
+			source_lines = read_text!(file.path).split_on("\n")
 			read = {
 				path: file.path,
-				declared: Declarations.from_tree(file.nodes),
-				source_lines: read_text!(file.path).split_on("\n"),
+				declared: Declarations.from_file({ path: file.path, nodes: file.nodes, source_lines }),
+				source_lines,
 			}
 			$files = $files.append({ is_app: Tree.is_app(file.nodes), read })
 		} else if file.err.starts_with(file.path) {
@@ -140,8 +142,8 @@ read_word_set! = |path| {
 		}
 	}
 	var $words = Set.empty()
-	for line in lines(text) {
-		word = Text.trim(text_before_note(line))
+	for line in Text.lines(text) {
+		word = Text.trim(Text.before_first(line, "--"))
 		if word.contains(" ") or $words.contains(word) {
 			Shale.fail!("${path}: `${word}` is no single new word")
 		}
@@ -152,31 +154,14 @@ read_word_set! = |path| {
 	$words
 }
 
-## A text's lines, as Shale's `lines` splits it: a last newline ends a line.
-lines : Str -> List(Str)
-lines = |text| {
-	parts = text.split_on("\n")
-	if text.ends_with("\n") {
-		parts.drop_last(1)
-	} else {
-		parts
-	}
-}
-
-## The line before any note after `--`.
-text_before_note : Str -> Str
-text_before_note = |line|
-	match line.split_first("--") {
-		Ok(parts) => parts.before
-		Err(_) => line
-	}
+## The checks, in the order the summary counts them.
+checks : List(Str)
+checks = ["family", "twin_name"]
 
 ## The counts, `check_families (Roc): N files; family N, twin_name N`.
 summary_of : List(Finding), U64 -> Str
 summary_of = |findings, file_count| {
-	count_of = |check| findings.count_if(|finding| finding.check == check).to_str()
-	counts = Finding.checks.map(|check| "${check} ${count_of(check)}")
-	"check_families (Roc): ${file_count.to_str()} files; ${Str.join_with(counts, ", ")}"
+	"check_families (Roc): ${file_count.to_str()} files; ${Finding.counts_of(findings, checks)}"
 }
 
 ## The summary, each finding, then the summary again (cookbook/findings.shale):

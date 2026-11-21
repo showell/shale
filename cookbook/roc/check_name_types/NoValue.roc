@@ -7,9 +7,9 @@
 ## Draw`, `Draw : U64 -> List(U64)`), so it is not judged either. A string
 ## with something in it is words about the case, not a stand-in for it (a
 ## name of words for no match, say), so only `""` is judged.
-import Declarations
-import Finding
-import Tree
+import lib.Declarations
+import lib.Finding
+import lib.Tree
 
 NoValue := [].{
 

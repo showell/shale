@@ -17,13 +17,14 @@
 ## This root reads the words file (Words), globs the files (`Shale.glob!`),
 ## has Roc's parser read them (`Shale.roc_tree!`) and each one's text
 ## (`Shale.read!`), and prints the verdict (`Shale.print!`, `Shale.fail!`).
-## Its modules are beside it: Retired, the two checks, over Identifiers,
-## Tree, Words and Text; Finding; and SelfTest.
+## Its modules are beside it: Retired, the two checks, over Identifiers and
+## Words; and SelfTest. Tree, Text and Finding are the cookbook's Roc
+## library, cookbook/roc/lib/.
 ## budget: steps=800000000 arena_bytes=2000000000 output_bytes=4000000 programs=100 roc_cpu_ms=600000
-app [main!] { pf: platform "../../../roc_platform/platform/main.roc" }
+app [main!] { lib: "../lib/main.roc", pf: platform "../../../roc_platform/platform/main.roc" }
 
 import pf.Shale
-import Finding
+import lib.Finding
 import Retired
 import SelfTest
 import Words
@@ -34,7 +35,7 @@ main! = |{}| {
 	pattern = Shale.arg!("glob", "**/*.roc")
 	words_file = Shale.arg!("words", "")
 	if is_self_test {
-		SelfTest.run!({})
+		SelfTest.run!(checks)
 	} else {
 		run_check!({ pattern, words_file })
 	}
@@ -91,13 +92,15 @@ read_text! = |path|
 		}
 	}
 
+## The checks, in the order the summary counts them.
+checks : List(Str)
+checks = ["retired_name", "retired_comment"]
+
 ## The counts, `check_vocabulary (Roc): N files; retired_name N,
 ## retired_comment N`.
 summary_of : List(Finding), U64 -> Str
 summary_of = |findings, file_count| {
-	count_of = |check| findings.count_if(|finding| finding.check == check).to_str()
-	counts = Finding.checks.map(|check| "${check} ${count_of(check)}")
-	"check_vocabulary (Roc): ${file_count.to_str()} files; ${Str.join_with(counts, ", ")}"
+	"check_vocabulary (Roc): ${file_count.to_str()} files; ${Finding.counts_of(findings, checks)}"
 }
 
 ## The summary, each finding, then the summary again (cookbook/findings.shale):

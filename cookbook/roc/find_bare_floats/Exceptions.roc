@@ -5,9 +5,9 @@
 ## module no file below the table's folder holds, is a finding of its own,
 ## `unused_exception`.
 import pf.Shale
-import Finding
-import Text
-import Tree
+import lib.Finding
+import lib.Text
+import lib.Tree
 
 Exceptions := { path : Str, excuses : List(Exceptions.Excuse) }.{
 

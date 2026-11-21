@@ -6,7 +6,7 @@
 ## malformed line or a word listed twice stops the run. The table belongs to
 ## the project, because what `dist` must be depends on the project's types.
 import pf.Shale
-import Text
+import lib.Text
 
 Words := {
 	## What the table promises of each word in it.
@@ -129,7 +129,7 @@ read_word_set! = |path| {
 	}
 	var $words = Set.empty()
 	for line in Text.lines(text) {
-		word = Text.trim(text_before_note(line))
+		word = Text.trim(Text.before_first(line, "--"))
 		if word.contains(" ") or $words.contains(word) {
 			Shale.fail!("${path}: `${word}` is no single new word")
 		}
@@ -139,11 +139,3 @@ read_word_set! = |path| {
 	}
 	$words
 }
-
-## The line before any note after `--`.
-text_before_note : Str -> Str
-text_before_note = |line|
-	match line.split_first("--") {
-		Ok(parts) => parts.before
-		Err(_) => line
-	}

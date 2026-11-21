@@ -4,9 +4,9 @@
 ## field is a finding. A field named by a preposition (`from`, `to`, `at`) or
 ## by a word the table gives `any` (`id`, where a host's number and a user's
 ## id are two things) is not judged, because that word fits any two things.
-import Declarations
-import Finding
-import Tree
+import lib.Declarations
+import lib.Finding
+import lib.Tree
 import Words
 
 BareBesideUnit := [].{

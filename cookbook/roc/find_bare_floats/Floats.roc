@@ -4,9 +4,9 @@
 ## helper only tests use holds it. A local's annotation is the body's
 ## business and isn't judged.
 import Exceptions
-import Finding
+import lib.Finding
 import TestHelpers
-import Tree
+import lib.Tree
 
 Floats := [].{
 
@@ -135,7 +135,7 @@ bare_float = |file, found| {
 	} else {
 		Tree.kid_at(declaration, 2)
 	}
-	type_text = Tree.render_type(file.syntax_nodes, type_place)
+	type_text = Tree.written_type(file.syntax_nodes, type_place)
 	{
 		path: file.path,
 		line: found.line,

@@ -17,17 +17,17 @@
 ## The effects: `Shale.arg!` for the arguments, `Shale.glob!` for the files,
 ## `Shale.roc_tree!` for Roc's own parser's tree of each, `Shale.read!` for
 ## a finding's source line, and `Shale.print!` and `Shale.fail!` for the
-## verdict. Nest, beside this, is the rule, over Tree; Finding is how a
+## verdict. Nest, beside this, is the rule, over Tree; NestFinding is how a
 ## finding prints; SelfTest checks the plants.
 ## budget: steps=800000000 arena_bytes=3000000000 output_bytes=4000000 roc_cpu_ms=600000
-app [main!] { pf: platform "../../../roc_platform/platform/main.roc" }
+app [main!] { lib: "../lib/main.roc", pf: platform "../../../roc_platform/platform/main.roc" }
 
 import pf.Shale
-import Finding
+import NestFinding
 import Nest
 import SelfTest
-import Text
-import Tree
+import lib.Text
+import lib.Tree
 
 ## What a run checks: the files a glob names, and the rule, or the plants
 ## at the self-test's own `min`.
@@ -109,7 +109,7 @@ read_house! = |{}| {
 ## The check over the glob's files: the verdict printed, then a stop when a
 ## file didn't parse. The findings are a report, not a failure, so a run
 ## that parses every file exits 0; a caller holds the count.
-run_check! : Settings => { paths : List(Str), findings : List(Finding) }
+run_check! : Settings => { paths : List(Str), findings : List(NestFinding) }
 run_check! = |given| {
 	paths = Shale.glob!(given.pattern)
 	settings = { ..given, house: read_house!({}) }
@@ -126,7 +126,7 @@ run_check! = |given| {
 		}
 	}
 	summary_line = summary($findings, { file_count: paths.len(), settings })
-	print_findings!(summary_line, $findings.map(Finding.finding_line))
+	print_findings!(summary_line, $findings.map(NestFinding.finding_line))
 	if !($refused.is_empty()) {
 		for refusal in $refused {
 			Shale.print!("refused: ${refusal}")
@@ -141,7 +141,7 @@ run_check! = |given| {
 ## A parsed file's findings. Its text is read only when it has a nest, for
 ## the source lines; a file the parser read and the read finds gone stops
 ## the run.
-find_file_findings! : { path : Str, syntax_nodes : List(Tree.SyntaxNode) }, Settings => List(Finding)
+find_file_findings! : { path : Str, syntax_nodes : List(Tree.Node) }, Settings => List(NestFinding)
 find_file_findings! = |file, settings| {
 	nests = match settings.house {
 		Kept => Nest.nests_in(file.syntax_nodes, settings.rule)
@@ -174,7 +174,7 @@ find_file_findings! = |file, settings| {
 ## `find_deep_calls (Roc): 9 files; nested 14 (min 3, strict); depth 3 11,
 ## depth 4 3`: the files, the findings, the rule, and how many at each depth,
 ## the depths in the order of their text, as the Shale original sorted them.
-summary : List(Finding), { file_count : U64, settings : Settings } -> Str
+summary : List(NestFinding), { file_count : U64, settings : Settings } -> Str
 summary = |findings, { file_count, settings }| {
 	rule = settings.rule
 	strictness = match rule.strictness {

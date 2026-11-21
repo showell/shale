@@ -4,7 +4,7 @@
 ## word retired twice or a word both kept and retired stops the run, as the
 ## Shale original did, on the same line and in the same words.
 import pf.Shale
-import Text
+import lib.Text
 
 Words := [].{
 
@@ -57,8 +57,8 @@ Words := [].{
 	retired_in : List(U8), Words.Decided -> List(Str)
 	retired_in = |text, decided| {
 		var $found = []
-		for run in Text.name_runs(text) {
-			for word in Text.name_words(run) {
+		for run in name_runs(text) {
+			for word in Text.name_words(Str.from_utf8_lossy(run)) {
 				if decided.contains(word) and !($found.contains(word)) {
 					$found = $found.append(word)
 				}
@@ -96,3 +96,28 @@ read_entry! = |line, place|
 ## separated by commas.
 entry_pattern : Str
 entry_pattern = "^([a-z0-9]+): *([a-z0-9]+(?:, *[a-z0-9]+)*)$"
+
+## The runs of letters, digits and underscores in the bytes, left to right
+## (the Shale original's `[A-Za-z0-9_]+`, every match).
+name_runs : List(U8) -> List(List(U8))
+name_runs = |bytes| {
+	var $runs = []
+	var $run = []
+	for byte in bytes {
+		if is_name_byte(byte) {
+			$run = $run.append(byte)
+		} else if !($run.is_empty()) {
+			$runs = $runs.append($run)
+			$run = []
+		}
+	}
+	if $run.is_empty() {
+		$runs
+	} else {
+		$runs.append($run)
+	}
+}
+
+is_name_byte : U8 -> Bool
+is_name_byte = |byte|
+	Text.is_capital(byte) or Text.is_small_letter(byte) or Text.is_digit(byte) or byte == '_'

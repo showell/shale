@@ -3,22 +3,9 @@
 ## (cookbook/roc/find_unused_imports.shale's header says what counts as a
 ## use); cookbook/roc/imports.shale holds the same rules for the Shale
 ## recipes that ask them of a file, rewrite_method_calls.shale among them.
-Imports := [].{
+import lib.Tree
 
-	## A parsed file's node, as `Shale.roc_tree!` gives it (the platform names
-	## its fields): `parent` and `kids` are places in the file's nodes
-	## counted from 1.
-	SyntaxNode : {
-		kind : Str,
-		depth : U64,
-		parent : U64,
-		kids : List(U64),
-		line : U64,
-		col : U64,
-		end_line : U64,
-		end_col : U64,
-		attrs : List({ name : Str, value : Str }),
-	}
+Imports := [].{
 
 	## An import line no name of the file uses: its line and how a finding
 	## names it.
@@ -27,7 +14,7 @@ Imports := [].{
 	## Each import of the file whose names it never uses, from its tree and
 	## its source lines, which hold the qualifier of a pattern's tag that the
 	## tree drops.
-	unused_imports : List(Imports.SyntaxNode), List(Str) -> List(Imports.UnusedImport)
+	unused_imports : List(Tree.Node), List(Str) -> List(Imports.UnusedImport)
 	unused_imports = |nodes, source_lines| {
 		used = heads_used(nodes, source_lines)
 		imports_of(nodes)
@@ -44,33 +31,16 @@ Import : {
 	names : List(Str),
 }
 
-## The node at a place of the file's nodes; a place the tree gives always
-## holds one.
-node_at : List(Imports.SyntaxNode), U64 -> Imports.SyntaxNode
-node_at = |nodes, at|
-	match nodes.get(at - 1) {
-		Ok(node) => node
-		Err(_) => crash "find_unused_imports: the nodes has no node ${at.to_str()}"
-	}
-
-## A node's attribute, `""` where the tree gives it none.
-attribute : Imports.SyntaxNode, Str -> Str
-attribute = |node, name|
-	match node.attrs.find_first(|attribute_entry| attribute_entry.name == name) {
-		Ok(attribute_entry) => attribute_entry.value
-		Err(_) => ""
-	}
-
 ## The kids of a node, as nodes.
-kid_nodes : List(Imports.SyntaxNode), Imports.SyntaxNode -> List(Imports.SyntaxNode)
+kid_nodes : List(Tree.Node), Tree.Node -> List(Tree.Node)
 kid_nodes = |nodes, node|
-	node.kids.map(|at| node_at(nodes, at))
+	node.kids.map(|at| Tree.node_at(nodes, at))
 
 # ── The imports
 
 ## Each import of the file, in order: `import pkg.Mod`, its alias and what it
 ## exposes, and each file import, `import "page.html" as page : Str`.
-imports_of : List(Imports.SyntaxNode) -> List(Import)
+imports_of : List(Tree.Node) -> List(Import)
 imports_of = |nodes|
 	nodes.join_map(
 		|node|
@@ -85,10 +55,10 @@ imports_of = |nodes|
 
 ## A module's import. Its name is the alias of `import pkg.Mod as M`, else
 ## the last part of the module's path; a name it exposes is one too.
-module_import : List(Imports.SyntaxNode), Imports.SyntaxNode -> Import
+module_import : List(Tree.Node), Tree.Node -> Import
 module_import = |nodes, node| {
-	path = attribute(node, "raw")
-	alias = attribute(node, "alias")
+	path = Tree.attribute(node, "raw")
+	alias = Tree.attribute(node, "alias")
 	name = if alias == "" {
 		path.split_on(".").last() ?? path
 	} else {
@@ -110,27 +80,27 @@ module_import = |nodes, node| {
 
 ## The names an `exposing [...]` list names: a type's `text`, and each
 ## value's name, held by the value's own kids.
-exposed_names : List(Imports.SyntaxNode), Imports.SyntaxNode -> List(Str)
+exposed_names : List(Tree.Node), Tree.Node -> List(Str)
 exposed_names = |nodes, list|
 	kid_nodes(nodes, list).join_map(
 		|entry|
 			if entry.kind == "exposed-upper-ident" {
-				[attribute(entry, "text")]
+				[Tree.attribute(entry, "text")]
 			} else if entry.kind == "exposed-lower-ident" {
-				kid_nodes(nodes, entry).map(|name| attribute(name, "value"))
+				kid_nodes(nodes, entry).map(|name| Tree.attribute(name, "value"))
 			} else {
 				[]
 			},
 	)
 
 ## A file import's name, used when the file refers to it.
-file_imports : List(Imports.SyntaxNode), Imports.SyntaxNode -> List(Import)
+file_imports : List(Tree.Node), Tree.Node -> List(Import)
 file_imports = |nodes, node|
 	kid_nodes(nodes, node)
 		.keep_if(|kid| kid.kind == "name")
 		.map(
 			|kid| {
-				name = attribute(kid, "value")
+				name = Tree.attribute(kid, "value")
 				{
 					line: node.line,
 					label: "the file import `${name}`",
@@ -146,7 +116,7 @@ file_imports = |nodes, node|
 ## module, so only a qualified one counts, or one that is a nominal type's
 ## name (`Point.{ x: 0 }`). A platform header's `hosted { "sym": Host.f! }`
 ## entry uses its module.
-heads_used : List(Imports.SyntaxNode), List(Str) -> Set(Str)
+heads_used : List(Tree.Node), List(Str) -> Set(Str)
 heads_used = |nodes, source_lines| {
 	union_tags = kids_of_kind(nodes, "tags")
 	nominal_names = kids_of_kind(nodes, "mapper")
@@ -154,13 +124,13 @@ heads_used = |nodes, source_lines| {
 		|node, index| {
 			at = index + 1
 			if node.kind == "e-ident" {
-				attribute(node, "raw")
+				Tree.attribute(node, "raw")
 			} else if node.kind == "e-tag" {
 				tag_use(node, nominal_names.contains(at))
 			} else if node.kind == "ty" and !(union_tags.contains(at)) {
-				attribute(node, "name")
+				Tree.attribute(node, "name")
 			} else if node.kind == "symbol-map-entry" {
-				attribute(node, "module")
+				Tree.attribute(node, "module")
 			} else if node.kind == "p-tag" {
 				pattern_tag_use(node, source_lines)
 			} else {
@@ -173,9 +143,9 @@ heads_used = |nodes, source_lines| {
 
 ## An expression's tag, when it names a module: qualified, or a nominal
 ## type's name.
-tag_use : Imports.SyntaxNode, Bool -> Str
+tag_use : Tree.Node, Bool -> Str
 tag_use = |node, names_nominal| {
-	raw = attribute(node, "raw")
+	raw = Tree.attribute(node, "raw")
 	if raw.contains(".") or names_nominal {
 		raw
 	} else {
@@ -186,9 +156,9 @@ tag_use = |node, names_nominal| {
 ## A pattern's tag, when it is qualified. roc-ast drops a pattern tag's
 ## qualifier (`Color.Red =>` comes as `.Red`), so the tag is read from the
 ## source at the pattern's column.
-pattern_tag_use : Imports.SyntaxNode, List(Str) -> Str
+pattern_tag_use : Tree.Node, List(Str) -> Str
 pattern_tag_use = |node, source_lines| {
-	raw = attribute(node, "raw")
+	raw = Tree.attribute(node, "raw")
 	written = if raw.starts_with(".") {
 		source_line = match source_lines.get(node.line - 1) {
 			Ok(text) => text
@@ -234,6 +204,6 @@ head_of = |name|
 	name.split_on(".").first() ?? name
 
 ## The places of the nodes that are kids of a node of the kind.
-kids_of_kind : List(Imports.SyntaxNode), Str -> Set(U64)
+kids_of_kind : List(Tree.Node), Str -> Set(U64)
 kids_of_kind = |nodes, kind|
 	Set.from_list(nodes.keep_if(|node| node.kind == kind).join_map(|node| node.kids))

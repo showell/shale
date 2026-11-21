@@ -1,14 +1,14 @@
 ## The identifiers a node of Roc's tree holds, by its kind: the attribute
 ## that holds the name, or for a name a header or an import exposes in lower
 ## case, the `value` of a `text` kid.
-import Tree
+import lib.Tree
 
 Identifiers := [].{
 
 	## The identifiers a node of the tree holds, in the order the Shale
 	## original read them: each named attribute that is not empty, then each
 	## `text` kid's value.
-	of_node : List(Tree.SyntaxNode), Tree.SyntaxNode -> List(Str)
+	of_node : List(Tree.Node), Tree.Node -> List(Str)
 	of_node = |syntax_nodes, node| {
 		named = name_attributes(node.kind)
 			.map(|attribute_name| Tree.attribute(node, attribute_name))
@@ -50,7 +50,7 @@ name_attributes = |kind|
 	}
 
 ## The values of the node's `text` kids, those that are not empty.
-text_kid_values : List(Tree.SyntaxNode), Tree.SyntaxNode -> List(Str)
+text_kid_values : List(Tree.Node), Tree.Node -> List(Str)
 text_kid_values = |syntax_nodes, node|
 	node.kids
 		.map(|kid| Tree.node_at(syntax_nodes, kid))

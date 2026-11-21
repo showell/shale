@@ -6,7 +6,7 @@
 ## file's top-level names can be reached from outside, so they have none. A
 ## local that shares a helper's name counts as a use, which can only report
 ## more.
-import Tree
+import lib.Tree
 
 TestHelpers := [].{
 

@@ -5,9 +5,10 @@
 ## member names the missing name in its file's opening comment or the doc
 ## above its type, to say why it differs. A reader who knows one member then
 ## finds the others' names without looking.
-import Declarations
-import Finding
-import Text
+import lib.Declarations
+import lib.Finding
+import lib.Text
+import lib.Tree
 
 Family := [].{
 
@@ -25,7 +26,7 @@ Family := [].{
 	## A file as the check reads it: its path, what it declares, and its lines.
 	FileRead : {
 		path : Str,
-		declared : Declarations.FileDeclarations,
+		declared : Declarations,
 		source_lines : List(Str),
 	}
 
@@ -33,7 +34,7 @@ Family := [].{
 	## method Roc calls by name.
 	module_of : Family.FileRead -> [IsModule(Family.Module), NoModule]
 	module_of = |file| {
-		name = module_name(file.path)
+		name = Tree.module_name(file.path)
 		line = module_line(file.declared.types, name)
 		is_member = |value| value.owner == name and !(language_fixed_names.contains(value.name))
 		members = Set.from_list(file.declared.values.keep_if(is_member).map(|value| value.name))
@@ -77,7 +78,7 @@ smallest_family : U64
 smallest_family = 3
 
 ## The line of the last top-level type named `name`, the module's own, or 0.
-module_line : List(Declarations.TypeDeclaration), Str -> U64
+module_line : List(Declarations.TypeDeclared), Str -> U64
 module_line = |types, name| {
 	var $line = 0
 	for declared in types {
@@ -159,43 +160,10 @@ missing_name = |gap| {
 ## The last word of a name of two or more words.
 last_word : Str -> Try(Str, [OneWord])
 last_word = |name|
-	match name_words(name) {
+	match Text.name_words(name) {
 		[_, .., last] => Ok(last)
 		_ => Err(OneWord)
 	}
-
-## A name's words, lowercased: split at its capitals (`NodeInfo` gives
-## `node`, `info`) and at its underscores.
-name_words : Str -> List(Str)
-name_words = |name| {
-	var $words = []
-	var $current = []
-	for byte in name.to_utf8() {
-		if byte == '_' {
-			$words = with_word($words, $current)
-			$current = []
-		} else if Text.is_capital(byte) and !($current.is_empty()) {
-			$words = with_word($words, $current)
-			$current = [byte]
-		} else {
-			$current = $current.append(byte)
-		}
-	}
-	with_word($words, $current)
-}
-
-## `words` with `bytes` after them as a lowercased word, when there are any.
-with_word : List(Str), List(U8) -> List(Str)
-with_word = |words, bytes|
-	if bytes.is_empty() {
-		words
-	} else {
-		words.append(Text.lower(Str.from_utf8_lossy(bytes)))
-	}
-
-## The module a .roc file holds, by its file name less its extension.
-module_name : Str -> Str
-module_name = |path| Str.from_utf8_lossy(Text.basename(path).to_utf8().drop_last(4))
 
 ## The comment lines that open a file, trimmed.
 opening_comment : List(Str) -> List(Str)
@@ -218,7 +186,7 @@ doc_above = |source_lines, line| {
 	var $parts = []
 	var $above = line - 1
 	while $above >= 1 {
-		trimmed = Text.trim(line_at(source_lines, $above))
+		trimmed = Text.trim(Text.line_at(source_lines, $above))
 		if !(trimmed.starts_with("#")) {
 			return Str.join_with($parts, " ")
 		}
@@ -227,14 +195,6 @@ doc_above = |source_lines, line| {
 	}
 	Str.join_with($parts, " ")
 }
-
-## Line `number` of the file, counted from 1.
-line_at : List(Str), U64 -> Str
-line_at = |source_lines, number|
-	match source_lines.get(number - 1) {
-		Ok(line) => line
-		Err(_) => crash "check_families: the file has no line ${number.to_str()}"
-	}
 
 ## The methods Roc calls by name, from Roc's docs/langref/static-dispatch.md
 ## and operators.md, with the encoders' `encode` and `decode`: a module that
