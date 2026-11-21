@@ -1,0 +1,42 @@
+===  (exit 0)
+lines  path
+0 of 7 .zig files are over 1000 lines
+=== over=4 (exit 0)
+lines  path
+    6  shale/src/long.zig
+    5  shale/no_last_newline.zig
+    5  shale/src/tie_first.zig
+    5  shale/tie_second.zig
+4 of 7 .zig files are over 4 lines
+=== over=3 (exit 0)
+lines  path
+    6  shale/src/long.zig
+    5  shale/no_last_newline.zig
+    5  shale/src/tie_first.zig
+    5  shale/tie_second.zig
+    4  angry-gopher/deep/a/b/four.zig
+5 of 7 .zig files are over 3 lines
+=== over=0 (exit 0)
+lines  path
+    6  shale/src/long.zig
+    5  shale/no_last_newline.zig
+    5  shale/src/tie_first.zig
+    5  shale/tie_second.zig
+    4  angry-gopher/deep/a/b/four.zig
+    2  shale/blank_lines.zig
+6 of 7 .zig files are over 0 lines
+=== over=-1 (exit 0)
+lines  path
+    6  shale/src/long.zig
+    5  shale/no_last_newline.zig
+    5  shale/src/tie_first.zig
+    5  shale/tie_second.zig
+    4  angry-gopher/deep/a/b/four.zig
+    2  shale/blank_lines.zig
+    0  angry-gopher/empty.zig
+7 of 7 .zig files are over -1 lines
+=== over=6 (exit 0)
+lines  path
+0 of 7 .zig files are over 6 lines
+=== over=abc (exit 1)
+── stop: fail: list_long_files: over=abc is not an integer

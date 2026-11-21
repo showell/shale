@@ -54,7 +54,8 @@ puts them back:
   lines.
 - `list_long_files.shale`: every `.zig` file over a thousand lines in the
   repos it names (edit its list for your box). It runs from the folder that
-  holds the repos.
+  holds the repos. It is the launcher of a Roc script,
+  `list_long_files/list_long_files.roc`, on Shale's Roc platform.
 
 ## Smells: where a tree may want a second look
 

@@ -267,7 +267,9 @@ can't account for. The C finders are built on it.
 - `zig/judge_move.shale`: judges that a move of declarations kept the
   behaviour. `shale cookbook:zig/judge_move.shale mode=baseline bin=zig-out/bin/x`
 - `zig/list_long_files.shale`: lists the .zig files over a thousand lines in
-  the repos. `cd <repos> && shale cookbook:zig/list_long_files.shale`
+  the repos; the launcher of a one-file Roc script
+  (`zig/list_long_files/list_long_files.roc`, on `roc_platform/`, held to its
+  goldens by that folder's `check_goldens.shale`). `cd <repos> && shale cookbook:zig/list_long_files.shale`
 - `zig/map_file.shale`: prints a map of a file's declarations and tests.
   `shale cookbook:zig/map_file.shale path=src/x.zig`
 - `zig/plan_function_cut.shale`: says what a piece of a long function would
