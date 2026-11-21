@@ -166,8 +166,9 @@ the splitter package **`cookbook/c/items/`**, which each names by a
 relative path), **`cookbook/zig/list_long_files/`**, **`cookbook/zig/count_comments/`**,
 **`cookbook/roc/find_unused_imports/`**, **`cookbook/roc/check_families/`**,
 **`cookbook/roc/find_deep_calls/`**, **`cookbook/roc/check_vocabulary/`**,
-**`cookbook/roc/check_name_types/`**, **`cookbook/roc/find_bare_floats/`** and
-**`cookbook/count_shale_stops/`** are ported the same way: the
+**`cookbook/roc/check_name_types/`**, **`cookbook/roc/find_bare_floats/`**,
+**`cookbook/count_shale_stops/`** and **`cookbook/roc/find_extra_parens/`**
+are ported the same way: the
 launcher keeps the recipe's name and arguments, the goldens were written
 from the Shale original on plants, and `check_goldens.shale` holds them.
 count_comments' launcher builds with `opt=speed`, since its byte-by-byte
@@ -178,6 +179,11 @@ ShaleJson module, as Shale's `json_read` reads it) and whose dev build took
 3.5 times the original's CPU over a 180 MB transcript; and the four over
 the C, whose splitter masks a line a byte at a time (the dev build took
 four times map_file's original's CPU over `tree=c`).
+find_extra_parens rewrites as well as finds (`write=1`): its goldens hold
+the files a rewrite of every plant leaves, and the rewrite reads a file
+with no finding no more, since Roc's arena frees nothing and a second
+parse of a large tree would not fit (`real!`, `mkdir!` and `remove_tree!`
+were exported for it: `roc fmt`'s argv and the self-test's scratch copy).
 **`cookbook/roc/EXAMPLES.txt`** lists every port, a line each: its Roc, its
 Shale original's path and the commit that replaced it, so a page can show
 the two side by side. Its sections (the checks on Roc code first) are the
