@@ -163,7 +163,8 @@ count_comments' launcher builds with `opt=speed`, since its byte-by-byte
 scan runs about 60 times slower in Roc's dev build.
 **`cookbook/roc/EXAMPLES.txt`** lists every port, a line each: its Roc, its
 Shale original's path and the commit that replaced it, so a page can show
-the two side by side.
+the two side by side. Its sections (the checks on Roc code first) are the
+page's; its header says the format.
 
 ## Pitfalls
 

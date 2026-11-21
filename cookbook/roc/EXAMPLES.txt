@@ -1,12 +1,20 @@
 # cookbook/roc/EXAMPLES.txt: the Roc-on-Shale examples, one a line, for the
-# examples page. Five fields, tab-separated: the name; the Roc's path (an
-# app's root, its modules beside it); the Shale original's path; the commit
-# that replaced the original with the Roc, so `git show <commit>~1:<original>`
-# is the original as it last stood; and one sentence of what it does. A
-# commit is this repository's, and moves if its branch is rebased.
-count_roc	cookbook/roc/count_roc/count_roc.roc	cookbook/roc/count_roc.shale	f7898161	A test-density report for a tree of Roc projects: each folder's modules and lines, its test modules and lines, and its expects, where `roc loc` gives one app's size.
+# examples page, in sections. A section starts with its line: `## `, its
+# heading, a tab, and one sentence saying what is in it; the examples under
+# it, to the next section line, are its own, in the page's order. An example
+# line has five fields, tab-separated: the name; the Roc's path (an app's
+# root, its modules beside it); the Shale original's path; the commit that
+# replaced the original with the Roc, so `git show <commit>~1:<original>` is
+# the original as it last stood; and one sentence of what it does. A new
+# port goes at the end of its section, not of the file. A commit is this
+# repository's, and moves if its branch is rebased. Any other line that
+# starts with `#` is a comment, as these are.
+## Finding flaws in Roc code	The checks that Steve's Roc repositories run in their gates, ported from Shale to Roc, so each one is Roc code reading Roc code, most of them through Roc's own parser.
 find_unclear_names	cookbook/roc/find_unclear_names/find_unclear_names.roc	cookbook/roc/find_unclear_names.shale	e8cbee93	A gate over Roc's own parse trees for names and module docs that say too little: a pure function named like a mutation, an abbreviation, a missing or historical doc.
+find_unused_imports	cookbook/roc/find_unused_imports/find_unused_imports.roc	cookbook/roc/find_unused_imports.shale	d08020ff	The import lines a Roc file never uses, read from Roc's own parse tree, a gate with its plants' self-test in Roc too.
 check_module_size	roc_platform/examples/check_module_size.roc	cookbook/roc/check_module_size.shale	ebd03e07	Each Roc module held to a size, the whole file counted, written line for line beside its Shale original, which is still the recipe (the commit is the one that added the Roc).
+## Reports on Roc projects	A report to read rather than a gate to pass: what a tree of Roc projects holds, counted.
+count_roc	cookbook/roc/count_roc/count_roc.roc	cookbook/roc/count_roc.shale	f7898161	A test-density report for a tree of Roc projects: each folder's modules and lines, its test modules and lines, and its expects, where `roc loc` gives one app's size.
+## Small scripts over Zig	Smaller ports that read Zig files rather than Roc: a walk, a sort and a table, and a line-by-line scan with its patterns in plain Roc.
 list_long_files	cookbook/zig/list_long_files/list_long_files.roc	cookbook/zig/list_long_files.shale	fd5b7e6a	The .zig files over a thousand lines in the repos we work in, longest first: the smallest walk, a sort and a table.
 count_comments	cookbook/zig/count_comments/count_comments.roc	cookbook/zig/count_comments.shale	8023162f	How much each Zig file's comments say and how loudly: each trimmed line a tag (blank, code, doc, plain), per-file ratios, and the regular expressions done as byte patterns in plain Roc.
-find_unused_imports	cookbook/roc/find_unused_imports/find_unused_imports.roc	cookbook/roc/find_unused_imports.shale	d08020ff	The import lines a Roc file never uses, read from Roc's own parse tree, a gate with its plants' self-test in Roc too.
