@@ -1,0 +1,3 @@
+-- A terms file with a line that is no term: a capital starts it.
+route: Stop
+Two_opt

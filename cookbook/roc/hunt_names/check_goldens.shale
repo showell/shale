@@ -1,0 +1,182 @@
+-- cookbook/roc/hunt_names/check_goldens.shale: hunt_names (the Roc script
+-- beside this, hunt_names.roc, through its launcher
+-- cookbook/roc/hunt_names.shale) held to its goldens, goldens.txt beside
+-- this, line for line and exit code for exit code. From the shale
+-- checkout's root:
+--
+--   shale cookbook/roc/hunt_names/check_goldens.shale self_test=1
+--   shale cookbook/roc/hunt_names/check_goldens.shale write=1
+--
+-- The cases are the self-test's plants, all at once (with `house=0`, with
+-- `words=1`, the census, with the plants' terms, and with each argument
+-- refused: `house=2`, `types=2`, `types=1` with no root, a terms file that
+-- is no terms and one that is missing), the typed plants without the types,
+-- and a few plants alone; the edges' plants
+-- (cookbook/roc/plants/hunt_names/edges/: names of odd words, the census's
+-- ties, docs naming a module beside the file whether or not the glob holds
+-- it, type and field names, preposition splits, a file that does not parse
+-- and a module beside a doc that does not parse); the typed edges under the
+-- types, run from their own folder, whose roc-version pins their Roc (a
+-- member alias of `Bool`, unannotated functions, a module no root reaches,
+-- no root, a root named twice); every plant at once; a glob that finds
+-- nothing; and `self_test=1`. The goldens were written from the Shale
+-- original's output on them, and the port matched it on other repositories'
+-- trees too (roc-chat, roc-apps, roc-screensaver), which are left out
+-- because their code moves. `write=1` writes the goldens again from the
+-- launcher, for a change meant to move them: `git diff` shows what moved.
+--
+-- What is held: the exit code, and the output with each runner's own lines
+-- left out: Shale's `──` report lines (budgets, used, steps, time, the
+-- platform's lock), the `called from` lines, and the launchers' own stops
+-- (run.shale's `run: ...`, this recipe's launcher's). A stop's line is held
+-- by its words, not its place (`── stop: <words>`), a place in a prelude or
+-- a library included.
+-- budget: programs=200 steps=200000000 arena_bytes=1000000000 output_bytes=1000000
+
+const LAUNCHER = "cookbook/roc/hunt_names.shale"
+const GOLDENS = "cookbook/roc/hunt_names/goldens.txt"
+const AT = "cookbook:roc/plants/hunt_names/"
+const TYPED = "cookbook/roc/plants/hunt_names/edges/typed"
+const TERMS = "terms=cookbook:roc/plants/hunt_names/terms.txt"
+const SELF_TEST = arg("self_test", "") == "1"
+const WRITE = arg("write", "") == "1"
+if SELF_TEST == WRITE then fail("check_goldens: self_test=1 holds the goldens, write=1 writes them; one of the two") end
+
+-- The plant rows, as `{glob, args}` run from the checkout's root, then the
+-- typed edges' rows, as `{values}` run from their folder.
+const ROWS = {
+  {glob = "*.roc", args = {}},
+  {glob = "*.roc", args = {"house=0"}},
+  {glob = "*.roc", args = {"words=1"}},
+  {glob = "*.roc", args = {"words=1", "house=0"}},
+  {glob = "*.roc", args = {TERMS}},
+  {glob = "*.roc", args = {"house=2"}},
+  {glob = "*.roc", args = {"types=2"}},
+  {glob = "*.roc", args = {"types=1"}},
+  {glob = "*.roc", args = {"terms=cookbook:roc/plants/hunt_names/edges/bad_terms.txt"}},
+  {glob = "*.roc", args = {"terms=cookbook:roc/plants/hunt_names/edges/no_such_terms.txt"}},
+  {glob = "typed/*.roc", args = {}},
+  {glob = "stale_doc_name.roc", args = {}},
+  {glob = "quiet_singular_list_terms.roc", args = {TERMS}},
+  {glob = "quiet_singular_list_terms.roc", args = {}},
+  {glob = "phrase_name_*.roc", args = {}},
+  {glob = "edges/*.roc", args = {}},
+  {glob = "edges/*.roc", args = {"house=0"}},
+  {glob = "edges/*.roc", args = {"words=1"}},
+  {glob = "edges/docs.roc", args = {}},
+  {glob = "edges/broken/docs_beside_broken.roc", args = {}},
+  {glob = "edges/broken/*.roc", args = {}},
+  {glob = "**/*.roc", args = {}},
+  {glob = "nothing_here/*.roc", args = {}},
+  {glob = "nothing_here/*.roc", args = {"words=1"}},
+}
+const TYPED_ROWS = {
+  {values = "glob=*.roc\ntypes=1\nroot=EdgeApp.roc\n"},
+  {values = "glob=Inferred.roc\ntypes=1\nroot=EdgeApp.roc\n"},
+  {values = "glob=Inferred.roc\ntypes=1\nroot=EdgeApp.roc,EdgeApp.roc\n"},
+  {values = "glob=Inferred.roc\ntypes=1\nroot=EdgeApp.roc\nwords=1\n"},
+  {values = "glob=*.roc\ntypes=1\n"},
+  {values = "glob=Inferred.roc\ntypes=0\n"},
+}
+
+-- A run's output with each runner's own lines left out, and a stop's line
+-- cut to its words.
+function body(out)
+  local kept = {}
+  for l in lines(out) do
+    if starts_with(l, "── stopped at ") then
+      local place = "^── stopped at (the [A-Za-z]+ prelude|the prelude|[^ ]+)(:[0-9]+:[0-9]+)?( \\(in `[^`]*`\\))?: "
+      local words_of = re_replace(re_replace(l, " \\([0-9]+ steps\\)$", ""), place, "")
+      if not starts_with(words_of, "fail: run: ") and not starts_with(words_of, "fail: hunt_names: the Roc program stopped") then push(kept, "── stop: " .. words_of) end
+    elseif not starts_with(l, "── ") and not starts_with(l, "   called from") then
+      push(kept, l)
+    end
+  end
+  return kept
+end
+
+-- Each case, `{name, values, cwd}`: the values on the launcher's stdin, and
+-- the folder it runs in.
+function cases()
+  local out = {}
+  for row in ROWS do
+    local values = "glob=" .. AT .. row.glob .. "\n"
+    local name = row.glob
+    for a in row.args do
+      values = values .. a .. "\n"
+      name = name .. " " .. a
+    end
+    push(out, {name = name, values = values, cwd = "."})
+  end
+  for row in TYPED_ROWS do
+    push(out, {name = "in edges/typed: " .. join(lines(row.values), " "), values = row.values, cwd = TYPED})
+  end
+  push(out, {name = "self_test=1", values = "self_test=1\n", cwd = "."})
+  return out
+end
+
+-- One case's run, as its golden section: `=== <name> (exit N)` and its body.
+function section(c)
+  local r = run({"shale", real(LAUNCHER), "--args-stdin"}, {stdin = c.values, cwd = c.cwd, timeout_ms = 900000, whole = 8000000})
+  local ls = {"=== " .. c.name .. " (exit " .. r.code .. ")"}
+  for l in body(r.out) do push(ls, l) end
+  return {text = join(ls, "\n"), ms = r.ms}
+end
+
+-- The goldens' sections by their first line.
+function golden_sections()
+  local by = {}
+  local head = nil
+  local ls = {}
+  for l in lines(read(GOLDENS)) do
+    if starts_with(l, "=== ") then
+      if head ~= nil then by[head] = join(ls, "\n") end
+      head = l
+      ls = {l}
+    else
+      push(ls, l)
+    end
+  end
+  if head ~= nil then by[head] = join(ls, "\n") end
+  return by
+end
+
+if WRITE then
+  local all = {}
+  for c in cases() do push(all, section(c).text) end
+  replace(GOLDENS, join(all, "\n") .. "\n")
+  print("check_goldens: wrote " .. #all .. " cases to " .. GOLDENS)
+else
+  local golden = golden_sections()
+  local wrong = 0
+  local n = 0
+  for c in cases() do
+    n = n + 1
+    local got = section(c)
+    local head = lines(got.text)[1]
+    local want = get(golden, head, nil)
+    if want == nil then
+      -- The head holds the exit code, so a changed code is a missing head.
+      print("FAIL " .. head .. ": no golden of that name and exit code")
+      wrong = wrong + 1
+    elseif want ~= got.text then
+      local a = lines(want)
+      local b = lines(got.text)
+      local shown = 0
+      print("FAIL " .. head)
+      for k = 1, max(#a, #b) do
+        local x = get(a, k, "<none>")
+        local y = get(b, k, "<none>")
+        if x ~= y and shown < 5 then
+          print("  line " .. k .. ":\n    golden: " .. x .. "\n    got:    " .. y)
+          shown = shown + 1
+        end
+      end
+      wrong = wrong + 1
+    else
+      print("ok   " .. c.name .. " (" .. got.ms .. " ms)")
+    end
+  end
+  if wrong > 0 then fail("check_goldens: " .. wrong .. " of " .. n .. " cases differ from " .. GOLDENS) end
+  print("check_goldens: all " .. n .. " cases match " .. GOLDENS)
+end
