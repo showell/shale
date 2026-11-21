@@ -156,8 +156,9 @@ folder by folder, from `Shale.glob!` and `Shale.read!` and plain Roc.
 `check_goldens.shale` runs it on a copy of `cookbook/roc/plants/count_roc/`.
 
 **`cookbook/zig/list_long_files/`**, **`cookbook/zig/count_comments/`**,
-**`cookbook/roc/find_unused_imports/`**, **`cookbook/roc/check_families/`**
-and **`cookbook/roc/find_deep_calls/`** are ported the same way: the
+**`cookbook/roc/find_unused_imports/`**, **`cookbook/roc/check_families/`**,
+**`cookbook/roc/find_deep_calls/`** and **`cookbook/roc/check_vocabulary/`**
+are ported the same way: the
 launcher keeps the recipe's name and arguments, the goldens were written
 from the Shale original on plants, and `check_goldens.shale` holds them.
 count_comments' launcher builds with `opt=speed`, since its byte-by-byte

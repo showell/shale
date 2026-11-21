@@ -87,7 +87,11 @@ are passed in):
       cd <repo> && shale <shale>/cookbook/roc/check_module_size.shale exempt=tools/module_size.txt
 
 - [check_vocabulary.shale](check_vocabulary.shale): a project held to its
-  decided words.
+  decided words. It is written in Roc, a root,
+  [check_vocabulary/check_vocabulary.roc](check_vocabulary/check_vocabulary.roc),
+  with its checks in `Retired.roc` beside it;
+  [check_goldens.shale](check_vocabulary/check_goldens.shale) holds it to
+  its goldens.
 - [check_name_types.shale](check_name_types.shale): names that disagree
   with their types.
 - [check_families.shale](check_families.shale): a module spelled unlike

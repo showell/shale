@@ -127,7 +127,9 @@ checkouts, and `<lanes>` the one that holds your lanes.
 - `roc/check_stacking.shale`: finds groups laid out against the stacking
   rule, and with `write=1` lays them out by it. `shale cookbook:roc/check_stacking.shale`
 - `roc/check_vocabulary.shale`: holds a project to the words it has decided
-  on. `shale cookbook:roc/check_vocabulary.shale words=vocabulary.txt`
+  on; the launcher of a Roc script (`roc/check_vocabulary/`, on
+  `roc_platform/`, held to its goldens by that folder's `check_goldens.shale`).
+  `shale cookbook:roc/check_vocabulary.shale words=vocabulary.txt`
 - `roc/compare_machine_code.shale`: says whether two builds of a Roc archive
   or program hold the same machine code, procedure by procedure. `shale cookbook:roc/compare_machine_code.shale old=a.a new=b.a`
 - `roc/count_roc.shale`: counts a Roc project's modules, lines, test modules,
