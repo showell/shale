@@ -145,9 +145,6 @@ checkouts, and `<lanes>` the one that holds your lanes.
   held to its goldens by that folder's `check_goldens.shale`). `cd <repos> && shale cookbook:roc/count_roc.shale in=roc-apps/basic`
 - `roc/declared.shale` (library): what a file declares, and a name's words,
   read from its parse tree. `use("cookbook:roc/declared.shale")`
-- `roc/doc_names.shale` (library): the backticked names in a file's comments,
-  and whether each still names something (`hunt_names`' `stale_doc_name`).
-  `use("cookbook:roc/doc_names.shale")`
 - `roc/find_bare_floats.shale`: finds bare `F64`s in declarations, against a
   table of exceptions; the launcher of a Roc script (`roc/find_bare_floats/`,
   on `roc_platform/`, held to its goldens by that folder's
@@ -175,7 +172,10 @@ checkouts, and `<lanes>` the one that holds your lanes.
   `use("cookbook:roc/headers.shale")`
 - `roc/house.shale` (library): the checks that are our house style alone.
   `use("cookbook:roc/house.shale")`
-- `roc/hunt_names.shale`: hunts for awkward names. `shale cookbook:roc/hunt_names.shale`
+- `roc/hunt_names.shale`: hunts for awkward names; the launcher of a Roc
+  script of several modules (its root `roc/hunt_names/hunt_names.roc`, on
+  `roc_platform/`, held to its goldens by that folder's
+  `check_goldens.shale`). `shale cookbook:roc/hunt_names.shale`
 - `roc/imports.shale` (library): a file's imports and the ones it leaves
   unused. `use("cookbook:roc/imports.shale")`
 - `roc/member_uses.shale` (library): how the type printer resolves names and
@@ -184,10 +184,6 @@ checkouts, and `<lanes>` the one that holds your lanes.
   writing of a file's tree. `use("./method_text.shale")`
 - `roc/module_family.shale` (library): how the type printer walks sibling
   modules as one family. `use("cookbook:roc/module_family.shale")`
-- `roc/naming_passes.shale` (library): `hunt_names`' checks judged over the
-  whole tree once every file is read, and its census. `use("cookbook:roc/naming_passes.shale")`
-- `roc/naming_plants.shale` (library): `hunt_names`' self-test, which check
-  each plant is for. `use("cookbook:roc/naming_plants.shale")`
 - `roc/parsed.shale` (library): parses a tree's .roc files and fails on any
   that roc-ast refuses. `use("cookbook:roc/parsed.shale")`
 - `roc/pinned.shale` (library): the Roc compiler a repo's `roc-version`

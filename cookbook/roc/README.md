@@ -56,7 +56,12 @@ fails.
 question):
 
 - [hunt_names.shale](hunt_names.shale): awkward names. Its word lists are
-  in `cookbook/words/`; a project's own terms come in as `terms=`.
+  in `cookbook/words/`; a project's own terms come in as `terms=`. It is
+  written in Roc, a root,
+  [hunt_names/hunt_names.roc](hunt_names/hunt_names.roc), with its reading
+  and its checks in the modules beside it;
+  [check_goldens.shale](hunt_names/check_goldens.shale) holds it to its
+  goldens.
 - [check_errors.shale](check_errors.shale): how code reports failure.
 - [check_boundaries.shale](check_boundaries.shale): whether each function
   earns its boundary and each parameter is really one. Give it the whole
@@ -234,8 +239,6 @@ beside them). Each header lists its functions.
 - [member_uses.shale](member_uses.shale) and
   [module_family.shale](module_family.shale): `print_module_types`'s name
   resolution, use counts and family printing.
-- [doc_names.shale](doc_names.shale), [naming_passes.shale](naming_passes.shale)
-  and [naming_plants.shale](naming_plants.shale): parts of `hunt_names`.
 - [peer_calls.shale](peer_calls.shale),
   [number_literals.shale](number_literals.shale) and
   [method_text.shale](method_text.shale): parts of `rewrite_method_calls`.
