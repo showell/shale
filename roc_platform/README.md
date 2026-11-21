@@ -168,8 +168,8 @@ folder by folder, from `Shale.glob!` and `Shale.read!` and plain Roc.
 **`cookbook/roc/find_deep_calls/`**, **`cookbook/roc/check_vocabulary/`**,
 **`cookbook/roc/check_name_types/`**, **`cookbook/roc/find_bare_floats/`**,
 **`cookbook/roc/check_errors/`** (which runs roc-types too, for `types=1`),
-**`cookbook/count_shale_stops/`** and **`cookbook/roc/find_extra_parens/`**
-are ported the same way: the
+**`cookbook/count_shale_stops/`**, **`cookbook/roc/find_extra_parens/`**
+and **`cookbook/roc/check_stacking/`** are ported the same way: the
 launcher keeps the recipe's name and arguments, the goldens were written
 from the Shale original on plants, and `check_goldens.shale` holds them.
 count_comments' launcher builds with `opt=speed`, since its byte-by-byte
@@ -185,6 +185,13 @@ the files a rewrite of every plant leaves, and the rewrite reads a file
 with no finding no more, since Roc's arena frees nothing and a second
 parse of a large tree would not fit (`real!`, `mkdir!` and `remove_tree!`
 were exported for it: `roc fmt`'s argv and the self-test's scratch copy).
+check_stacking rewrites too, and its goldens hold the same; its reading of
+the bracket groups and the stacking rule is the library's `Groups`,
+`Stacking` and `Packed` (`cookbook/roc/lib/`), the Shale
+`cookbook/roc/groups.shale`'s line for line, its regular expressions
+matched by hand. Its dev build took 0.8 times the original's CPU over
+roc-apps' projects, and runs the whole of roc-apps at once, where the
+original runs out of its 2 GB arena.
 **`cookbook/roc/EXAMPLES.txt`** lists every port, a line each: its Roc, its
 Shale original's path and the commit that replaced it, so a page can show
 the two side by side. Its sections (the checks on Roc code first) are the
