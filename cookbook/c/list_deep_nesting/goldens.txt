@@ -1,0 +1,168 @@
+=== self_test=1 (exit 0)
+PASS list_deep_nesting self-test: 5 checks, every plant's depth, the default min, the summaries and a test over the plants
+=== dir=cookbook/c/plants/list_deep_nesting (exit 0)
+cookbook/c/plants/list_deep_nesting/depths.c:52: depth_five: depth 5 (at line 57)
+cookbook/c/plants/list_deep_nesting/depths.c:40: depth_four: depth 4 (at line 44)
+list_deep_nesting: cookbook/c/plants/list_deep_nesting, tests left out: 6 functions read, 2 at depth 4 or past; by depth, 1: 2, 2: 1, 3: 1, 4: 1, 5: 1
+=== dir=cookbook/c/plants/list_deep_nesting tests=1 (exit 0)
+cookbook/c/plants/list_deep_nesting/depths.c:52: depth_five: depth 5 (at line 57)
+cookbook/c/plants/list_deep_nesting/depths.c:40: depth_four: depth 4 (at line 44)
+list_deep_nesting: cookbook/c/plants/list_deep_nesting, tests included: 7 functions read, 2 at depth 4 or past; by depth, 1: 2, 2: 2, 3: 1, 4: 1, 5: 1
+=== dir=cookbook/c/plants/list_deep_nesting min=1 (exit 0)
+cookbook/c/plants/list_deep_nesting/depths.c:52: depth_five: depth 5 (at line 57)
+cookbook/c/plants/list_deep_nesting/depths.c:40: depth_four: depth 4 (at line 44)
+cookbook/c/plants/list_deep_nesting/depths.c:28: depth_three: depth 3 (at line 31)
+cookbook/c/plants/list_deep_nesting/depths.c:19: braces_in_text: depth 2 (at line 21)
+cookbook/c/plants/list_deep_nesting/depths.c:6: depth_one: depth 1 (at line 6)
+cookbook/c/plants/list_deep_nesting/depths.c:10: braceless: depth 1 (at line 11)
+list_deep_nesting: cookbook/c/plants/list_deep_nesting, tests left out: 6 functions read, 6 at depth 1 or past; by depth, 1: 2, 2: 1, 3: 1, 4: 1, 5: 1
+=== dir=cookbook/c/plants/list_deep_nesting min=2 tests=1 (exit 0)
+cookbook/c/plants/list_deep_nesting/depths.c:52: depth_five: depth 5 (at line 57)
+cookbook/c/plants/list_deep_nesting/depths.c:40: depth_four: depth 4 (at line 44)
+cookbook/c/plants/list_deep_nesting/depths.c:28: depth_three: depth 3 (at line 31)
+cookbook/c/plants/list_deep_nesting/depths.c:19: braces_in_text: depth 2 (at line 21)
+cookbook/c/plants/list_deep_nesting/depths.c:69: a_nested_test: depth 2 (at line 70)
+list_deep_nesting: cookbook/c/plants/list_deep_nesting, tests included: 7 functions read, 5 at depth 2 or past; by depth, 1: 2, 2: 2, 3: 1, 4: 1, 5: 1
+=== dir=cookbook/c/plants/list_deep_nesting min=3 (exit 0)
+cookbook/c/plants/list_deep_nesting/depths.c:52: depth_five: depth 5 (at line 57)
+cookbook/c/plants/list_deep_nesting/depths.c:40: depth_four: depth 4 (at line 44)
+cookbook/c/plants/list_deep_nesting/depths.c:28: depth_three: depth 3 (at line 31)
+list_deep_nesting: cookbook/c/plants/list_deep_nesting, tests left out: 6 functions read, 3 at depth 3 or past; by depth, 1: 2, 2: 1, 3: 1, 4: 1, 5: 1
+=== dir=cookbook/c/plants/list_deep_nesting min=5 (exit 0)
+cookbook/c/plants/list_deep_nesting/depths.c:52: depth_five: depth 5 (at line 57)
+list_deep_nesting: cookbook/c/plants/list_deep_nesting, tests left out: 6 functions read, 1 at depth 5 or past; by depth, 1: 2, 2: 1, 3: 1, 4: 1, 5: 1
+=== dir=cookbook/c/plants/list_deep_nesting min=9 (exit 0)
+list_deep_nesting: cookbook/c/plants/list_deep_nesting, tests left out: 6 functions read, 0 at depth 9 or past; by depth, 1: 2, 2: 1, 3: 1, 4: 1, 5: 1
+=== dir=cookbook/c/plants/list_long_functions (exit 0)
+list_deep_nesting: cookbook/c/plants/list_long_functions, tests left out: 4 functions read, 0 at depth 4 or past; by depth, 1: 4
+=== dir=cookbook/c/plants/list_long_functions tests=1 (exit 0)
+list_deep_nesting: cookbook/c/plants/list_long_functions, tests included: 5 functions read, 0 at depth 4 or past; by depth, 1: 5
+=== dir=cookbook/c/plants/list_long_functions min=1 (exit 0)
+cookbook/c/plants/list_long_functions/lengths.c:5: one_line: depth 1 (at line 5)
+cookbook/c/plants/list_long_functions/lengths.c:7: two_lines: depth 1 (at line 8)
+cookbook/c/plants/list_long_functions/lengths.c:13: four_with_comments: depth 1 (at line 14)
+cookbook/c/plants/list_long_functions/lengths.c:25: six_lines: depth 1 (at line 26)
+list_deep_nesting: cookbook/c/plants/list_long_functions, tests left out: 4 functions read, 4 at depth 1 or past; by depth, 1: 4
+=== dir=cookbook/c/plants/list_long_functions min=2 tests=1 (exit 0)
+list_deep_nesting: cookbook/c/plants/list_long_functions, tests included: 5 functions read, 0 at depth 2 or past; by depth, 1: 5
+=== dir=cookbook/c/plants/list_long_functions min=3 (exit 0)
+list_deep_nesting: cookbook/c/plants/list_long_functions, tests left out: 4 functions read, 0 at depth 3 or past; by depth, 1: 4
+=== dir=cookbook/c/plants/list_long_functions min=5 (exit 0)
+list_deep_nesting: cookbook/c/plants/list_long_functions, tests left out: 4 functions read, 0 at depth 5 or past; by depth, 1: 4
+=== dir=cookbook/c/plants/list_long_functions min=9 (exit 0)
+list_deep_nesting: cookbook/c/plants/list_long_functions, tests left out: 4 functions read, 0 at depth 9 or past; by depth, 1: 4
+=== dir=cookbook/c/plants/find_clones (exit 0)
+list_deep_nesting: cookbook/c/plants/find_clones, tests left out: 7 functions read, 0 at depth 4 or past; by depth, 1: 2, 2: 5
+=== dir=cookbook/c/plants/find_clones tests=1 (exit 0)
+list_deep_nesting: cookbook/c/plants/find_clones, tests included: 7 functions read, 0 at depth 4 or past; by depth, 1: 2, 2: 5
+=== dir=cookbook/c/plants/find_clones min=1 (exit 0)
+cookbook/c/plants/find_clones/clones.c:6: sum_weights: depth 2 (at line 8)
+cookbook/c/plants/find_clones/clones.c:18: sum_prices: depth 2 (at line 20)
+cookbook/c/plants/find_clones/clones.c:31: count_matches: depth 2 (at line 34)
+cookbook/c/plants/find_clones/clones.c:58: write_trailer: depth 2 (at line 60)
+cookbook/c/plants/find_clones/tests/test_clones.c:5: oracle_weights: depth 2 (at line 7)
+cookbook/c/plants/find_clones/clones.c:47: write_header: depth 1 (at line 48)
+cookbook/c/plants/find_clones/clones.c:82: write_banner: depth 1 (at line 83)
+list_deep_nesting: cookbook/c/plants/find_clones, tests left out: 7 functions read, 7 at depth 1 or past; by depth, 1: 2, 2: 5
+=== dir=cookbook/c/plants/find_clones min=2 tests=1 (exit 0)
+cookbook/c/plants/find_clones/clones.c:6: sum_weights: depth 2 (at line 8)
+cookbook/c/plants/find_clones/clones.c:18: sum_prices: depth 2 (at line 20)
+cookbook/c/plants/find_clones/clones.c:31: count_matches: depth 2 (at line 34)
+cookbook/c/plants/find_clones/clones.c:58: write_trailer: depth 2 (at line 60)
+cookbook/c/plants/find_clones/tests/test_clones.c:5: oracle_weights: depth 2 (at line 7)
+list_deep_nesting: cookbook/c/plants/find_clones, tests included: 7 functions read, 5 at depth 2 or past; by depth, 1: 2, 2: 5
+=== dir=cookbook/c/plants/find_clones min=3 (exit 0)
+list_deep_nesting: cookbook/c/plants/find_clones, tests left out: 7 functions read, 0 at depth 3 or past; by depth, 1: 2, 2: 5
+=== dir=cookbook/c/plants/find_clones min=5 (exit 0)
+list_deep_nesting: cookbook/c/plants/find_clones, tests left out: 7 functions read, 0 at depth 5 or past; by depth, 1: 2, 2: 5
+=== dir=cookbook/c/plants/find_clones min=9 (exit 0)
+list_deep_nesting: cookbook/c/plants/find_clones, tests left out: 7 functions read, 0 at depth 9 or past; by depth, 1: 2, 2: 5
+=== dir=cookbook/c/plants/find_dead_code (exit 0)
+list_deep_nesting: cookbook/c/plants/find_dead_code, tests left out: 19 functions read, 0 at depth 4 or past; by depth, 1: 19
+=== dir=cookbook/c/plants/find_dead_code tests=1 (exit 0)
+list_deep_nesting: cookbook/c/plants/find_dead_code, tests included: 21 functions read, 0 at depth 4 or past; by depth, 1: 21
+=== dir=cookbook/c/plants/find_dead_code min=1 (exit 0)
+cookbook/c/plants/find_dead_code/lib.c:18: lib_proto_only: depth 1 (at line 19)
+cookbook/c/plants/find_dead_code/lib.c:22: lib_live: depth 1 (at line 23)
+cookbook/c/plants/find_dead_code/lib.c:27: lib_by_pointer: depth 1 (at line 28)
+cookbook/c/plants/find_dead_code/lib.c:36: lib_in_macro: depth 1 (at line 37)
+cookbook/c/plants/find_dead_code/lib.c:43: lib_in_unused_macro: depth 1 (at line 44)
+cookbook/c/plants/find_dead_code/lib.c:50: lib_recursive: depth 1 (at line 51)
+cookbook/c/plants/find_dead_code/lib.c:56: lib_by_dead: depth 1 (at line 57)
+cookbook/c/plants/find_dead_code/lib.c:61: lib_in_comment: depth 1 (at line 62)
+cookbook/c/plants/find_dead_code/lib.c:66: lib_member: depth 1 (at line 67)
+cookbook/c/plants/find_dead_code/lib.c:71: lib_tested: depth 1 (at line 72)
+cookbook/c/plants/find_dead_code/lib.h:8: lib_header_live: depth 1 (at line 8)
+cookbook/c/plants/find_dead_code/lib.h:11: lib_header_dead: depth 1 (at line 11)
+cookbook/c/plants/find_dead_code/lib.h:14: lib_header_tested: depth 1 (at line 14)
+cookbook/c/plants/find_dead_code/main.c:4: main: depth 1 (at line 5)
+cookbook/c/plants/find_dead_code/test.h:7: test_fail: depth 1 (at line 8)
+cookbook/c/plants/find_dead_code/tests/test_lib.c:5: test_lib_helper: depth 1 (at line 6)
+cookbook/c/plants/find_dead_code/tests/test_lib.c:10: test_lib_stray: depth 1 (at line 11)
+cookbook/c/plants/find_dead_code/tests/test_lib.c:16: pick: depth 1 (at line 17)
+cookbook/c/plants/find_dead_code/tests/test_other.c:4: pick: depth 1 (at line 5)
+list_deep_nesting: cookbook/c/plants/find_dead_code, tests left out: 19 functions read, 19 at depth 1 or past; by depth, 1: 19
+=== dir=cookbook/c/plants/find_dead_code min=2 tests=1 (exit 0)
+list_deep_nesting: cookbook/c/plants/find_dead_code, tests included: 21 functions read, 0 at depth 2 or past; by depth, 1: 21
+=== dir=cookbook/c/plants/find_dead_code min=3 (exit 0)
+list_deep_nesting: cookbook/c/plants/find_dead_code, tests left out: 19 functions read, 0 at depth 3 or past; by depth, 1: 19
+=== dir=cookbook/c/plants/find_dead_code min=5 (exit 0)
+list_deep_nesting: cookbook/c/plants/find_dead_code, tests left out: 19 functions read, 0 at depth 5 or past; by depth, 1: 19
+=== dir=cookbook/c/plants/find_dead_code min=9 (exit 0)
+list_deep_nesting: cookbook/c/plants/find_dead_code, tests left out: 19 functions read, 0 at depth 9 or past; by depth, 1: 19
+=== dir=cookbook/c/plants/hunt_names (exit 0)
+list_deep_nesting: cookbook/c/plants/hunt_names, tests left out: 13 functions read, 0 at depth 4 or past; by depth, 1: 12, 2: 1
+=== dir=cookbook/c/plants/hunt_names tests=1 (exit 0)
+list_deep_nesting: cookbook/c/plants/hunt_names, tests included: 13 functions read, 0 at depth 4 or past; by depth, 1: 12, 2: 1
+=== dir=cookbook/c/plants/hunt_names min=1 (exit 0)
+cookbook/c/plants/hunt_names/quiet_do_word.c:4: store_done: depth 2 (at line 5)
+cookbook/c/plants/hunt_names/abbreviation.c:4: bi_length: depth 1 (at line 5)
+cookbook/c/plants/hunt_names/abbreviation.c:8: builtin_count: depth 1 (at line 9)
+cookbook/c/plants/hunt_names/function_case.c:4: readThing: depth 1 (at line 5)
+cookbook/c/plants/hunt_names/quiet_abbreviation.c:4: msg_send: depth 1 (at line 5)
+cookbook/c/plants/hunt_names/quiet_abbreviation.c:8: quiet_ptr_len: depth 1 (at line 9)
+cookbook/c/plants/hunt_names/quiet_function_case.c:4: read_thing: depth 1 (at line 5)
+cookbook/c/plants/hunt_names/quiet_function_case.c:8: main: depth 1 (at line 9)
+cookbook/c/plants/hunt_names/quiet_vague.c:4: json_value: depth 1 (at line 5)
+cookbook/c/plants/hunt_names/quiet_vague_local.c:4: quiet_sum: depth 1 (at line 5)
+cookbook/c/plants/hunt_names/quiet_vague_local.c:11: quiet_give: depth 1 (at line 12)
+cookbook/c/plants/hunt_names/quiet_zig_bound.c:8: quiet_bounded: depth 1 (at line 9)
+cookbook/c/plants/hunt_names/vague_local.c:4: vague_local_sum: depth 1 (at line 5)
+list_deep_nesting: cookbook/c/plants/hunt_names, tests left out: 13 functions read, 13 at depth 1 or past; by depth, 1: 12, 2: 1
+=== dir=cookbook/c/plants/hunt_names min=2 tests=1 (exit 0)
+cookbook/c/plants/hunt_names/quiet_do_word.c:4: store_done: depth 2 (at line 5)
+list_deep_nesting: cookbook/c/plants/hunt_names, tests included: 13 functions read, 1 at depth 2 or past; by depth, 1: 12, 2: 1
+=== dir=cookbook/c/plants/hunt_names min=3 (exit 0)
+list_deep_nesting: cookbook/c/plants/hunt_names, tests left out: 13 functions read, 0 at depth 3 or past; by depth, 1: 12, 2: 1
+=== dir=cookbook/c/plants/hunt_names min=5 (exit 0)
+list_deep_nesting: cookbook/c/plants/hunt_names, tests left out: 13 functions read, 0 at depth 5 or past; by depth, 1: 12, 2: 1
+=== dir=cookbook/c/plants/hunt_names min=9 (exit 0)
+list_deep_nesting: cookbook/c/plants/hunt_names, tests left out: 13 functions read, 0 at depth 9 or past; by depth, 1: 12, 2: 1
+=== dir=cookbook/c/plants/map_file/breaks (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file/breaks tests=1 (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file/breaks min=1 (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file/breaks min=2 tests=1 (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file/breaks min=3 (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file/breaks min=5 (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file/breaks min=9 (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file tests=1 (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file min=1 (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file min=2 tests=1 (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file min=3 (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file min=5 (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file min=9 (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)

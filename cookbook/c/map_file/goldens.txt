@@ -1,0 +1,135 @@
+=== self_test=1 (exit 0)
+PASS map_file self-test: 28 checks, each item kind mapped and 9 shape breaks stopped at their lines
+===  (exit 1)
+── stop: fail: map_file: give `file=<a .c or .h>` or `tree=<a folder>`, one of them
+=== file=cookbook/c/plants/map_file/kinds.c tree=cookbook/c/plants/map_file (exit 1)
+── stop: fail: map_file: give `file=<a .c or .h>` or `tree=<a folder>`, one of them
+=== file=cookbook/c/plants/map_file/kinds.h (exit 0)
+2-3 guard SHALE_KINDS_H
+5-5 include stdint.h
+6-6 include slice.h
+9-9 macro KINDS_MAX
+10-17 macro KINDS_DEFINE
+19-19 directive if defined
+20-20 macro KINDS_LINUX
+21-21 directive endif
+23-26 struct KindsPair
+28-28 enum KindsKind
+30-33 union KindsWord
+35-35 typedef KindsHook
+37-40 enum KINDS_FIRST
+42-42 generator KindsPairs
+43-43 generator KindsVec
+45-45 static_assert KindsPair
+47-47 function kinds_sum
+51-58 function kinds_name
+60-61 prototype kinds_check
+63-66 data KINDS_NAMES
+67-67 data KINDS_ONE
+69-69 guard SHALE_KINDS_H
+=== file=cookbook/c/plants/map_file/kinds.c (exit 0)
+2-2 include test.h
+4-4 data kinds_hook
+6-11 function kinds_wrapped
+13-15 test kinds_test
+17-19 test_list TEST_MAIN
+21-23 function main
+=== file=cookbook/c/plants/find_dead_code/lib.c (exit 0)
+3-3 include lib.h
+5-5 generator Ints
+6-6 generator Chars
+7-7 generator Typed
+8-8 generator Fields
+11-13 struct Holder
+16-16 prototype lib_proto_only
+18-20 function lib_proto_only
+22-24 function lib_live
+27-29 function lib_by_pointer
+31-33 data LIB_HOOKS
+36-38 function lib_in_macro
+40-40 macro LIB_CALL
+43-45 function lib_in_unused_macro
+47-47 macro LIB_UNUSED_CALL
+50-53 function lib_recursive
+56-58 function lib_by_dead
+61-63 function lib_in_comment
+66-68 function lib_member
+71-73 function lib_tested
+=== file=cookbook/c/plants/find_dead_code/lib.h (exit 0)
+2-3 guard SHALE_LIB_H
+5-5 include vec.h
+8-8 function lib_header_live
+11-11 function lib_header_dead
+14-14 function lib_header_tested
+16-16 guard SHALE_LIB_H
+=== file=cookbook/c/plants/find_dead_code/main.c (exit 0)
+2-2 include lib.c
+4-16 function main
+=== file=cookbook/c/plants/find_dead_code/test.h (exit 0)
+3-4 guard SHALE_TEST_H
+7-9 function test_fail
+11-11 macro EXPECT
+14-15 function test_unused_kit
+17-17 guard SHALE_TEST_H
+=== file=cookbook/c/plants/find_dead_code/vec.h (exit 0)
+2-3 guard SHALE_VEC_H
+5-16 macro VEC_DEFINE
+18-18 guard SHALE_VEC_H
+=== file=cookbook/c/plants/find_clones/clones.c (exit 0)
+3-3 include test.h
+6-16 function sum_weights
+18-28 function sum_prices
+31-44 function count_matches
+47-56 function write_header
+58-78 function write_trailer
+82-91 function write_banner
+=== file=cookbook/c/plants/list_deep_nesting/depths.c (exit 0)
+4-4 include test.h
+6-6 function depth_one
+10-16 function braceless
+19-26 function braces_in_text
+28-38 function depth_three
+40-50 function depth_four
+52-67 function depth_five
+69-73 test a_nested_test
+75-77 test_list TEST_MAIN
+=== file=cookbook/c/plants/list_long_functions/lengths.c (exit 0)
+3-3 include test.h
+5-5 function one_line
+7-10 function two_lines
+13-23 function four_with_comments
+25-33 function six_lines
+35-44 test a_long_test
+46-48 test_list TEST_MAIN
+=== file=cookbook/c/plants/map_file/breaks/bad_generator.c (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== file=cookbook/c/plants/map_file/breaks/bad_test.c (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_test.c:2: a `TEST(` line that is not `TEST(name) {`: TEST(t)
+=== file=cookbook/c/plants/map_file/breaks/column0.c (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/column0.c:2: a line at column 0 that opens no item the dialect knows: int bare(void);
+=== file=cookbook/c/plants/map_file/breaks/in_body.c (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/in_body.c:3: a line at column 0 inside the function `f` opened at line 2, which only a `}` may close: return 0;
+=== file=cookbook/c/plants/map_file/breaks/indented.c (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/indented.c:3: an indented line outside every item:     int stray;
+=== file=cookbook/c/plants/map_file/breaks/no_endif.h (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/no_endif.h:5: a header whose last item is not its guard's `#endif`: f
+=== file=cookbook/c/plants/map_file/breaks/no_guard.h (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/no_guard.h:1: a header with no `#ifndef SHALE_NO_GUARD_H`: no_guard.h
+=== file=cookbook/c/plants/map_file/breaks/unclosed.c (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/unclosed.c:2: the function `f` that no `}` at column 0 closes: static int f(void) {
+=== file=cookbook/c/plants/map_file/breaks/wrapped_head.c (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/wrapped_head.c:3: a line at column 0 inside the head opened at line 2: int b) {
+=== tree=cookbook/c/plants/map_file (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== tree=cookbook/c/plants/map_file/breaks (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== tree=cookbook/c/plants/find_dead_code (exit 0)
+PASS c items: 7 files under cookbook/c/plants/find_dead_code, 180 lines, each in one item or between them; 46 items: 1 data, 20 function, 4 generator, 6 guard, 5 include, 4 macro, 1 prototype, 1 struct, 2 test, 2 test_list
+=== tree=cookbook/c/plants/find_clones (exit 0)
+PASS c items: 2 files under cookbook/c/plants/find_clones, 106 lines, each in one item or between them; 9 items: 7 function, 2 include
+=== tree=cookbook/c/plants/hunt_names (exit 0)
+PASS c items: 20 files under cookbook/c/plants/hunt_names, 166 lines, each in one item or between them; 53 items: 8 enum, 16 function, 20 include, 3 macro, 6 struct
+=== tree=cookbook/c/plants/list_deep_nesting (exit 0)
+PASS c items: 1 files under cookbook/c/plants/list_deep_nesting, 77 lines, each in one item or between them; 9 items: 6 function, 1 include, 1 test, 1 test_list
+=== tree=cookbook/c/plants/list_long_functions (exit 0)
+PASS c items: 1 files under cookbook/c/plants/list_long_functions, 48 lines, each in one item or between them; 7 items: 4 function, 1 include, 1 test, 1 test_list

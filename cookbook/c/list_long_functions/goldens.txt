@@ -1,0 +1,158 @@
+=== self_test=1 (exit 0)
+PASS list_long_functions self-test: 6 checks, the distribution, the default threshold and three lists over the plants
+=== dir=cookbook/c/plants/list_long_functions (exit 0)
+list_long_functions: cookbook/c/plants/list_long_functions, tests left out: 4 functions: median 2, p75 4, p90 6, p95 6, p99 6, max 6 code lines
+list_long_functions: 0 functions past 6 code lines (the 95th percentile)
+=== dir=cookbook/c/plants/list_long_functions tests=1 (exit 0)
+list_long_functions: cookbook/c/plants/list_long_functions, tests included: 5 functions: median 4, p75 6, p90 8, p95 8, p99 8, max 8 code lines
+list_long_functions: 0 functions past 8 code lines (the 95th percentile)
+=== dir=cookbook/c/plants/list_long_functions over=3 (exit 0)
+list_long_functions: cookbook/c/plants/list_long_functions, tests left out: 4 functions: median 2, p75 4, p90 6, p95 6, p99 6, max 6 code lines
+cookbook/c/plants/list_long_functions/lengths.c:25: long: six_lines: 6 code lines (1 comment, 0 blank)
+cookbook/c/plants/list_long_functions/lengths.c:13: long: four_with_comments: 4 code lines (3 comment, 2 blank)
+list_long_functions: 2 functions past 3 code lines (over=)
+=== dir=cookbook/c/plants/list_long_functions over=4 (exit 0)
+list_long_functions: cookbook/c/plants/list_long_functions, tests left out: 4 functions: median 2, p75 4, p90 6, p95 6, p99 6, max 6 code lines
+cookbook/c/plants/list_long_functions/lengths.c:25: long: six_lines: 6 code lines (1 comment, 0 blank)
+list_long_functions: 1 functions past 4 code lines (over=)
+=== dir=cookbook/c/plants/list_long_functions over=6 tests=1 (exit 0)
+list_long_functions: cookbook/c/plants/list_long_functions, tests included: 5 functions: median 4, p75 6, p90 8, p95 8, p99 8, max 8 code lines
+cookbook/c/plants/list_long_functions/lengths.c:35: long: a_long_test: 8 code lines (0 comment, 0 blank)
+list_long_functions: 1 functions past 6 code lines (over=)
+=== dir=cookbook/c/plants/list_long_functions over=1000 (exit 0)
+list_long_functions: cookbook/c/plants/list_long_functions, tests left out: 4 functions: median 2, p75 4, p90 6, p95 6, p99 6, max 6 code lines
+list_long_functions: 0 functions past 1000 code lines (over=)
+=== dir=cookbook/c/plants/list_deep_nesting (exit 0)
+list_long_functions: cookbook/c/plants/list_deep_nesting, tests left out: 6 functions: median 5, p75 9, p90 14, p95 14, p99 14, max 14 code lines
+list_long_functions: 0 functions past 14 code lines (the 95th percentile)
+=== dir=cookbook/c/plants/list_deep_nesting tests=1 (exit 0)
+list_long_functions: cookbook/c/plants/list_deep_nesting, tests included: 7 functions: median 5, p75 9, p90 14, p95 14, p99 14, max 14 code lines
+list_long_functions: 0 functions past 14 code lines (the 95th percentile)
+=== dir=cookbook/c/plants/list_deep_nesting over=3 (exit 0)
+list_long_functions: cookbook/c/plants/list_deep_nesting, tests left out: 6 functions: median 5, p75 9, p90 14, p95 14, p99 14, max 14 code lines
+cookbook/c/plants/list_deep_nesting/depths.c:52: long: depth_five: 14 code lines (0 comment, 0 blank)
+cookbook/c/plants/list_deep_nesting/depths.c:28: long: depth_three: 9 code lines (0 comment, 0 blank)
+cookbook/c/plants/list_deep_nesting/depths.c:40: long: depth_four: 9 code lines (0 comment, 0 blank)
+cookbook/c/plants/list_deep_nesting/depths.c:10: long: braceless: 5 code lines (0 comment, 0 blank)
+cookbook/c/plants/list_deep_nesting/depths.c:19: long: braces_in_text: 5 code lines (1 comment, 0 blank)
+list_long_functions: 5 functions past 3 code lines (over=)
+=== dir=cookbook/c/plants/list_deep_nesting over=4 (exit 0)
+list_long_functions: cookbook/c/plants/list_deep_nesting, tests left out: 6 functions: median 5, p75 9, p90 14, p95 14, p99 14, max 14 code lines
+cookbook/c/plants/list_deep_nesting/depths.c:52: long: depth_five: 14 code lines (0 comment, 0 blank)
+cookbook/c/plants/list_deep_nesting/depths.c:28: long: depth_three: 9 code lines (0 comment, 0 blank)
+cookbook/c/plants/list_deep_nesting/depths.c:40: long: depth_four: 9 code lines (0 comment, 0 blank)
+cookbook/c/plants/list_deep_nesting/depths.c:10: long: braceless: 5 code lines (0 comment, 0 blank)
+cookbook/c/plants/list_deep_nesting/depths.c:19: long: braces_in_text: 5 code lines (1 comment, 0 blank)
+list_long_functions: 5 functions past 4 code lines (over=)
+=== dir=cookbook/c/plants/list_deep_nesting over=6 tests=1 (exit 0)
+list_long_functions: cookbook/c/plants/list_deep_nesting, tests included: 7 functions: median 5, p75 9, p90 14, p95 14, p99 14, max 14 code lines
+cookbook/c/plants/list_deep_nesting/depths.c:52: long: depth_five: 14 code lines (0 comment, 0 blank)
+cookbook/c/plants/list_deep_nesting/depths.c:28: long: depth_three: 9 code lines (0 comment, 0 blank)
+cookbook/c/plants/list_deep_nesting/depths.c:40: long: depth_four: 9 code lines (0 comment, 0 blank)
+list_long_functions: 3 functions past 6 code lines (over=)
+=== dir=cookbook/c/plants/list_deep_nesting over=1000 (exit 0)
+list_long_functions: cookbook/c/plants/list_deep_nesting, tests left out: 6 functions: median 5, p75 9, p90 14, p95 14, p99 14, max 14 code lines
+list_long_functions: 0 functions past 1000 code lines (over=)
+=== dir=cookbook/c/plants/find_clones (exit 0)
+list_long_functions: cookbook/c/plants/find_clones, tests left out: 7 functions: median 9, p75 12, p90 19, p95 19, p99 19, max 19 code lines
+list_long_functions: 0 functions past 19 code lines (the 95th percentile)
+=== dir=cookbook/c/plants/find_clones tests=1 (exit 0)
+list_long_functions: cookbook/c/plants/find_clones, tests included: 7 functions: median 9, p75 12, p90 19, p95 19, p99 19, max 19 code lines
+list_long_functions: 0 functions past 19 code lines (the 95th percentile)
+=== dir=cookbook/c/plants/find_clones over=3 (exit 0)
+list_long_functions: cookbook/c/plants/find_clones, tests left out: 7 functions: median 9, p75 12, p90 19, p95 19, p99 19, max 19 code lines
+cookbook/c/plants/find_clones/clones.c:58: long: write_trailer: 19 code lines (0 comment, 0 blank)
+cookbook/c/plants/find_clones/clones.c:31: long: count_matches: 12 code lines (0 comment, 0 blank)
+cookbook/c/plants/find_clones/clones.c:6: long: sum_weights: 9 code lines (0 comment, 0 blank)
+cookbook/c/plants/find_clones/clones.c:18: long: sum_prices: 9 code lines (0 comment, 0 blank)
+cookbook/c/plants/find_clones/tests/test_clones.c:5: long: oracle_weights: 9 code lines (0 comment, 0 blank)
+cookbook/c/plants/find_clones/clones.c:47: long: write_header: 8 code lines (0 comment, 0 blank)
+cookbook/c/plants/find_clones/clones.c:82: long: write_banner: 8 code lines (0 comment, 0 blank)
+list_long_functions: 7 functions past 3 code lines (over=)
+=== dir=cookbook/c/plants/find_clones over=4 (exit 0)
+list_long_functions: cookbook/c/plants/find_clones, tests left out: 7 functions: median 9, p75 12, p90 19, p95 19, p99 19, max 19 code lines
+cookbook/c/plants/find_clones/clones.c:58: long: write_trailer: 19 code lines (0 comment, 0 blank)
+cookbook/c/plants/find_clones/clones.c:31: long: count_matches: 12 code lines (0 comment, 0 blank)
+cookbook/c/plants/find_clones/clones.c:6: long: sum_weights: 9 code lines (0 comment, 0 blank)
+cookbook/c/plants/find_clones/clones.c:18: long: sum_prices: 9 code lines (0 comment, 0 blank)
+cookbook/c/plants/find_clones/tests/test_clones.c:5: long: oracle_weights: 9 code lines (0 comment, 0 blank)
+cookbook/c/plants/find_clones/clones.c:47: long: write_header: 8 code lines (0 comment, 0 blank)
+cookbook/c/plants/find_clones/clones.c:82: long: write_banner: 8 code lines (0 comment, 0 blank)
+list_long_functions: 7 functions past 4 code lines (over=)
+=== dir=cookbook/c/plants/find_clones over=6 tests=1 (exit 0)
+list_long_functions: cookbook/c/plants/find_clones, tests included: 7 functions: median 9, p75 12, p90 19, p95 19, p99 19, max 19 code lines
+cookbook/c/plants/find_clones/clones.c:58: long: write_trailer: 19 code lines (0 comment, 0 blank)
+cookbook/c/plants/find_clones/clones.c:31: long: count_matches: 12 code lines (0 comment, 0 blank)
+cookbook/c/plants/find_clones/clones.c:6: long: sum_weights: 9 code lines (0 comment, 0 blank)
+cookbook/c/plants/find_clones/clones.c:18: long: sum_prices: 9 code lines (0 comment, 0 blank)
+cookbook/c/plants/find_clones/tests/test_clones.c:5: long: oracle_weights: 9 code lines (0 comment, 0 blank)
+cookbook/c/plants/find_clones/clones.c:47: long: write_header: 8 code lines (0 comment, 0 blank)
+cookbook/c/plants/find_clones/clones.c:82: long: write_banner: 8 code lines (0 comment, 0 blank)
+list_long_functions: 7 functions past 6 code lines (over=)
+=== dir=cookbook/c/plants/find_clones over=1000 (exit 0)
+list_long_functions: cookbook/c/plants/find_clones, tests left out: 7 functions: median 9, p75 12, p90 19, p95 19, p99 19, max 19 code lines
+list_long_functions: 0 functions past 1000 code lines (over=)
+=== dir=cookbook/c/plants/find_dead_code (exit 0)
+list_long_functions: cookbook/c/plants/find_dead_code, tests left out: 19 functions: median 1, p75 1, p90 2, p95 10, p99 10, max 10 code lines
+list_long_functions: 0 functions past 10 code lines (the 95th percentile)
+=== dir=cookbook/c/plants/find_dead_code tests=1 (exit 0)
+list_long_functions: cookbook/c/plants/find_dead_code, tests included: 21 functions: median 1, p75 1, p90 1, p95 2, p99 10, max 10 code lines
+cookbook/c/plants/find_dead_code/main.c:4: long: main: 10 code lines (1 comment, 0 blank)
+list_long_functions: 1 functions past 2 code lines (the 95th percentile)
+=== dir=cookbook/c/plants/find_dead_code over=3 (exit 0)
+list_long_functions: cookbook/c/plants/find_dead_code, tests left out: 19 functions: median 1, p75 1, p90 2, p95 10, p99 10, max 10 code lines
+cookbook/c/plants/find_dead_code/main.c:4: long: main: 10 code lines (1 comment, 0 blank)
+list_long_functions: 1 functions past 3 code lines (over=)
+=== dir=cookbook/c/plants/find_dead_code over=4 (exit 0)
+list_long_functions: cookbook/c/plants/find_dead_code, tests left out: 19 functions: median 1, p75 1, p90 2, p95 10, p99 10, max 10 code lines
+cookbook/c/plants/find_dead_code/main.c:4: long: main: 10 code lines (1 comment, 0 blank)
+list_long_functions: 1 functions past 4 code lines (over=)
+=== dir=cookbook/c/plants/find_dead_code over=6 tests=1 (exit 0)
+list_long_functions: cookbook/c/plants/find_dead_code, tests included: 21 functions: median 1, p75 1, p90 1, p95 2, p99 10, max 10 code lines
+cookbook/c/plants/find_dead_code/main.c:4: long: main: 10 code lines (1 comment, 0 blank)
+list_long_functions: 1 functions past 6 code lines (over=)
+=== dir=cookbook/c/plants/find_dead_code over=1000 (exit 0)
+list_long_functions: cookbook/c/plants/find_dead_code, tests left out: 19 functions: median 1, p75 1, p90 2, p95 10, p99 10, max 10 code lines
+list_long_functions: 0 functions past 1000 code lines (over=)
+=== dir=cookbook/c/plants/hunt_names (exit 0)
+list_long_functions: cookbook/c/plants/hunt_names, tests left out: 13 functions: median 1, p75 2, p90 3, p95 3, p99 3, max 3 code lines
+list_long_functions: 0 functions past 3 code lines (the 95th percentile)
+=== dir=cookbook/c/plants/hunt_names tests=1 (exit 0)
+list_long_functions: cookbook/c/plants/hunt_names, tests included: 13 functions: median 1, p75 2, p90 3, p95 3, p99 3, max 3 code lines
+list_long_functions: 0 functions past 3 code lines (the 95th percentile)
+=== dir=cookbook/c/plants/hunt_names over=3 (exit 0)
+list_long_functions: cookbook/c/plants/hunt_names, tests left out: 13 functions: median 1, p75 2, p90 3, p95 3, p99 3, max 3 code lines
+list_long_functions: 0 functions past 3 code lines (over=)
+=== dir=cookbook/c/plants/hunt_names over=4 (exit 0)
+list_long_functions: cookbook/c/plants/hunt_names, tests left out: 13 functions: median 1, p75 2, p90 3, p95 3, p99 3, max 3 code lines
+list_long_functions: 0 functions past 4 code lines (over=)
+=== dir=cookbook/c/plants/hunt_names over=6 tests=1 (exit 0)
+list_long_functions: cookbook/c/plants/hunt_names, tests included: 13 functions: median 1, p75 2, p90 3, p95 3, p99 3, max 3 code lines
+list_long_functions: 0 functions past 6 code lines (over=)
+=== dir=cookbook/c/plants/hunt_names over=1000 (exit 0)
+list_long_functions: cookbook/c/plants/hunt_names, tests left out: 13 functions: median 1, p75 2, p90 3, p95 3, p99 3, max 3 code lines
+list_long_functions: 0 functions past 1000 code lines (over=)
+=== dir=cookbook/c/plants/map_file/breaks (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file/breaks tests=1 (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file/breaks over=3 (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file/breaks over=4 (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file/breaks over=6 tests=1 (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file/breaks over=1000 (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file tests=1 (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file over=3 (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file over=4 (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file over=6 tests=1 (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file over=1000 (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
