@@ -261,7 +261,8 @@ enters `node_modules`; `walk_all` with `skip` passes it by. The `zig/` and
 ## Checks
 
     shale c/build.shale           # the fast tier: every C test, the discipline, the gate: seconds
-    shale c/build.shale full=1    # adds the GCC release build, ASan, the planted faults, the cookbook's self-tests and the docs' citations
+    shale c/build.shale full=1    # adds the GCC release build, ASan, the cookbook's self-tests and the docs' citations
+    shale c/build.shale full=1 plants=due   # also the planted faults whose proof is stale
     shale tests/golden.shale      # a build held to every golden case, from the outside
 
 [c/docs/building.md](c/docs/building.md) says what each tier runs and
