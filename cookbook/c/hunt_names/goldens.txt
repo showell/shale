@@ -1,0 +1,89 @@
+=== self_test=1 (exit 0)
+PASS hunt_names self-test: 10 checks, each firing on its own plant alone, 13 findings exactly, the quiet plants on none
+=== dir=cookbook/c/plants/hunt_names (exit 0)
+cookbook/c/plants/hunt_names/abbreviation.c:4: abbreviation: `bi` for `builtin`, which other names spell out, in 1 name here: `bi_length`
+cookbook/c/plants/hunt_names/bound_order.c:4: bound_order: `BOUND_MAX_NAME` has `MAX` before its last word: a bound ends with it, as `BOUND_NAME_MAX` would
+cookbook/c/plants/hunt_names/constant_case.c:4: constant_case: the constant `constant_wrong` is not UPPER_SNAKE
+cookbook/c/plants/hunt_names/container_type.c:4: container_type: the type `Entry` is only container words: name it for what it holds
+cookbook/c/plants/hunt_names/container_type.c:8: container_type: the type `NodeInfo` is only container words: name it for what it holds
+cookbook/c/plants/hunt_names/do_word.c:4: do_word: `store_do_write` has `do` in it, which says only that it acts: name the act
+cookbook/c/plants/hunt_names/function_case.c:4: function_case: the function `readThing` is not snake_case
+cookbook/c/plants/hunt_names/type_case.c:4: type_case: the type `bad_type` is not PascalCase
+cookbook/c/plants/hunt_names/vague.c:4: vague: `handle_data` is only vague words: what does it act on, and how?
+cookbook/c/plants/hunt_names/vague_local.c:4: vague_local: `vague_local_sum`'s parameter `data` says nothing of what it holds
+cookbook/c/plants/hunt_names/vague_local.c:5: vague_local: `vague_local_sum`'s local `tmp` says nothing of what it holds
+cookbook/c/plants/hunt_names/zig_bound.c:4: zig_bound: `ZIG_BOUND_MOST` is a bound in Zig's words: C's are `_MAX` and `_MIN`
+cookbook/c/plants/hunt_names/zig_bound.c:8: zig_bound: `ZIG_BOUND_LEAST` is a bound in Zig's words: C's are `_MAX` and `_MIN`
+hunt_names: 20 files under cookbook/c/plants/hunt_names; 13 findings: type_case 1, function_case 1, constant_case 1, zig_bound 2, bound_order 1, vague 1, do_word 1, vague_local 2, container_type 2, abbreviation 1
+  cookbook/c/plants/hunt_names abbreviation: 1
+  cookbook/c/plants/hunt_names bound_order: 1
+  cookbook/c/plants/hunt_names constant_case: 1
+  cookbook/c/plants/hunt_names container_type: 2
+  cookbook/c/plants/hunt_names do_word: 1
+  cookbook/c/plants/hunt_names function_case: 1
+  cookbook/c/plants/hunt_names type_case: 1
+  cookbook/c/plants/hunt_names vague: 1
+  cookbook/c/plants/hunt_names vague_local: 2
+  cookbook/c/plants/hunt_names zig_bound: 2
+=== dir=cookbook/c/plants/hunt_names_edges (exit 0)
+cookbook/c/plants/hunt_names_edges/abbrevs.c:4: abbreviation: `idx` for `index`, which other names spell out, in 5 names here: `idx_one`, `idx_two`, `idx_three`, `idx_four` and 1 more
+cookbook/c/plants/hunt_names_edges/abbrevs.c:30: abbreviation: `cmd` for `command`, which other names spell out, in 1 name here: `cmd_fx_val`
+cookbook/c/plants/hunt_names_edges/abbrevs.c:30: abbreviation: `val` for `value`, which other names spell out, in 1 name here: `cmd_fx_val`
+cookbook/c/plants/hunt_names_edges/locals.c:4: vague_local: `edge_locals`'s parameter `data` says nothing of what it holds
+cookbook/c/plants/hunt_names_edges/locals.c:4: vague_local: `edge_locals`'s parameter `handle` says nothing of what it holds
+cookbook/c/plants/hunt_names_edges/locals.c:4: vague_local: `edge_locals`'s parameter `info` says nothing of what it holds
+cookbook/c/plants/hunt_names_edges/locals.c:5: vague_local: `edge_locals`'s local `tmp` says nothing of what it holds
+cookbook/c/plants/hunt_names_edges/locals.c:6: vague_local: `edge_locals`'s local `temp` says nothing of what it holds
+cookbook/c/plants/hunt_names_edges/locals.c:7: vague_local: `edge_locals`'s local `stuff` says nothing of what it holds
+cookbook/c/plants/hunt_names_edges/locals.c:8: vague_local: `edge_locals`'s local `obj` says nothing of what it holds
+cookbook/c/plants/hunt_names_edges/locals.c:9: vague_local: `edge_locals`'s local `util` says nothing of what it holds
+cookbook/c/plants/hunt_names_edges/locals.c:10: vague_local: `edge_locals`'s local `helper` says nothing of what it holds
+cookbook/c/plants/hunt_names_edges/locals.c:11: vague_local: `edge_locals`'s local `things` says nothing of what it holds
+cookbook/c/plants/hunt_names_edges/locals.c:15: vague_local: `edge_locals`'s local `misc` says nothing of what it holds
+cookbook/c/plants/hunt_names_edges/locals.c:16: vague_local: `edge_locals`'s local `thing` says nothing of what it holds
+cookbook/c/plants/hunt_names_edges/locals.c:20: vague_local: `edge_one_line`'s parameter `data` says nothing of what it holds
+cookbook/c/plants/hunt_names_edges/locals.c:20: vague_local: `edge_one_line`'s parameter `info` says nothing of what it holds
+cookbook/c/plants/hunt_names_edges/locals.c:22: vague_local: `edge_wrapped`'s parameter `obj` says nothing of what it holds
+cookbook/c/plants/hunt_names_edges/locals.c:22: vague_local: `edge_wrapped`'s parameter `stuff` says nothing of what it holds
+cookbook/c/plants/hunt_names_edges/locals.c:33: vague_local: `main`'s local `data` says nothing of what it holds
+cookbook/c/plants/hunt_names_edges/names.c:5: zig_bound: `EDGE_LIMIT_MOST` is a bound in Zig's words: C's are `_MAX` and `_MIN`
+cookbook/c/plants/hunt_names_edges/names.c:6: bound_order: `EDGE_MAX_SIZE_BYTES` has `MAX` before its last word: a bound ends with it, as `EDGE_SIZE_BYTES_MAX` would
+cookbook/c/plants/hunt_names_edges/names.c:7: bound_order: `EDGE__DOUBLE_MAX_` has `MAX` before its last word: a bound ends with it, as `EDGE__DOUBLE__MAX` would
+cookbook/c/plants/hunt_names_edges/names.c:8: bound_order: `MAX_EDGE` has `MAX` before its last word: a bound ends with it, as `EDGE_MAX` would
+cookbook/c/plants/hunt_names_edges/names.c:10: bound_order: `EDGE_MIN_A_B` has `MIN` before its last word: a bound ends with it, as `EDGE_A_B_MIN` would
+cookbook/c/plants/hunt_names_edges/names.c:10: bound_order: `EDGE_SPAN_MAX_X_MS` has `MAX` before its last word: a bound ends with it, as `EDGE_SPAN_X_MS_MAX` would
+cookbook/c/plants/hunt_names_edges/names.c:10: constant_case: the constant `edgeMixed` is not UPPER_SNAKE
+cookbook/c/plants/hunt_names_edges/names.c:10: zig_bound: `EDGE_LEAST` is a bound in Zig's words: C's are `_MAX` and `_MIN`
+cookbook/c/plants/hunt_names_edges/names.c:23: type_case: the type `edge_lone_t` is not PascalCase
+cookbook/c/plants/hunt_names_edges/names.c:37: function_case: the function `Vec2DLength` is not snake_case
+cookbook/c/plants/hunt_names_edges/names.c:49: vague: `run_handle` is only vague words: what does it act on, and how?
+cookbook/c/plants/hunt_names_edges/names.c:53: do_word: `do_edge` has `do` in it, which says only that it acts: name the act
+cookbook/c/plants/hunt_names_edges/names.c:61: function_case: the function `edge_utf8Name` is not snake_case
+cookbook/c/plants/hunt_names_edges/sub/deeper.h:5: container_type: the type `DataEntry` is only container words: name it for what it holds
+cookbook/c/plants/hunt_names_edges/sub/deeper.h:9: vague_local: `deeper_arr_get`'s parameter `data` says nothing of what it holds
+hunt_names: 4 files under cookbook/c/plants/hunt_names_edges; 35 findings: type_case 1, function_case 2, constant_case 1, zig_bound 2, bound_order 5, vague 1, do_word 1, vague_local 18, container_type 1, abbreviation 3
+  cookbook/c/plants/hunt_names_edges abbreviation: 3
+  cookbook/c/plants/hunt_names_edges bound_order: 5
+  cookbook/c/plants/hunt_names_edges constant_case: 1
+  cookbook/c/plants/hunt_names_edges do_word: 1
+  cookbook/c/plants/hunt_names_edges function_case: 2
+  cookbook/c/plants/hunt_names_edges type_case: 1
+  cookbook/c/plants/hunt_names_edges vague: 1
+  cookbook/c/plants/hunt_names_edges vague_local: 17
+  cookbook/c/plants/hunt_names_edges zig_bound: 2
+  cookbook/c/plants/hunt_names_edges/sub container_type: 1
+  cookbook/c/plants/hunt_names_edges/sub vague_local: 1
+=== dir=cookbook/c/plants/map_file (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/map_file/breaks (exit 1)
+── stop: fail: cookbook/c/plants/map_file/breaks/bad_generator.c:2: a generator line whose name and type this reader can't find: VEC_DEFINE(Lonely)
+=== dir=cookbook/c/plants/find_clones (exit 0)
+hunt_names: 2 files under cookbook/c/plants/find_clones; 0 findings: type_case 0, function_case 0, constant_case 0, zig_bound 0, bound_order 0, vague 0, do_word 0, vague_local 0, container_type 0, abbreviation 0
+=== dir=cookbook/c/plants/find_dead_code (exit 0)
+hunt_names: 7 files under cookbook/c/plants/find_dead_code; 0 findings: type_case 0, function_case 0, constant_case 0, zig_bound 0, bound_order 0, vague 0, do_word 0, vague_local 0, container_type 0, abbreviation 0
+=== dir=cookbook/c/plants/list_deep_nesting (exit 0)
+hunt_names: 1 files under cookbook/c/plants/list_deep_nesting; 0 findings: type_case 0, function_case 0, constant_case 0, zig_bound 0, bound_order 0, vague 0, do_word 0, vague_local 0, container_type 0, abbreviation 0
+=== dir=cookbook/c/plants/list_long_functions (exit 0)
+hunt_names: 1 files under cookbook/c/plants/list_long_functions; 0 findings: type_case 0, function_case 0, constant_case 0, zig_bound 0, bound_order 0, vague 0, do_word 0, vague_local 0, container_type 0, abbreviation 0
+=== dir=cookbook/c/plants/nowhere (exit 1)
+── stop: file_system: `walk("cookbook/c/plants/nowhere")`: not found (FileNotFound): `exists(p)` asks first
