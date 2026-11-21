@@ -1,6 +1,6 @@
 ## Text cut, trimmed, lowered and ordered as Shale's builtins and preludes do
-## it (`lines`, `trim`, `lower`, `sub`, `split`, `between`, `basename`,
-## `dirname`, `path_under`, `sort`), and a name's words as
+## it (`lines`, `words`, `trim`, `lower`, `sub`, `split`, `between`,
+## `basename`, `dirname`, `path_under`, `sort`), and a name's words as
 ## cookbook/roc/declared.shale splits them, so a recipe's output is its
 ## Shale original's, byte for byte.
 Text := [].{
@@ -138,6 +138,23 @@ Text := [].{
 		with_word($words, $word)
 	}
 
+	## A text's words, as Shale's `words` splits it: the runs between spaces,
+	## tabs, carriage returns and newlines, none empty.
+	words : Str -> List(Str)
+	words = |text| {
+		var $said = []
+		var $word = []
+		for byte in text.to_utf8() {
+			if byte == ' ' or byte == '\t' or byte == '\r' or byte == '\n' {
+				$said = with_raw_word($said, $word)
+				$word = []
+			} else {
+				$word = $word.append(byte)
+			}
+		}
+		with_raw_word($said, $word)
+	}
+
 	## The texts put in Shale's `sort` order, bytewise.
 	sort_bytewise : List(Str) -> List(Str)
 	sort_bytewise = |texts| texts.sort_with(Text.byte_order)
@@ -176,6 +193,15 @@ lower_byte = |byte|
 		byte + 32
 	} else {
 		byte
+	}
+
+## `said` with `bytes` after it as a word, as they are, when there are any.
+with_raw_word : List(Str), List(U8) -> List(Str)
+with_raw_word = |said, bytes|
+	if bytes.is_empty() {
+		said
+	} else {
+		said.append(Str.from_utf8_lossy(bytes))
 	}
 
 ## `words` with `bytes` after them as a lowercased word, when there are any.

@@ -40,7 +40,7 @@ RocTypes := [].{
 	pin_of : List(Str), Str -> Try(Str, Str)
 	pin_of = |output_lines, root| {
 		head = output_lines.first() ?? ""
-		said = words(head)
+		said = Text.words(head)
 		if !(head.starts_with("roc-types ")) {
 			Err("`roc_types`: no `roc-types ${format}` header (${root}, the first line `${head}`): an older roc-types, or not roc-types; ${RocTypes.install_hint}")
 		} else if said.len() < 2 or (said.get(1) ?? "") != format {
@@ -132,32 +132,6 @@ RocTypes := [].{
 ## The version of the format this reads.
 format : Str
 format = "1"
-
-## A line's words, as Shale's `words` splits it: at each run of spaces, tabs,
-## carriage returns and newlines.
-words : Str -> List(Str)
-words = |text| {
-	var $said = []
-	var $word = []
-	for byte in text.to_utf8() {
-		if byte == ' ' or byte == '\t' or byte == '\r' or byte == '\n' {
-			$said = with_word($said, $word)
-			$word = []
-		} else {
-			$word = $word.append(byte)
-		}
-	}
-	with_word($said, $word)
-}
-
-## `said` with `bytes` after it as a word, when there are any.
-with_word : List(Str), List(U8) -> List(Str)
-with_word = |said, bytes|
-	if bytes.is_empty() {
-		said
-	} else {
-		said.append(Str.from_utf8_lossy(bytes))
-	}
 
 ## The record a `t` line holds, `t`, the kind, the tag, the span's four
 ## numbers and the type, tab-separated, or why it is not one. `number` is the
