@@ -1,0 +1,3 @@
+slope: tilt, slant
+slant: lean
+tilt: ramp

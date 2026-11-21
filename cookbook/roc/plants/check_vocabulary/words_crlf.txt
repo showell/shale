@@ -1,0 +1,3 @@
+# The plants' words with CRLF line ends.
+lean: tilt
+ride: tour, journey
