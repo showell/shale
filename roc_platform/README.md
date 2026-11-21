@@ -162,8 +162,9 @@ folder by folder, from `Shale.glob!` and `Shale.read!` and plain Roc.
 
 **`cookbook/c/map_file/`**, **`cookbook/c/list_long_functions/`**,
 **`cookbook/c/list_deep_nesting/`**, **`cookbook/c/find_clones/`**,
-**`cookbook/c/find_dead_code/`** (over the splitter package
-**`cookbook/c/items/`**, which each names by a relative path), **`cookbook/zig/list_long_files/`**, **`cookbook/zig/count_comments/`**,
+**`cookbook/c/find_dead_code/`**, **`cookbook/c/hunt_names/`** (over the
+splitter package **`cookbook/c/items/`**, which each names by a relative
+path), **`cookbook/zig/list_long_files/`**, **`cookbook/zig/count_comments/`**,
 **`cookbook/roc/find_unused_imports/`**, **`cookbook/roc/check_families/`**,
 **`cookbook/roc/find_deep_calls/`**, **`cookbook/roc/check_vocabulary/`**,
 **`cookbook/roc/check_name_types/`**, **`cookbook/roc/find_bare_floats/`**,
@@ -177,7 +178,7 @@ scan runs about 60 times slower in Roc's dev build, and so does
 find_deep_calls', whose dev build took 1.6 times the Shale original's CPU;
 count_shale_stops', which reads a transcript's JSON in Roc (its
 ShaleJson module, as Shale's `json_read` reads it) and whose dev build took
-3.5 times the original's CPU over a 180 MB transcript; and the five over
+3.5 times the original's CPU over a 180 MB transcript; and the six over
 the C, whose splitter masks a line a byte at a time (the dev build took
 four times map_file's original's CPU over `tree=c`).
 find_extra_parens rewrites as well as finds (`write=1`): its goldens hold
