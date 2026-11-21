@@ -62,7 +62,12 @@ question):
   earns its boundary and each parameter is really one. Give it the whole
   tree, tests included, since it counts callers only in the files it reads.
 - [find_deep_calls.shale](find_deep_calls.shale): calls nested three or
-  more deep, like `f(g(h(x)))`, which read inside out.
+  more deep, like `f(g(h(x)))`, which read inside out. It is written in
+  Roc, a root,
+  [find_deep_calls/find_deep_calls.roc](find_deep_calls/find_deep_calls.roc),
+  with its rule in `Nest.roc` beside it;
+  [check_goldens.shale](find_deep_calls/check_goldens.shale) holds it to
+  its goldens.
 - [find_extra_parens.shale](find_extra_parens.shale): the parentheses and
   braceless `if`s a code emitter leaves, which Roc's formatter keeps. With
   `write=1` it rewrites them and runs `roc fmt`. In a sweep it goes before
