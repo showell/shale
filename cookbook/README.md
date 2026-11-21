@@ -115,7 +115,9 @@ checkouts, and `<lanes>` the one that holds your lanes.
 - `roc/check_errors.shale`: checks how Roc code reports failure.
   `shale cookbook:roc/check_errors.shale`
 - `roc/check_families.shale`: checks that look-alike modules are spelled
-  alike and one type name means one thing. `shale cookbook:roc/check_families.shale`
+  alike and one type name means one thing; the launcher of a Roc script
+  (`roc/check_families/`, on `roc_platform/`, held to its goldens by that
+  folder's `check_goldens.shale`). `shale cookbook:roc/check_families.shale`
 - `roc/check_foreign_code.shale`: runs the general checks over another
   project's Roc code, without our house style. `shale cookbook:roc/check_foreign_code.shale`
 - `roc/check_module_size.shale`: holds each Roc module to a size, the whole

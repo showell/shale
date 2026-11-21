@@ -1,0 +1,90 @@
+=== family/*.roc (exit 1)
+check_families (Roc): 4 files; family 1, twin_name 0
+cookbook:roc/plants/check_families/family/RailSighting.roc:4: family: `RailSighting` has no `in_view`, which 3 of the 4 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
+check_families (Roc): 4 files; family 1, twin_name 0
+── stop: fail: check_families (Roc): 4 files; family 1, twin_name 0
+=== family_answered/*.roc (exit 0)
+check_families (Roc): 4 files; family 0, twin_name 0
+=== family_small/*.roc (exit 0)
+check_families (Roc): 2 files; family 0, twin_name 0
+=== family_half/*.roc (exit 0)
+check_families (Roc): 5 files; family 0, twin_name 0
+=== twin_name/*.roc (exit 1)
+check_families (Roc): 2 files; family 0, twin_name 1
+cookbook:roc/plants/check_families/twin_name/Bird.roc:4: twin_name: `Pose` is also declared at cookbook:roc/plants/check_families/twin_name/Cat.roc:4, in another shape
+check_families (Roc): 2 files; family 0, twin_name 1
+── stop: fail: check_families (Roc): 2 files; family 0, twin_name 1
+=== twin_name/*.roc roles=cookbook:roc/plants/check_families/roles.txt (exit 0)
+check_families (Roc): 2 files; family 0, twin_name 0
+=== twin_name/*.roc roles=cookbook:roc/plants/check_families/other_roles.txt (exit 1)
+check_families (Roc): 2 files; family 0, twin_name 1
+cookbook:roc/plants/check_families/twin_name/Bird.roc:4: twin_name: `Pose` is also declared at cookbook:roc/plants/check_families/twin_name/Cat.roc:4, in another shape
+check_families (Roc): 2 files; family 0, twin_name 1
+── stop: fail: check_families (Roc): 2 files; family 0, twin_name 1
+=== twin_name/*.roc roles=cookbook:roc/plants/check_families/no_such.txt (exit 1)
+── stop: fail: no word list cookbook:roc/plants/check_families/no_such.txt
+=== twin_app/*.roc (exit 0)
+check_families (Roc): 2 files; family 0, twin_name 0
+=== twin_copy/*.roc (exit 0)
+check_families (Roc): 2 files; family 0, twin_name 0
+=== twin_namespace/*.roc (exit 0)
+check_families (Roc): 3 files; family 0, twin_name 0
+=== twin_namespace_clash/*.roc (exit 1)
+check_families (Roc): 2 files; family 0, twin_name 1
+cookbook:roc/plants/check_families/twin_namespace_clash/Lamp.roc:2: twin_name: `Lamp` is also declared at cookbook:roc/plants/check_families/twin_namespace_clash/Parts.roc:3, in another shape
+check_families (Roc): 2 files; family 0, twin_name 1
+── stop: fail: check_families (Roc): 2 files; family 0, twin_name 1
+=== broken/*.roc (exit 1)
+check_families (Roc): 1 files; family 0, twin_name 0
+refused: cookbook:roc/plants/check_families/broken/refused.roc: 4 parse problem(s): a file that does not parse has no tree to hunt
+── stop: fail: check_families: roc-ast refused 1 files (named above), which have no tree to judge; every other file was judged
+=== */*.roc (exit 1)
+check_families (Roc): 27 files; family 10, twin_name 2
+cookbook:roc/plants/check_families/family/RailSighting.roc:4: family: `RailSighting` has no `in_view`, which 9 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
+cookbook:roc/plants/check_families/family_half/CatSighting.roc:3: family: `CatSighting` has no `depth_keys`, which 8 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
+cookbook:roc/plants/check_families/family_half/GroundSighting.roc:3: family: `GroundSighting` has no `depth_keys`, which 8 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
+cookbook:roc/plants/check_families/family_half/GroundSighting.roc:3: family: `GroundSighting` has no `in_view`, which 9 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
+cookbook:roc/plants/check_families/family_half/RailSighting.roc:3: family: `RailSighting` has no `depth_keys`, which 8 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
+cookbook:roc/plants/check_families/family_half/RailSighting.roc:3: family: `RailSighting` has no `in_view`, which 9 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
+cookbook:roc/plants/check_families/family_half/TreeSighting.roc:3: family: `TreeSighting` has no `depth_keys`, which 8 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
+cookbook:roc/plants/check_families/family_small/CatSighting.roc:3: family: `CatSighting` has no `depth_keys`, which 8 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
+cookbook:roc/plants/check_families/family_small/RailSighting.roc:3: family: `RailSighting` has no `depth_keys`, which 8 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
+cookbook:roc/plants/check_families/family_small/RailSighting.roc:3: family: `RailSighting` has no `in_view`, which 9 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
+cookbook:roc/plants/check_families/twin_name/Bird.roc:4: twin_name: `Pose` is also declared at cookbook:roc/plants/check_families/twin_name/Cat.roc:4, in another shape
+cookbook:roc/plants/check_families/twin_namespace/Parts.roc:3: twin_name: `Lamp` is also declared at cookbook:roc/plants/check_families/twin_namespace_clash/Lamp.roc:2, cookbook:roc/plants/check_families/twin_namespace_clash/Parts.roc:3, in another shape
+check_families (Roc): 27 files; family 10, twin_name 2
+refused: cookbook:roc/plants/check_families/broken/refused.roc: 4 parse problem(s): a file that does not parse has no tree to hunt
+── stop: fail: check_families: roc-ast refused 1 files (named above), which have no tree to judge; every other file was judged
+=== */*.roc roles=cookbook:roc/plants/check_families/roles.txt (exit 1)
+check_families (Roc): 27 files; family 10, twin_name 1
+cookbook:roc/plants/check_families/family/RailSighting.roc:4: family: `RailSighting` has no `in_view`, which 9 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
+cookbook:roc/plants/check_families/family_half/CatSighting.roc:3: family: `CatSighting` has no `depth_keys`, which 8 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
+cookbook:roc/plants/check_families/family_half/GroundSighting.roc:3: family: `GroundSighting` has no `depth_keys`, which 8 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
+cookbook:roc/plants/check_families/family_half/GroundSighting.roc:3: family: `GroundSighting` has no `in_view`, which 9 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
+cookbook:roc/plants/check_families/family_half/RailSighting.roc:3: family: `RailSighting` has no `depth_keys`, which 8 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
+cookbook:roc/plants/check_families/family_half/RailSighting.roc:3: family: `RailSighting` has no `in_view`, which 9 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
+cookbook:roc/plants/check_families/family_half/TreeSighting.roc:3: family: `TreeSighting` has no `depth_keys`, which 8 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
+cookbook:roc/plants/check_families/family_small/CatSighting.roc:3: family: `CatSighting` has no `depth_keys`, which 8 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
+cookbook:roc/plants/check_families/family_small/RailSighting.roc:3: family: `RailSighting` has no `depth_keys`, which 8 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
+cookbook:roc/plants/check_families/family_small/RailSighting.roc:3: family: `RailSighting` has no `in_view`, which 9 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
+cookbook:roc/plants/check_families/twin_namespace/Parts.roc:3: twin_name: `Lamp` is also declared at cookbook:roc/plants/check_families/twin_namespace_clash/Lamp.roc:2, cookbook:roc/plants/check_families/twin_namespace_clash/Parts.roc:3, in another shape
+check_families (Roc): 27 files; family 10, twin_name 1
+refused: cookbook:roc/plants/check_families/broken/refused.roc: 4 parse problem(s): a file that does not parse has no tree to hunt
+── stop: fail: check_families: roc-ast refused 1 files (named above), which have no tree to judge; every other file was judged
+=== nothing_here/*.roc (exit 0)
+check_families (Roc): 0 files; family 0, twin_name 0
+=== self_test=1 (exit 0)
+ok   cookbook:roc/plants/check_families/family/*.roc
+ok   cookbook:roc/plants/check_families/family_answered/*.roc
+ok   cookbook:roc/plants/check_families/family_small/*.roc
+ok   cookbook:roc/plants/check_families/family_half/*.roc
+ok   cookbook:roc/plants/check_families/twin_name/*.roc
+ok   cookbook:roc/plants/check_families/twin_name/*.roc
+ok   cookbook:roc/plants/check_families/twin_name/*.roc
+ok   cookbook:roc/plants/check_families/twin_name/*.roc
+ok   cookbook:roc/plants/check_families/twin_app/*.roc
+ok   cookbook:roc/plants/check_families/twin_copy/*.roc
+ok   cookbook:roc/plants/check_families/twin_namespace/*.roc
+ok   cookbook:roc/plants/check_families/twin_namespace_clash/*.roc
+ok   cookbook:roc/plants/check_families/broken/*.roc
+check_families self_test: PASS (13 rows: each plant gives its findings and a nonzero exit, each clean case none and exit 0)

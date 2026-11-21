@@ -88,7 +88,11 @@ are passed in):
 - [check_families.shale](check_families.shale): a module spelled unlike
   the others that share its last word, and one type name declared in two
   modules with different shapes. Give it the whole tree, since twins often
-  sit in two folders.
+  sit in two folders. It is written in Roc, a root,
+  [check_families/check_families.roc](check_families/check_families.roc),
+  with its checks in `Family.roc` and `Twin.roc` beside it;
+  [check_goldens.shale](check_families/check_goldens.shale) holds it to its
+  goldens.
 - [find_bare_floats.shale](find_bare_floats.shale): a bare `F64` in a
   signature or a type alias's field, against a table of named exceptions.
 - [find_unclear_names.shale](find_unclear_names.shale): names and module
