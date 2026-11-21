@@ -39,7 +39,7 @@ in Shale. Its surface is generated from Shale's builtin table.
   gives the Roc's part.
 - **A stop made while the Roc waits names the Roc's file and line**: a
   hosted call Shale refused, a `fail!`, a budget run out answering one, the
-  CPU budget: `` ── stopped at roc_platform/examples/Reach.roc:9:7 (in
+  CPU budget: `` ── stopped at roc_platform/examples/Reach.roc:10:7 (in
   `Shale.read!`): argument: ... ``. Each shim keeps its return address; the
   launcher links the program with a table of the lines of the script's
   files (`app.sites`, from the pinned Roc's DWARF line table, which names a
