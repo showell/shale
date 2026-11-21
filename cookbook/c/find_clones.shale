@@ -1,5 +1,5 @@
--- Finds the same code twice in Shale's C, from cookbook/c/items.shale's
--- splitter, as two kinds of pair:
+-- Finds the same code twice in Shale's C, from the splitter the C recipes
+-- share (cookbook/c/items/, a Roc package), as two kinds of pair:
 --
 --   twin  two functions of one shape: their bodies' lines, each with every
 --         name made `I`, every number `N`, every string `S` and every
@@ -42,286 +42,40 @@
 -- function as long as the twins but of another shape, four lines alike
 -- that a fifth's string breaks, a test's oracle copy unless `tests=1`).
 --
--- budget: steps=900000000 arena_bytes=1000000000 kept_bytes=268435456
+-- It is written in Roc, the app cookbook/c/find_clones/find_clones.roc and
+-- the modules beside it (Shape, a function's counted lines; Clones, the
+-- twins and the runs; SelfTest, the plants' check), over the splitter
+-- package cookbook/c/items/, on Shale's Roc platform
+-- (roc_platform/README.md); this file is its launcher. It hands every value
+-- it is given to roc_platform/run.shale in the checkout this cookbook is in
+-- (the `cookbook` mount's parent), which builds the Roc there (cached; the
+-- first build after a change to C Shale compiles the platform's host, 25 to
+-- 50 s) and runs the program rooted here, so `dir=` is this root's path. A
+-- value the Roc reads no `Shale.arg!` of stops the run before anything is
+-- built. `reads=inputs` builds and runs nothing, and prints the real path of
+-- each file the program is built from (run.shale's header). It is built
+-- with `opt=speed`, as map_file is: the masker reads a line a byte at a
+-- time, which Roc's dev build does several times slower than the Shale
+-- original's regular expressions; a stop in a speed build names the
+-- platform's driver, not the Roc's line. Its goldens, the Shale original's
+-- output on the plants, are held by
+-- cookbook/c/find_clones/check_goldens.shale.
+-- budget: programs=10 output_bytes=8000000
 
-use("./items.shale")
+const SCRIPT = "cookbook/c/find_clones/find_clones.roc"
+const CHECKOUT = dirname(dirname(real("cookbook:README.md")))
+const HERE = real(".")
 
-const PLANTS = "cookbook/c/plants/find_clones"
-const COMMON = 8
-
--- The C files under `dir`, sorted, c/out (the build's output) left out.
-function c_files_under(dir)
-  local files = {}
-  for e in walk_all(dir, {kind = "file", skip = "out"}) do
-    if ends_with(e.path, ".c") or ends_with(e.path, ".h") then push(files, e.path) end
-  end
-  sort(files)
-  return files
+-- `self_test` is read here by name, as the cookbook's full tier finds the
+-- recipes it runs `self_test=1` of. `arg_names()` is every value given; the
+-- rest are read by a name made as the run goes, so Shale's own check cannot
+-- see them: run.shale holds them to the script's reads.
+const SELF_TEST = arg("self_test", "")
+local values = {"script=" .. SCRIPT, "in=" .. HERE, "opt=speed"}
+if SELF_TEST ~= "" then push(values, "self_test=" .. SELF_TEST) end
+for name in arg_names() do
+  if name ~= "self_test" then push(values, name .. "=" .. arg(name, "")) end
 end
-
--- A token of C: a name, a number, a string, a character literal, or one
--- other character.
-const C_TOKEN = [=[[A-Za-z_]\w*|\d\w*|"[^"]*"|'[^']*'|\S]=]
-
--- A masked line's tokens with every name `I`, number `N`, string `S` and
--- character literal `C`; a keyword stays itself.
-function shape_of(code, keywords)
-  local out = {}
-  for t in re_find_all(code, C_TOKEN) do
-    local s = t.text
-    local c = sub(s, 1, 1)
-    if c == "\"" then
-      s = "S"
-    elseif c == "'" then
-      s = "C"
-    elseif re_match(c, "[0-9]") then
-      s = "N"
-    elseif re_match(c, "[A-Za-z_]") and not has_key(keywords, s) then
-      s = "I"
-    end
-    push(out, s)
-  end
-  return join(out, " ")
-end
-
--- A line of brackets alone, or a `default:`: no work of its own.
-function is_brackets(code)
-  return re_match(code, [=[^[{}()\[\];, ]*$|^\} else \{$|^default:$]=])
-end
-
--- Whether `p`, below `dir`, is the tests': in a `tests` folder, or a file
--- whose name starts with `test` (c/foundation/test.h, the tests' runner).
-function is_test_path(dir, p)
-  local rel = sub(p, #dir + 2)
-  return starts_with(rel, "tests/") or contains(rel, "/tests/") or starts_with(basename(p), "test")
-end
-
--- Each function's counted lines under `dir`: `{path, first, last, name,
--- lines}`, each line `{line, exact, shape}`. `exact` is the raw line to
--- where its code ends (a comment after it cut), its spaces made one.
-function read_functions(dir, tests)
-  local keywords = set_of(C_KEYWORDS)
-  local fns = {}
-  for p in c_files_under(dir) do
-    local all = lines(read(p))
-    local kept_file = tests or not is_test_path(dir, p)
-    for it in c_items(p) do
-      if kept_file and (it.kind == "function" or (tests and it.kind == "test")) and it.body_first ~= 0 and it.body_first ~= it.sig_last then
-        local kept = {}
-        local k = it.body_first
-        while k <= it.body_last do
-          local code = trim(c_mask(all[k]))
-          if code ~= "" and not is_brackets(code) then
-            local raw = all[k]
-            local masked = c_mask(raw)
-            local stop = #re_replace(masked, [=[\s+$]=], "")
-            local exact = re_replace(trim(sub(raw, 1, stop)), [=[\s+]=], " ")
-            push(kept, {line = k, exact = exact, shape = shape_of(code, keywords)})
-          end
-          k = k + 1
-        end
-        push(fns, {path = p, first = it.first, last = it.last, name = it.name, lines = kept})
-      end
-    end
-    yield()
-  end
-  return fns
-end
-
--- The set of runs of `k` lines of function `f`, by `field`, as a map.
-function runs_of(f, field, k)
-  local got = {}
-  local i = 1
-  while i + k - 1 <= #f.lines do
-    local parts = {}
-    local j = i
-    while j <= i + k - 1 do
-      push(parts, f.lines[j][field])
-      j = j + 1
-    end
-    got[join(parts, "\n")] = true
-    i = i + 1
-  end
-  return got
-end
-
--- Dice's coefficient of two sets, as a whole percent.
-function dice(a, b)
-  local na = #keys(a)
-  local nb = #keys(b)
-  if na + nb == 0 then return 0 end
-  local shared = 0
-  for x in keys(a) do
-    if has_key(b, x) then shared = shared + 1 end
-  end
-  return (200 * shared) // (na + nb)
-end
-
--- A function's place and name, `path:first-last name`.
-function place(f)
-  return f.path .. ":" .. f.first .. "-" .. f.last .. " " .. f.name
-end
-
--- The twin pairs of `fns`: `{a, b, structure, names}` (indexes), highest
--- structure first.
-function find_twins(fns, k, least, min_lines)
-  local sets = {}
-  local index = {}
-  local i = 0
-  for f in fns do
-    i = i + 1
-    local s = {}
-    if #f.lines >= min_lines then s = runs_of(f, "shape", k) end
-    push(sets, s)
-    for key in keys(s) do push_at(index, key, i) end
-  end
-  local shared = {}
-  for key in keys(index) do
-    local at = index[key]
-    if #at >= 2 and #at <= COMMON then
-      local x = 1
-      while x < #at do
-        local y = x + 1
-        while y <= #at do
-          incr(shared, at[x] .. ":" .. at[y])
-          y = y + 1
-        end
-        x = x + 1
-      end
-    end
-  end
-  local twins = {}
-  for id in keys(shared) do
-    local ab = split(id, ":")
-    local a = parse_int(ab[1])
-    local b = parse_int(ab[2])
-    local na = #keys(sets[a])
-    local nb = #keys(sets[b])
-    local score = (200 * shared[id]) // (na + nb)
-    if score >= least then
-      push(twins, {a = a, b = b, structure = score, names = dice(runs_of(fns[a], "exact", k), runs_of(fns[b], "exact", k))})
-    end
-  end
-  sort(twins, {{key = "structure", desc = true}, {key = "names", desc = true}, "a", "b"})
-  return twins
-end
-
--- The runs of `w` or more lines alike as written, in two places: `{a, b,
--- n, a0, a1, b0, b1}` (function indexes, the count, and each side's first
--- and last lines), longest first; a pair in `skip` (`a:b`) left out.
-function find_runs(fns, w, skip)
-  local at = {}
-  local fi = 0
-  for f in fns do
-    fi = fi + 1
-    local i = 1
-    while i + w - 1 <= #f.lines do
-      local parts = {}
-      local j = i
-      while j <= i + w - 1 do
-        push(parts, f.lines[j].exact)
-        j = j + 1
-      end
-      push_at(at, join(parts, "\n"), {f = fi, i = i})
-      i = i + 1
-    end
-  end
-  local pairs = {}
-  for key in keys(at) do
-    local places = at[key]
-    if #places >= 2 and #places <= COMMON then
-      local x = 1
-      while x < #places do
-        local y = x + 1
-        while y <= #places do
-          local p = places[x]
-          local q = places[y]
-          -- A window against itself shifted is no second place.
-          if not (p.f == q.f and q.i - p.i < w) then push_at(pairs, p.f .. ":" .. q.f .. ":" .. (q.i - p.i), p.i) end
-          y = y + 1
-        end
-        x = x + 1
-      end
-    end
-  end
-  local runs = {}
-  for id in keys(pairs) do
-    local parts = split(id, ":")
-    local fa = parse_int(parts[1])
-    local fb = parse_int(parts[2])
-    local off = parse_int(parts[3])
-    if not has_key(skip, fa .. ":" .. fb) then
-      local starts = sort(pairs[id])
-      local first = starts[1]
-      local last = starts[1]
-      local k = 2
-      while k <= #starts + 1 do
-        if k <= #starts and starts[k] == last + 1 then
-          last = starts[k]
-        else
-          local la = fns[fa].lines
-          local lb = fns[fb].lines
-          push(runs, {a = fa, b = fb, n = last - first + w, a0 = la[first].line, a1 = la[last + w - 1].line, b0 = lb[first + off].line, b1 = lb[last + w - 1 + off].line})
-          if k <= #starts then
-            first = starts[k]
-            last = starts[k]
-          end
-        end
-        k = k + 1
-      end
-    end
-  end
-  sort(runs, {{key = "n", desc = true}, "a", "a0", "b", "b0"})
-  return runs
-end
-
--- The findings over `dir`, `{functions, twins, runs}`, each list's lines.
-function find_clones(dir, o)
-  local fns = read_functions(dir, o.tests)
-  local twins = find_twins(fns, o.k, o.score, o.min)
-  local skip = {}
-  local twin_lines = {}
-  for t in twins do
-    skip[t.a .. ":" .. t.b] = true
-    push(twin_lines, place(fns[t.a]) .. " ~ " .. place(fns[t.b]) .. ": twin: structure " .. t.structure .. "%, names " .. t.names .. "%")
-  end
-  local run_lines = {}
-  for r in find_runs(fns, o.window, skip) do
-    local a = fns[r.a]
-    local b = fns[r.b]
-    push(run_lines, a.path .. ":" .. r.a0 .. "-" .. r.a1 .. " " .. a.name .. " ~ " .. b.path .. ":" .. r.b0 .. "-" .. r.b1 .. " " .. b.name .. ": run: " .. r.n .. " lines alike")
-  end
-  return {functions = #fns, twins = twin_lines, runs = run_lines}
-end
-
-function self_test()
-  local P = PLANTS .. "/clones.c"
-  local r = find_clones(PLANTS, {tests = false, k = 3, score = 80, min = 8, window = 6})
-  local got = join(r.twins, "\n") .. "\n--\n" .. join(r.runs, "\n")
-  local want = P .. ":6-16 sum_weights ~ " .. P .. ":18-28 sum_prices: twin: structure 100%, names 0%\n--\n" .. P .. ":49-54 write_header ~ " .. P .. ":64-69 write_trailer: run: 6 lines alike"
-  if got ~= want then fail("find_clones self-test: the plants' findings are\n" .. got .. "\nthey should be\n" .. want) end
-  -- With the tests, the oracle's copy is a twin of each, as written of one.
-  local T = PLANTS .. "/tests/test_clones.c"
-  local with = join(find_clones(PLANTS, {tests = true, k = 3, score = 80, min = 8, window = 6}).twins, "\n")
-  local want_with = join({
-    P .. ":6-16 sum_weights ~ " .. T .. ":5-15 oracle_weights: twin: structure 100%, names 100%",
-    P .. ":6-16 sum_weights ~ " .. P .. ":18-28 sum_prices: twin: structure 100%, names 0%",
-    P .. ":18-28 sum_prices ~ " .. T .. ":5-15 oracle_weights: twin: structure 100%, names 0%"}, "\n")
-  if with ~= want_with then fail("find_clones self-test: with tests=1 the plants' twins are\n" .. with .. "\nthey should be\n" .. want_with) end
-  print("PASS find_clones self-test: the twin and the run over the plants, exactly, their near misses left alone, and a test's oracle only with tests=1")
-  return nil
-end
-
-if arg("self_test", 0) == 1 then
-  self_test()
-else
-  local o = {tests = arg("tests", 0) == 1, k = arg("k", 3), score = arg("score", 80), min = arg("min", 8), window = arg("window", 6)}
-  local dir = arg("dir", "c")
-  local top = arg("top", 40)
-  local r = find_clones(dir, o)
-  for l in take(r.twins, top) do print(l) end
-  if #r.twins > top then print("... " .. (#r.twins - top) .. " more twins (top=)") end
-  for l in take(r.runs, top) do print(l) end
-  if #r.runs > top then print("... " .. (#r.runs - top) .. " more runs (top=)") end
-  print("find_clones: " .. r.functions .. " functions under " .. dir .. (o.tests and ", tests included" or ", tests left out") .. "; " .. #r.twins .. " twins (structure " .. o.score .. "%+ over runs of " .. o.k .. "), " .. #r.runs .. " runs of " .. o.window .. "+ lines alike")
-end
+local r = run({"shale", "--root", CHECKOUT, CHECKOUT .. "/roc_platform/run.shale", "--args-stdin"}, {stdin = join(values, "\n") .. "\n", timeout_ms = 1800000, whole = 8000000})
+print(trim_end(r.out))
+if r.code ~= 0 then fail("find_clones: the Roc program stopped (exit " .. r.code .. ")") end

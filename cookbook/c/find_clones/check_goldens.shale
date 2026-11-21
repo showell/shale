@@ -1,19 +1,22 @@
--- cookbook/c/find_clones/check_goldens.shale: find_clones (the Roc script beside
--- this, find_clones.roc, through its launcher cookbook/c/find_clones.shale) held to
--- its goldens, goldens.txt beside this, line for line and exit code for exit
--- code. From the shale checkout's root:
+-- cookbook/c/find_clones/check_goldens.shale: find_clones (the Roc script
+-- beside this, find_clones.roc, through its launcher
+-- cookbook/c/find_clones.shale) held to its goldens, goldens.txt beside
+-- this, line for line and exit code for exit code. From the shale
+-- checkout's root:
 --
 --   shale cookbook/c/find_clones/check_goldens.shale self_test=1
 --   shale cookbook/c/find_clones/check_goldens.shale write=1
 --
--- The cases are the self-test, each plant file mapped (the shape breaks
--- among them, each a stop), each plant folder split as a tree (find_clones's
--- own stops at its first break), and the two ways of giving neither or both
--- of `file=` and `tree=`. The goldens were written from the Shale original's
--- output on them, and the port matched the original on Shale's own C too
--- (`tree=c`, `tree=c/host`, and `file=` each of c/'s 99 files), which is left
--- out because that code moves. A case left out: a `file=` that is not there,
--- whose stop has the Roc's own words (the original's was `read`'s).
+-- The cases are the self-test, then each plant folder (map_file's breaks
+-- among them, each a stop) at the defaults, `tests=1`, `score=50`, `score=0
+-- min=1`, `k=2 window=3`, `k=1 window=2 score=30 min=2 tests=1`, `window=4
+-- top=1` and `top=0 score=0 min=0 window=1`. The goldens were written from
+-- the Shale original's output on them, and the port matched the original on
+-- Shale's own C too (`dir=c` alone, with `tests=1` and with `k=2 window=4
+-- score=60 top=100`, and `dir=c/host score=70`), which is left out because
+-- that code moves. Cases left out: a value that is no integer, a `dir=` that
+-- is not there, and a `k` or `window` below 1, whose stops or runs have the
+-- Roc's own words.
 --
 -- What is held: the exit code, and the output with each runner's own lines
 -- left out: Shale's `──` report lines, the `called from` lines, and the
