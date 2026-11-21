@@ -37,13 +37,15 @@ in Shale. Its surface is generated from Shale's builtin table.
   clock, armed while the Roc runs, stops a loop that never calls Shale. A
   runaway stops as `budget cpu`, at its own line, and the `── used:` line
   gives the Roc's part.
-- **A stop made while the Roc waits names the Roc's line**: a hosted call
-  Shale refused, a `fail!`, a budget run out answering one, the CPU budget:
-  `` ── stopped at roc_platform/examples/escape.roc:25:8 (in `Shale.read!`):
-  argument: ... ``. Each shim keeps its return address; the launcher links
-  the program with a table of the script's lines (`app.sites`, from the
-  pinned Roc's DWARF line table), and the address's line is the stop's. The
-  column is the call's own text on that line, else the line's first.
+- **A stop made while the Roc waits names the Roc's file and line**: a
+  hosted call Shale refused, a `fail!`, a budget run out answering one, the
+  CPU budget: `` ── stopped at roc_platform/examples/Reach.roc:9:7 (in
+  `Shale.read!`): argument: ... ``. Each shim keeps its return address; the
+  launcher links the program with a table of the lines of the script's
+  files (`app.sites`, from the pinned Roc's DWARF line table, which names a
+  row's file by its module), and the address's file and line are the
+  stop's. The column is the call's own text on that line, else the line's
+  first.
 - **A value no `Shale.arg!` reads stops the run** before anything is built,
   naming the ones the script reads, as Shale does for a script's `arg`.
 
@@ -75,17 +77,57 @@ compiled once with `gcc -O2`. The launcher then runs the program in this
 root, or rooted at `in=` (an absolute folder). The object and each
 script's program are cached by content hash under `out/`, each built in a
 job of its own (`out/jobs/`), so concurrent runs build a key once. A
-`## budget: NAME=N ...` line in the script sets its budgets. `run.shale`'s
-header has the rest of its arguments.
+`## budget: NAME=N ...` line in the app's root sets its budgets.
+`run.shale`'s header has the rest of its arguments.
+
+**A script may be several files.** `script=` names the app's root, and the
+launcher takes with it:
+
+- **its own modules**, each a type module beside the file that imports it
+  bare (`import Words` is `Words.roc`), followed in turn. A module reaches
+  the system as the root does, through `import pf.Shale`: the platform is
+  the only door, whichever file asks.
+- **packages by a relative path** in the app's header (`lib:
+  "../lib/main.roc"`, then `import lib.Plural`), as roc-chat imports
+  roc-markdown: that `package [Plural] {}` file and the modules it
+  exposes. This is how recipes would share a module (a lib folder
+  beside them in cookbook/roc, say), though none does yet: what Roc does itself
+  stays in each recipe. A script's package imports no package of its own.
+
+Every file is read through Shale's store (a path out of the root stops the
+launch), copied into the cache (the root as `main.roc`, packages under
+`pkg/<name>/`, the header's paths made the cache's) and hashed into the
+key, so an edit to any module rebuilds the program and nothing else does.
+`Shale.arg!` reads are found in all of them. Two modules of one name are
+refused: Roc's line table names a file by its module, and a stop could not
+say which. The host's sites table numbers the files (`file K PATH`, and each
+row, call and line its `K`), so a stop in a module names that module's
+`file:line:col`.
+
+**A script's build prunes `out/`** of what no current key reaches: every
+host object but the current one, every build linked with another host's,
+the script's own builds at other keys (each edit's) and the logs of the
+jobs that made them. A build whose job still runs is left alone. A build
+says what it was built for in its `built_for` file, which pruning reads.
+
+**`reads=inputs`** builds and runs nothing: it prints the real path of every
+file the program is built from (the script's files, the platform, the
+launcher, the host and the code git tracks in `c/`), one a line, for a
+caller that keys a cache on a Roc recipe. A launcher hands its values on,
+so `shale cookbook:roc/find_unclear_names.shale reads=inputs` asks the
+recipe itself, with no `const SCRIPT` to read.
 
 The examples in `examples/`: `count_lines.roc`, the smallest app;
 `check_module_size.roc`, a cookbook recipe in Roc, held line for line to
 its Shale original by `tools/compare.shale`; and `escape.roc`, which tries
-each guard and stops with Shale's own refusal.
+each guard and stops with Shale's own refusal. escape.roc is several files:
+`Reach.roc`, a module of its own that tries a guard too, and `kit/`, a
+package it names by a relative path.
 
 **`shale roc_platform/self_test.shale`** is the policy proofs: each of
-escape.roc's tries held to Shale's own stop or output, then a misspelled
-argument and a right one. `shale=c/out/tcc/shale` runs the launcher with a
+escape.roc's tries held to Shale's own stop or output (a refusal in
+Reach.roc named at Reach.roc's line, a package's function run), then a
+misspelled argument and a right one. `shale=c/out/tcc/shale` runs the launcher with a
 checkout's own build. It needs the pinned Roc and builds the host's
 object, so it runs when a Roc build is asked for, outside the tiers.
 
@@ -93,8 +135,12 @@ object, so it runs when a Roc build is asked for, outside the tiers.
 
 ## The ports
 
-**`cookbook/roc/find_unclear_names/find_unclear_names.roc`** is a recipe
-in Roc: `cookbook/roc/find_unclear_names.shale` is its launcher. The
+**`cookbook/roc/find_unclear_names/`** is a recipe in Roc: its app's root
+is `find_unclear_names.roc` (the word lists, the run, the verdict), and
+beside it are a module a check (`PureMutator`, `Abbreviation`,
+`ModuleDoc`), what the checks read (`Tree`, `Declarations`, `Text`),
+`Finding` and `SelfTest`, each under 500 lines.
+`cookbook/roc/find_unclear_names.shale` is its launcher. The
 launcher hands its values to `run.shale` in the checkout its cookbook is in
 (the `cookbook` mount's parent) with `in=` its own root, so the build is
 the checkout's and the program runs where the caller is. That folder's
@@ -127,6 +173,11 @@ cookbook's self-tests.
 - The Roc's arena has its own budget, set to the run's `arena_bytes`,
   beside the values' arena.
 - The host's cache key ignores uncommitted edits under `c/`.
-- A script is one file, with its own text helpers.
-- A caller's cache key that follows a recipe's `use`s misses a change to
-  the Roc script a launcher runs, or to the platform.
+- A stop in a package's module names the driver's line: the dev build's
+  line table had no rows of a package's module where it was tried. A
+  package reaches no effect, so only a crash or the CPU budget can stop
+  there.
+- A build of under a second takes about 1.3 s of wall time: the launcher
+  waits for its build job by `job_wait`'s polling, which doubles from 20 ms.
+- `measure.shale` copies an example's root alone, so it times one-file
+  examples only.

@@ -142,8 +142,8 @@ checkouts, and `<lanes>` the one that holds your lanes.
 - `roc/find_extra_parens.shale`: finds the parentheses and braceless `if`s a
   code emitter leaves, and with `write=1` rewrites them. `shale cookbook:roc/find_extra_parens.shale`
 - `roc/find_unclear_names.shale`: finds names and module docs that say too
-  little; the launcher of a Roc script
-  (`roc/find_unclear_names/find_unclear_names.roc`, on `roc_platform/`,
+  little; the launcher of a Roc script of several modules (its root
+  `roc/find_unclear_names/find_unclear_names.roc`, on `roc_platform/`,
   held to its goldens by that folder's `check_goldens.shale`).
   `shale cookbook:roc/find_unclear_names.shale`
 - `roc/find_unused_imports.shale`: finds the imports a file leaves unused.

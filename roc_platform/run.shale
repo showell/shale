@@ -212,8 +212,9 @@ if READS == "inputs" then
   for f in files do push(paths, f.path) end
   for p in glob(DIR .. "/platform/*.roc") do push(paths, p) end
   for p in {DIR .. "/roc-version", DIR .. "/run.shale", DIR .. "/surface.gen.shale", DIR .. "/host/host.c", DIR .. "/host/hosted.gen.c", DIR .. "/host/roc_platform_abi.h"} do push(paths, p) end
+  -- git_ls_files gives a folder's paths from that folder.
   for p in git_ls_files("c") do
-    if not ends_with(p, ".md") then push(paths, p) end
+    if not ends_with(p, ".md") then push(paths, "c/" .. p) end
   end
   for p in paths do print(real(p)) end
 end

@@ -1,8 +1,9 @@
 -- This recipe finds names and top comments that say less than they should: a
 -- pure function named like a mutation, an abbreviation in a name, and a
 -- module with no doc or with history where its doc belongs. It is written in
--- Roc, cookbook/roc/find_unclear_names/find_unclear_names.roc, run on Shale's
--- Roc platform (roc_platform/README.md); this file is its launcher, so it is
+-- Roc, the app cookbook/roc/find_unclear_names/find_unclear_names.roc and the
+-- modules beside it (one a check, and what they read), run on Shale's Roc
+-- platform (roc_platform/README.md); this file is its launcher, so it is
 -- launched as every Shale recipe is:
 --
 --   cd <repo> && shale <shale>/cookbook/roc/find_unclear_names.shale
@@ -79,8 +80,10 @@
 -- here, so `glob=` and the word files are this root's paths, as they were
 -- the Shale recipe's. A value the Roc script reads no `Shale.arg!` of stops
 -- the run before anything is built. Its output is the program's, then the
--- launchers' own stops when it stops. Its goldens, the Shale original's
--- output on the plants, are held by
+-- launchers' own stops when it stops. `reads=inputs` builds and runs
+-- nothing, and prints the real path of each file the program is built from,
+-- one a line (run.shale's header), for a caller's cache key. Its goldens,
+-- the Shale original's output on the plants, are held by
 -- cookbook/roc/find_unclear_names/check_goldens.shale.
 -- budget: programs=10 output_bytes=8000000
 

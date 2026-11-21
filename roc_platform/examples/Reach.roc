@@ -3,6 +3,7 @@
 import pf.Shale
 
 Reach := [].{
+
 	## A read out of the root, from a module.
 	climb! : {} => {}
 	climb! = |{}| {

@@ -92,7 +92,8 @@ are passed in):
 - [find_bare_floats.shale](find_bare_floats.shale): a bare `F64` in a
   signature or a type alias's field, against a table of named exceptions.
 - [find_unclear_names.shale](find_unclear_names.shale): names and module
-  docs that say too little. It is written in Roc,
+  docs that say too little. It is written in Roc, a folder of modules whose
+  root is
   [find_unclear_names/find_unclear_names.roc](find_unclear_names/find_unclear_names.roc),
   on Shale's Roc platform; the `.shale` file is its launcher, and
   [check_goldens.shale](find_unclear_names/check_goldens.shale) holds it to
