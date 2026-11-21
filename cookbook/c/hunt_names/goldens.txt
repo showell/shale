@@ -81,6 +81,8 @@ hunt_names: 4 files under cookbook/c/plants/hunt_names_edges; 35 findings: type_
 hunt_names: 2 files under cookbook/c/plants/find_clones; 0 findings: type_case 0, function_case 0, constant_case 0, zig_bound 0, bound_order 0, vague 0, do_word 0, vague_local 0, container_type 0, abbreviation 0
 === dir=cookbook/c/plants/find_dead_code (exit 0)
 hunt_names: 7 files under cookbook/c/plants/find_dead_code; 0 findings: type_case 0, function_case 0, constant_case 0, zig_bound 0, bound_order 0, vague 0, do_word 0, vague_local 0, container_type 0, abbreviation 0
+=== dir=cookbook/c/plants/find_dead_code_edges (exit 0)
+hunt_names: 5 files under cookbook/c/plants/find_dead_code_edges; 0 findings: type_case 0, function_case 0, constant_case 0, zig_bound 0, bound_order 0, vague 0, do_word 0, vague_local 0, container_type 0, abbreviation 0
 === dir=cookbook/c/plants/list_deep_nesting (exit 0)
 hunt_names: 1 files under cookbook/c/plants/list_deep_nesting; 0 findings: type_case 0, function_case 0, constant_case 0, zig_bound 0, bound_order 0, vague 0, do_word 0, vague_local 0, container_type 0, abbreviation 0
 === dir=cookbook/c/plants/list_long_functions (exit 0)

@@ -40,7 +40,7 @@ if SELF_TEST == WRITE then fail("check_goldens: self_test=1 holds the goldens, w
 -- Each case's values, one a line, as the launcher's stdin.
 function cases()
   local c = {"self_test=1"}
-  for d in {"hunt_names", "hunt_names_edges", "map_file", "map_file/breaks", "find_clones", "find_dead_code", "list_deep_nesting", "list_long_functions"} do
+  for d in {"hunt_names", "hunt_names_edges", "map_file", "map_file/breaks", "find_clones", "find_dead_code", "find_dead_code_edges", "list_deep_nesting", "list_long_functions"} do
     push(c, "dir=" .. PLANTS .. d)
   end
   push(c, "dir=" .. PLANTS .. "nowhere")
