@@ -63,6 +63,7 @@ msg     -- roc-ray's platform requires `Msg` (`[Model : model, Msg : msg] for pr
 min     -- Roc's own `Num.min`
 ms      -- a unit, milliseconds
 nav     -- HTML's element
+odin    -- the language's own name
 ol      -- HTML's element
 pi      -- the constant's own name
 png     -- the format's own name
