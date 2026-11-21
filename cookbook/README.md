@@ -122,7 +122,9 @@ checkouts, and `<lanes>` the one that holds your lanes.
   project's Roc code, without our house style. `shale cookbook:roc/check_foreign_code.shale`
 - `roc/check_module_size.shale`: holds each Roc module to a size, the whole
   file counted. `shale cookbook:roc/check_module_size.shale`
-- `roc/check_name_types.shale`: finds names that disagree with their types.
+- `roc/check_name_types.shale`: finds names that disagree with their types;
+  the launcher of a Roc script (`roc/check_name_types/`, on `roc_platform/`,
+  held to its goldens by that folder's `check_goldens.shale`).
   `shale cookbook:roc/check_name_types.shale table=name_types.txt`
 - `roc/check_stacking.shale`: finds groups laid out against the stacking
   rule, and with `write=1` lays them out by it. `shale cookbook:roc/check_stacking.shale`

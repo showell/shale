@@ -1,6 +1,11 @@
 -- This recipe finds names that disagree with their types: a number left bare
 -- beside a typed one, a constant that means "none" but has an ordinary type,
--- and, given a project's table, a word whose names must hold one type.
+-- and, given a project's table, a word whose names must hold one type. It is
+-- written in Roc, the app cookbook/roc/check_name_types/check_name_types.roc
+-- and the modules beside it (NameType, BareBesideUnit and NoValue, the
+-- checks; Declarations, Tree, Text and WordTable, what they read; Finding and
+-- SelfTest), on Shale's Roc platform (roc_platform/README.md); this file is
+-- its launcher, so it is launched as every Shale recipe is:
 --
 --   cd <repo> && shale <shale>/cookbook/roc/check_name_types.shale table=name_types.txt
 --   shale cookbook:roc/check_name_types.shale self_test=1
@@ -52,156 +57,35 @@
 -- The output is the counts, one line per finding, and the counts again
 -- (cookbook/findings.shale). The run fails if there are findings, or if
 -- any file doesn't parse, and the files that do parse are judged either way.
--- budget: steps=800000000 arena_bytes=2000000000 output_bytes=4000000
+--
+-- **The launcher** hands every value it is given to roc_platform/run.shale in
+-- the checkout this cookbook is in (the `cookbook` mount's parent), which
+-- builds the Roc there (cached; the first build after a change to C Shale
+-- compiles the platform's host, 25 to 50 s) and runs the program rooted
+-- here, so `glob=` and `table=` are this root's paths, as they were the Shale
+-- recipe's. A value the Roc script reads no `Shale.arg!` of stops the run
+-- before anything is built. Its output is the program's, then the launchers'
+-- own stops when it stops. `reads=inputs` builds and runs nothing, and prints
+-- the real path of each file the program is built from, one a line
+-- (run.shale's header), for a caller's cache key. Its goldens, the Shale
+-- original's output on the plants, are held by
+-- cookbook/roc/check_name_types/check_goldens.shale.
+-- budget: programs=10 output_bytes=8000000
 
-const SELF_TEST = arg("self_test", "") == "1"
-const GLOB = arg("glob", "**/*.roc")
-const TABLE_FILE = arg("table", "")
-use("./declared.shale")
-use("cookbook:findings.shale")
-use("./parsed.shale")
-use("./gate_recipe.shale")
-const CHECKS = {"name_type", "bare_beside_unit", "no_value"}
-const BARE_NUMBERS = {U8 = true, U16 = true, U32 = true, U64 = true, U128 = true, I8 = true, I16 = true, I32 = true, I64 = true, I128 = true, F32 = true, F64 = true, Dec = true}
-const NONE_WORDS = {no = true, none = true, unset = true}
-const QUESTION_WORDS = {is = true, has = true, can = true, should = true}
-const PREPOSITIONS = word_set("cookbook:words/prepositions.txt")
+const SCRIPT = "cookbook/roc/check_name_types/check_name_types.roc"
+const CHECKOUT = dirname(dirname(real("cookbook:README.md")))
+const HERE = real(".")
 
--- The table as a map from each word to the list of types allowed for it,
--- which is empty for `none` and `{"any"}` for `any`.
-function name_type_table(path)
-  local table_of_words = {}
-  if path == "" then return table_of_words end
-  if not exists(path) then fail("check_name_types: no table " .. path) end
-  local number = 0
-  for raw in lines(read(path)) do
-    number = number + 1
-    local l = trim(raw)
-    if l ~= "" and not starts_with(l, "#") then
-      local m = re_find(l, "^([a-z0-9]+): *(none|any|[A-Z][A-Za-z0-9]*(?:, *[A-Z][A-Za-z0-9]*)*)$")
-      if m == nil then fail("check_name_types: " .. path .. ":" .. number .. ": expected `word: Type, Type`, `word: none` or `word: any`") end
-      if has_key(table_of_words, m.groups[1]) then fail("check_name_types: " .. path .. ":" .. number .. ": `" .. m.groups[1] .. "` is listed twice") end
-      local allowed = {}
-      if m.groups[2] ~= "none" then
-        for t in split(m.groups[2], ",") do push(allowed, trim(t)) end
-      end
-      table_of_words[m.groups[1]] = allowed
-    end
-  end
-  return table_of_words
+-- `self_test` is read here by name, as the cookbook's full tier finds the
+-- recipes it runs `self_test=1` of. `arg_names()` is every value given; the
+-- rest are read by a name made as the run goes, so Shale's own check cannot
+-- see them: run.shale holds them to the script's reads.
+const SELF_TEST = arg("self_test", "")
+local values = {"script=" .. SCRIPT, "in=" .. HERE}
+if SELF_TEST ~= "" then push(values, "self_test=" .. SELF_TEST) end
+for name in arg_names() do
+  if name ~= "self_test" then push(values, name .. "=" .. arg(name, "")) end
 end
-
-function promises_nothing(table_of_words, word)
-  return has_key(table_of_words, word) and has_item(table_of_words[word], "any")
-end
-
-function judge_name_type(d, table_of_words, report)
-  local ws = name_words(sub(d.name, 1, ends_with(d.name, "!") and #d.name - 1 or #d.name))
-  if #ws == 0 or not has_key(table_of_words, ws[#ws]) then return nil end
-  local allowed = table_of_words[ws[#ws]]
-  if promises_nothing(table_of_words, ws[#ws]) then return nil end
-  local type_name = d.kind == "field" and d.type or d.result
-  if type_name == "" or type_name == "_" then return nil end
-  local names_something_else = has_key(PREPOSITIONS, ws[1]) or has_key(QUESTION_WORDS, ws[1])
-  if #allowed == 0 then
-    push(report, {path = d.path, line = d.line, check = "name_type", what = "`" .. d.name .. "` ends in `" .. ws[#ws] .. "`, which no name here may: its type is `" .. type_name .. "`"})
-  elseif not names_something_else and not has_item(allowed, last_part(type_name)) then
-    push(report, {path = d.path, line = d.line, check = "name_type", what = "`" .. d.name .. "` is `" .. type_name .. "`, and a name ending `" .. ws[#ws] .. "` is `" .. join(allowed, "` or `") .. "` here"})
-  end
-  return nil
-end
-
--- The nominal types built on a number, by name.
-function unit_types(all)
-  local units = {}
-  for d in all do
-    if d.kind == "type" and d.is_nominal and has_key(BARE_NUMBERS, d.underlying) then units[d.name] = true end
-  end
-  return units
-end
-
-function judge_bare_fields(all, table_of_words, report)
-  local units = unit_types(all)
-  local unit_of_field = {}
-  for d in all do
-    if d.kind == "field" and has_key(units, last_part(d.type)) then unit_of_field[d.name] = d end
-  end
-  for d in all do
-    if d.kind == "field" and has_key(BARE_NUMBERS, d.type) and has_key(unit_of_field, d.name) and not has_key(PREPOSITIONS, d.name) and not promises_nothing(table_of_words, d.name) then
-      local typed = unit_of_field[d.name]
-      push(report, {path = d.path, line = d.line, check = "bare_beside_unit", what = "the field `" .. d.name .. "` is a bare `" .. d.type .. "` here and a `" .. typed.type .. "` at " .. typed.path .. ":" .. typed.line})
-    end
-  end
-  return nil
-end
-
-function judge_no_values(all, report)
-  local tag_types = {}
-  -- An alias of a function type (`Draw : U64 -> List(U64)`) makes a value
-  -- of it a function, which `fn` sees only when written out.
-  local function_aliases = {}
-  for d in all do
-    if d.kind == "type" and d.is_tags then tag_types[d.name] = true end
-    if d.kind == "type" and d.is_fn and not d.is_nominal then function_aliases[d.name] = true end
-  end
-  for d in all do
-    if d.kind == "value" and d.annotated and not d.fn then
-      local ws = split(d.name, "_")
-      local is_none_word = has_key(NONE_WORDS, ws[1])
-      local is_plain = d.type ~= "Bool" and not d.has_text and not starts_with(d.type, "[") and not starts_with(d.type, "List(") and d.owner ~= last_part(d.type) and not has_key(tag_types, last_part(d.type)) and not has_key(function_aliases, last_part(d.type))
-      if is_none_word and is_plain then push(report, {path = d.path, line = d.line, check = "no_value", what = "`" .. d.name .. "` means none and is a `" .. d.type .. "`: keep the case as a tag"}) end
-    end
-  end
-  return nil
-end
-
-function self_test()
-  local at = "cookbook:roc/plants/check_name_types/"
-  local table_arg = "table=" .. at .. "table.txt"
-  check_plants("check_name_types", "cookbook:roc/check_name_types.shale", CHECKS, {
-    {glob = at .. "name_type.roc", args = {table_arg}, counts = {name_type = 6}, says = {"name_type.roc:3: name_type: `bull_dist` is `Geom.Along`, and a name ending `dist` is `Distance` here", "`in_2_frames` ends in `frames`"}},
-    {glob = at .. "name_type.roc"},
-    {glob = at .. "quiet_name_type.roc", args = {table_arg}},
-    {glob = at .. "bare_beside_unit/*.roc", counts = {bare_beside_unit = 2}, says = {"Rider.roc:4: bare_beside_unit: the field `forward` is a bare `F64` here and a `Distance` at"}},
-    {glob = at .. "quiet_bare/*.roc"},
-    {glob = at .. "bare_any/*.roc", counts = {bare_beside_unit = 1}, says = {"the field `id` is a bare `U64` here"}},
-    {glob = at .. "bare_any/*.roc", args = {"table=" .. at .. "table_any.txt"}},
-    {glob = at .. "name_type.roc", args = {"table=" .. at .. "table_any.txt"}},
-    {glob = at .. "no_value.roc", counts = {no_value = 4}, says = {"no_value.roc:9: no_value: `no_frames` means none and is a `Steps`"}},
-    {glob = at .. "quiet_no_value.roc"},
-    {glob = at .. "broken/*.roc", stops = true, says = {"refused: "}},
-    {glob = at .. "quiet_name_type.roc", args = {"table=" .. at .. "no_such.txt"}, stops = true, says = {"no table"}},
-    {glob = at .. "quiet_name_type.roc", args = {"table=" .. at .. "table_malformed.txt"}, stops = true, says = {"table_malformed.txt:2: expected"}},
-    {glob = at .. "quiet_name_type.roc", args = {"table=" .. at .. "table_twice.txt"}, stops = true, says = {"`dist` is listed twice"}},
-  })
-  return nil
-end
-
-function run_check()
-  local table_of_words = name_type_table(TABLE_FILE)
-  local paths = glob(GLOB)
-  local parsed = parse_roc_files(paths)
-  local all = {}
-  for f in parsed.files do
-    for d in declarations_of(f) do push(all, d) end
-  end
-  local report = {}
-  for d in all do
-    if d.kind == "field" or d.kind == "value" then judge_name_type(d, table_of_words, report) end
-  end
-  judge_bare_fields(all, table_of_words, report)
-  judge_no_values(all, report)
-  local verdict = verdict_of("check_name_types", CHECKS, report, #paths)
-  print_findings(verdict.summary, verdict.found)
-  fail_if_refused("check_name_types", parsed.refused)
-  return verdict
-end
-
--- This `fail` stands at the top level so the summary is the last line a
--- caller reads: a stop inside a function prints the calls after it.
-if SELF_TEST then
-  self_test()
-else
-  local verdict = run_check()
-  if #verdict.found > 0 then fail(verdict.summary) end
-end
+local r = run({"shale", "--root", CHECKOUT, CHECKOUT .. "/roc_platform/run.shale", "--args-stdin"}, {stdin = join(values, "\n") .. "\n", timeout_ms = 1800000, whole = 8000000})
+print(trim_end(r.out))
+if r.code ~= 0 then fail("check_name_types: the Roc program stopped (exit " .. r.code .. ")") end

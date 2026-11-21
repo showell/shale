@@ -93,7 +93,11 @@ are passed in):
   [check_goldens.shale](check_vocabulary/check_goldens.shale) holds it to
   its goldens.
 - [check_name_types.shale](check_name_types.shale): names that disagree
-  with their types.
+  with their types. It is written in Roc, a root,
+  [check_name_types/check_name_types.roc](check_name_types/check_name_types.roc),
+  with its checks in `NameType.roc`, `BareBesideUnit.roc` and `NoValue.roc`
+  beside it; [check_goldens.shale](check_name_types/check_goldens.shale)
+  holds it to its goldens.
 - [check_families.shale](check_families.shale): a module spelled unlike
   the others that share its last word, and one type name declared in two
   modules with different shapes. Give it the whole tree, since twins often
