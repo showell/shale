@@ -1,19 +1,20 @@
--- cookbook/c/list_deep_nesting/check_goldens.shale: list_deep_nesting (the Roc script beside
--- this, list_deep_nesting.roc, through its launcher cookbook/c/list_deep_nesting.shale) held to
--- its goldens, goldens.txt beside this, line for line and exit code for exit
--- code. From the shale checkout's root:
+-- cookbook/c/list_deep_nesting/check_goldens.shale: list_deep_nesting (the
+-- Roc script beside this, list_deep_nesting.roc, through its launcher
+-- cookbook/c/list_deep_nesting.shale) held to its goldens, goldens.txt
+-- beside this, line for line and exit code for exit code. From the shale
+-- checkout's root:
 --
 --   shale cookbook/c/list_deep_nesting/check_goldens.shale self_test=1
 --   shale cookbook/c/list_deep_nesting/check_goldens.shale write=1
 --
--- The cases are the self-test, each plant file mapped (the shape breaks
--- among them, each a stop), each plant folder split as a tree (list_deep_nesting's
--- own stops at its first break), and the two ways of giving neither or both
--- of `file=` and `tree=`. The goldens were written from the Shale original's
--- output on them, and the port matched the original on Shale's own C too
--- (`tree=c`, `tree=c/host`, and `file=` each of c/'s 99 files), which is left
--- out because that code moves. A case left out: a `file=` that is not there,
--- whose stop has the Roc's own words (the original's was `read`'s).
+-- The cases are the self-test, then each plant folder (map_file's breaks
+-- among them, each a stop) at the default `min`, `tests=1`, `min=1`,
+-- `min=2 tests=1`, `min=3`, `min=5` and `min=9`. The goldens were written
+-- from the Shale original's output on them, and the port matched the
+-- original on Shale's own C too (`dir=c` alone, with `tests=1 min=3` and
+-- with `min=2`, and `dir=c/host min=5`), which is left out because that
+-- code moves. Cases left out: a value that is no integer and a `dir=` that
+-- is not there, whose stops have the Roc's own words.
 --
 -- What is held: the exit code, and the output with each runner's own lines
 -- left out: Shale's `──` report lines, the `called from` lines, and the
