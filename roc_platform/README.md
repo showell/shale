@@ -167,6 +167,7 @@ relative path), **`cookbook/zig/list_long_files/`**, **`cookbook/zig/count_comme
 **`cookbook/roc/find_unused_imports/`**, **`cookbook/roc/check_families/`**,
 **`cookbook/roc/find_deep_calls/`**, **`cookbook/roc/check_vocabulary/`**,
 **`cookbook/roc/check_name_types/`**, **`cookbook/roc/find_bare_floats/`**,
+**`cookbook/roc/check_errors/`** (which runs roc-types too, for `types=1`),
 **`cookbook/count_shale_stops/`** and **`cookbook/roc/find_extra_parens/`**
 are ported the same way: the
 launcher keeps the recipe's name and arguments, the goldens were written
