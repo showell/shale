@@ -1,0 +1,3 @@
+# lambdas and annotations, by a path's end
+edges/annotations.roc pick -- a plant's dictated name
+annotations.roc run! -- an effect's
