@@ -21,6 +21,7 @@ app [main!] {
 
 import pf.Shale
 import items.Item
+import items.Paths
 import items.Split
 import items.Words
 import Clones
@@ -92,7 +93,7 @@ read_functions! = |folder, tests| {
 	for path in c_files_under!(folder) {
 		text = read_text!(path)
 		lines = Split.lines(text)
-		is_kept_file = tests or !(Shape.is_test_path(folder, path))
+		is_kept_file = tests or !(Paths.is_test_path(folder, path))
 		for item in split_or_stop!(path, text) {
 			is_read = item.kind == Function or (tests and item.kind == Test)
 			has_body = item.body_first != 0 and item.body_first != item.sig_last
@@ -133,10 +134,5 @@ split_or_stop! = |path, text|
 c_files_under! : Str => List(Str)
 c_files_under! = |folder| {
 	paths = Shale.glob!("${folder}/**/*.c").concat(Shale.glob!("${folder}/**/*.h"))
-	paths.keep_if(|path| !(is_in_out_folder(folder, path))).sort_with(Words.byte_order)
+	paths.keep_if(|path| !(Paths.is_in_out_folder(folder, path))).sort_with(Words.byte_order)
 }
-
-## Whether a folder below `folder` on the way to `path` is named `out`.
-is_in_out_folder : Str, Str -> Bool
-is_in_out_folder = |folder, path|
-	path.drop_prefix("${folder}/").split_on("/").drop_last(1).contains("out")

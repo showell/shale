@@ -22,6 +22,7 @@ app [main!] {
 
 import pf.Shale
 import items.Item
+import items.Paths
 import items.Split
 import items.Words
 import Length
@@ -124,10 +125,5 @@ split_or_stop! = |path, text|
 c_files_under! : Str => List(Str)
 c_files_under! = |folder| {
 	paths = Shale.glob!("${folder}/**/*.c").concat(Shale.glob!("${folder}/**/*.h"))
-	paths.keep_if(|path| !(is_in_out_folder(folder, path))).sort_with(Words.byte_order)
+	paths.keep_if(|path| !(Paths.is_in_out_folder(folder, path))).sort_with(Words.byte_order)
 }
-
-## Whether a folder below `folder` on the way to `path` is named `out`.
-is_in_out_folder : Str, Str -> Bool
-is_in_out_folder = |folder, path|
-	path.drop_prefix("${folder}/").split_on("/").drop_last(1).contains("out")

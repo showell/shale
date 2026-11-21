@@ -4,10 +4,11 @@
 ## "../items/main.roc"`, then `import items.Split`). It reaches no effect:
 ## a recipe reads the file and hands Split.items its text.
 ##
-##   Split   the splitter, and Shale's `lines`
+##   Split   the splitter, Shale's `lines` and an item's masked text
 ##   Guard   a header's guard, framed
 ##   Item    an item and its kinds
 ##   Mask    the masker, and the byte classes the readers read by
 ##   Head    the readers of an item's opening line or head
 ##   Words   the names in an item's text: its uses, an enum's constants
-package [Guard, Head, Item, Mask, Split, Words] {}
+##   Paths   a file's path read: the tests', or under a folder named `out`
+package [Guard, Head, Item, Mask, Paths, Split, Words] {}

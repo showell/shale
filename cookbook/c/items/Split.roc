@@ -82,6 +82,22 @@ Split := [].{
 			Ok($items)
 		}
 	}
+
+	## The masked text of the file's lines from `first` to `last`, counted from
+	## 1, joined by newlines: Shale's `c_masked_text`.
+	masked_text : List(List(U8)), { first : U64, last : U64 } -> List(U8)
+	masked_text = |file_lines, { first, last }| {
+		var $text = []
+		var $at = first
+		while $at <= last {
+			if $at > first {
+				$text = $text.append('\n')
+			}
+			$text = $text.concat(Mask.masked(file_lines.get($at - 1) ?? []))
+			$at = $at + 1
+		}
+		$text
+	}
 }
 
 ## A file being split: its path, for the errors, and its lines.
@@ -109,7 +125,7 @@ with_uses = |file, item, wanted| {
 	has_body = item.body_first != 0
 	is_code = item.kind == Function or item.kind == Test or item.kind == TestList
 	if wanted and has_body and is_code {
-		text = masked_text(file, { first: item.body_first, last: item.body_last })
+		text = Split.masked_text(file.lines, { first: item.body_first, last: item.body_last })
 		body =
 			if item.body_first == item.sig_last and item.kind != TestList {
 				match Mask.byte_from(text, '{', 0) {
@@ -123,21 +139,6 @@ with_uses = |file, item, wanted| {
 	} else {
 		item
 	}
-}
-
-## The masked text of the lines from `first` to `last`, joined by newlines.
-masked_text : CFile, { first : U64, last : U64 } -> List(U8)
-masked_text = |file, { first, last }| {
-	var $text = []
-	var $at = first
-	while $at <= last {
-		if $at > first {
-			$text = $text.append('\n')
-		}
-		$text = $text.concat(Mask.masked(line_at(file, $at)))
-		$at = $at + 1
-	}
-	$text
 }
 
 ## The line that closes the braced item opened at line `from`: the first
@@ -244,7 +245,7 @@ item_at = |file, at, code| {
 static_item : CFile, U64, Str -> Try(Item, Str)
 static_item = |file, at, storage| {
 	last = head_close(file, at)?
-	flat = spaces_made_one(masked_text(file, { first: at, last }))
+	flat = spaces_made_one(Split.masked_text(file.lines, { first: at, last }))
 	ending = last_code_byte(line_at(file, last))
 	match Head.function_head(flat) {
 		Ok({ return_type, name }) => {
@@ -310,7 +311,7 @@ type_item = |file, at, code| {
 		} else {
 			headed
 		}
-	text = masked_text(file, { first: at, last: braced.last })
+	text = Split.masked_text(file.lines, { first: at, last: braced.last })
 	declared =
 		if code.starts_with("typedef".to_utf8()) {
 			match (kind, Head.pointer_name(text, WithoutConst), Head.declared_name(text)) {
@@ -358,7 +359,7 @@ hash_item = |file, at, code| {
 		Ok({ word, argument }) if word == "define" => {
 			defined = Item.new(Macro, argument, { first: at, last })
 			if last > at {
-				makes = Words.suffixes(masked_text(file, { first: at, last }))
+				makes = Words.suffixes(Split.masked_text(file.lines, { first: at, last }))
 				Ok({ ..defined, body_first: at + 1, body_last: last, makes })
 			} else {
 				Ok(defined)
@@ -421,7 +422,7 @@ test_list_item = |file, at, code| {
 static_assert_item : CFile, U64 -> Try(Item, Str)
 static_assert_item = |file, at| {
 	close = paren_close(file, at)?
-	names = Words.names(masked_text(file, { first: at, last: close }))
+	names = Words.names(Split.masked_text(file.lines, { first: at, last: close }))
 	name = names.find_first(|each| each != "_Static_assert" and each != "sizeof") ?? ""
 	Ok(Item.new(StaticAssert, name, { first: at, last: close }))
 }

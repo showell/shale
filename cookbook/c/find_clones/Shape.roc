@@ -39,19 +39,6 @@ Shape := [].{
 		}
 		{ path, first: item.first, last: item.last, name: item.name, lines: $counted }
 	}
-
-	## Whether `path`, below the folder, is the tests': in a `tests` folder,
-	## or a file whose name starts with `test` (c/foundation/test.h, the
-	## tests' runner).
-	is_test_path : Str, Str -> Bool
-	is_test_path = |folder, path| {
-		below = Str.from_utf8_lossy(path.to_utf8().drop_first(folder.count_utf8_bytes() + 1))
-		file_name = match below.split_on("/").last() {
-			Ok(last) => last
-			Err(_) => below
-		}
-		below.starts_with("tests/") or below.contains("/tests/") or file_name.starts_with("test")
-	}
 }
 
 ## C's keywords and the words of its types and storage, which stay
