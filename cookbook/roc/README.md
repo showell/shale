@@ -99,7 +99,12 @@ are passed in):
   [check_goldens.shale](find_unclear_names/check_goldens.shale) holds it to
   its goldens.
 - [find_unused_imports.shale](find_unused_imports.shale): an import line
-  the file leaves unused, which Roc's compiler accepts quietly.
+  the file leaves unused, which Roc's compiler accepts quietly. It is
+  written in Roc too, a root,
+  [find_unused_imports/find_unused_imports.roc](find_unused_imports/find_unused_imports.roc),
+  with its rule in `Imports.roc` beside it;
+  [check_goldens.shale](find_unused_imports/check_goldens.shale) holds it to
+  its goldens.
 
 `hunt_names`, `check_errors` and `check_boundaries` can also ask Roc's type
 checker for types: add `types=1 root=<app>`, where the app imports the
@@ -198,7 +203,8 @@ beside them). Each header lists its functions.
 - [peer_calls.shale](peer_calls.shale),
   [number_literals.shale](number_literals.shale) and
   [method_text.shale](method_text.shale): parts of `rewrite_method_calls`.
-- [imports.shale](imports.shale): a file's imports that it leaves unused.
+- [imports.shale](imports.shale): a file's imports that it leaves unused,
+  for `rewrite_method_calls`; `find_unused_imports`' Roc holds the same rule.
 - [gate_recipe.shale](gate_recipe.shale): what the gating recipes share,
   their verdict and their plants' self-test.
 

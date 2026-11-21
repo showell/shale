@@ -148,8 +148,10 @@ checkouts, and `<lanes>` the one that holds your lanes.
   `roc/find_unclear_names/find_unclear_names.roc`, on `roc_platform/`,
   held to its goldens by that folder's `check_goldens.shale`).
   `shale cookbook:roc/find_unclear_names.shale`
-- `roc/find_unused_imports.shale`: finds the imports a file leaves unused.
-  `shale cookbook:roc/find_unused_imports.shale`
+- `roc/find_unused_imports.shale`: finds the imports a file leaves unused;
+  the launcher of a Roc script (`roc/find_unused_imports/`, on
+  `roc_platform/`, held to its goldens by that folder's
+  `check_goldens.shale`). `shale cookbook:roc/find_unused_imports.shale`
 - `roc/gate_recipe.shale` (library): what the recipes that gate a build
   share, their verdict and their plants' self-test. `use("cookbook:roc/gate_recipe.shale")`
 - `roc/groups.shale` (library): Roc's bracket groups and the stacking rule.

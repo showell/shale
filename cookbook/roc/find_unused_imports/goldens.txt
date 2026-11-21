@@ -1,0 +1,130 @@
+=== unused.roc (exit 1)
+find_unused_imports (Roc): 1 files; unused_import 1
+cookbook:roc/plants/find_unused_imports/unused.roc:3: unused_import: `game.Polygon` is imported and never used: delete the line
+find_unused_imports (Roc): 1 files; unused_import 1
+── stop: fail: find_unused_imports (Roc): 1 files; unused_import 1
+=== unused_alias.roc (exit 1)
+find_unused_imports (Roc): 1 files; unused_import 1
+cookbook:roc/plants/find_unused_imports/unused_alias.roc:3: unused_import: `game.Distance` as `D` is imported and never used: delete the line
+find_unused_imports (Roc): 1 files; unused_import 1
+── stop: fail: find_unused_imports (Roc): 1 files; unused_import 1
+=== unused_exposing.roc (exit 1)
+find_unused_imports (Roc): 1 files; unused_import 1
+cookbook:roc/plants/find_unused_imports/unused_exposing.roc:2: unused_import: `pf.Stdout` is imported and never used: delete the line
+find_unused_imports (Roc): 1 files; unused_import 1
+── stop: fail: find_unused_imports (Roc): 1 files; unused_import 1
+=== unused_file_import.roc (exit 1)
+find_unused_imports (Roc): 1 files; unused_import 1
+cookbook:roc/plants/find_unused_imports/unused_file_import.roc:2: unused_import: the file import `page` is imported and never used: delete the line
+find_unused_imports (Roc): 1 files; unused_import 1
+── stop: fail: find_unused_imports (Roc): 1 files; unused_import 1
+=== unused_in_prose.roc (exit 1)
+find_unused_imports (Roc): 1 files; unused_import 1
+cookbook:roc/plants/find_unused_imports/unused_in_prose.roc:2: unused_import: `game.Polygon` is imported and never used: delete the line
+find_unused_imports (Roc): 1 files; unused_import 1
+── stop: fail: find_unused_imports (Roc): 1 files; unused_import 1
+=== unused_method_only.roc (exit 1)
+find_unused_imports (Roc): 1 files; unused_import 1
+cookbook:roc/plants/find_unused_imports/unused_method_only.roc:3: unused_import: `game.Distance` is imported and never used: delete the line
+find_unused_imports (Roc): 1 files; unused_import 1
+── stop: fail: find_unused_imports (Roc): 1 files; unused_import 1
+=== unused_tag_namesake.roc (exit 1)
+find_unused_imports (Roc): 1 files; unused_import 1
+cookbook:roc/plants/find_unused_imports/unused_tag_namesake.roc:3: unused_import: `game.Other` is imported and never used: delete the line
+find_unused_imports (Roc): 1 files; unused_import 1
+── stop: fail: find_unused_imports (Roc): 1 files; unused_import 1
+=== unused_beside_hosted.roc (exit 1)
+find_unused_imports (Roc): 1 files; unused_import 1
+cookbook:roc/plants/find_unused_imports/unused_beside_hosted.roc:24: unused_import: `Http` is imported and never used: delete the line
+find_unused_imports (Roc): 1 files; unused_import 1
+── stop: fail: find_unused_imports (Roc): 1 files; unused_import 1
+=== unused.roc,cookbook:roc/plants/find_unused_imports/unused_alias.roc (exit 1)
+find_unused_imports (Roc): 2 files; unused_import 2
+cookbook:roc/plants/find_unused_imports/unused.roc:3: unused_import: `game.Polygon` is imported and never used: delete the line
+cookbook:roc/plants/find_unused_imports/unused_alias.roc:3: unused_import: `game.Distance` as `D` is imported and never used: delete the line
+find_unused_imports (Roc): 2 files; unused_import 2
+── stop: fail: find_unused_imports (Roc): 2 files; unused_import 2
+=== quiet_qualified.roc (exit 0)
+find_unused_imports (Roc): 1 files; unused_import 0
+=== quiet_annotation.roc (exit 0)
+find_unused_imports (Roc): 1 files; unused_import 0
+=== quiet_expect.roc (exit 0)
+find_unused_imports (Roc): 1 files; unused_import 0
+=== quiet_pattern_tag.roc (exit 0)
+find_unused_imports (Roc): 1 files; unused_import 0
+=== quiet_tag.roc (exit 0)
+find_unused_imports (Roc): 1 files; unused_import 0
+=== quiet_exposing.roc (exit 0)
+find_unused_imports (Roc): 1 files; unused_import 0
+=== quiet_alias.roc (exit 0)
+find_unused_imports (Roc): 1 files; unused_import 0
+=== quiet_interpolation.roc (exit 0)
+find_unused_imports (Roc): 1 files; unused_import 0
+=== quiet_file_import.roc (exit 0)
+find_unused_imports (Roc): 1 files; unused_import 0
+=== quiet_hosted.roc (exit 0)
+find_unused_imports (Roc): 1 files; unused_import 0
+=== broken/*.roc (exit 1)
+find_unused_imports (Roc): 1 files; unused_import 0
+refused: cookbook:roc/plants/find_unused_imports/broken/refused.roc: 4 parse problem(s): a file that does not parse has no tree to hunt
+── stop: fail: find_unused_imports: roc-ast refused 1 files (named above), which have no tree to judge; every other file was judged
+=== *.roc (exit 1)
+find_unused_imports (Roc): 18 files; unused_import 8
+cookbook:roc/plants/find_unused_imports/unused.roc:3: unused_import: `game.Polygon` is imported and never used: delete the line
+cookbook:roc/plants/find_unused_imports/unused_alias.roc:3: unused_import: `game.Distance` as `D` is imported and never used: delete the line
+cookbook:roc/plants/find_unused_imports/unused_beside_hosted.roc:24: unused_import: `Http` is imported and never used: delete the line
+cookbook:roc/plants/find_unused_imports/unused_exposing.roc:2: unused_import: `pf.Stdout` is imported and never used: delete the line
+cookbook:roc/plants/find_unused_imports/unused_file_import.roc:2: unused_import: the file import `page` is imported and never used: delete the line
+cookbook:roc/plants/find_unused_imports/unused_in_prose.roc:2: unused_import: `game.Polygon` is imported and never used: delete the line
+cookbook:roc/plants/find_unused_imports/unused_method_only.roc:3: unused_import: `game.Distance` is imported and never used: delete the line
+cookbook:roc/plants/find_unused_imports/unused_tag_namesake.roc:3: unused_import: `game.Other` is imported and never used: delete the line
+find_unused_imports (Roc): 18 files; unused_import 8
+── stop: fail: find_unused_imports (Roc): 18 files; unused_import 8
+=== **/*.roc (exit 1)
+find_unused_imports (Roc): 19 files; unused_import 8
+cookbook:roc/plants/find_unused_imports/unused.roc:3: unused_import: `game.Polygon` is imported and never used: delete the line
+cookbook:roc/plants/find_unused_imports/unused_alias.roc:3: unused_import: `game.Distance` as `D` is imported and never used: delete the line
+cookbook:roc/plants/find_unused_imports/unused_beside_hosted.roc:24: unused_import: `Http` is imported and never used: delete the line
+cookbook:roc/plants/find_unused_imports/unused_exposing.roc:2: unused_import: `pf.Stdout` is imported and never used: delete the line
+cookbook:roc/plants/find_unused_imports/unused_file_import.roc:2: unused_import: the file import `page` is imported and never used: delete the line
+cookbook:roc/plants/find_unused_imports/unused_in_prose.roc:2: unused_import: `game.Polygon` is imported and never used: delete the line
+cookbook:roc/plants/find_unused_imports/unused_method_only.roc:3: unused_import: `game.Distance` is imported and never used: delete the line
+cookbook:roc/plants/find_unused_imports/unused_tag_namesake.roc:3: unused_import: `game.Other` is imported and never used: delete the line
+find_unused_imports (Roc): 19 files; unused_import 8
+refused: cookbook:roc/plants/find_unused_imports/broken/refused.roc: 4 parse problem(s): a file that does not parse has no tree to hunt
+── stop: fail: find_unused_imports: roc-ast refused 1 files (named above), which have no tree to judge; every other file was judged
+=== quiet_tag.roc , cookbook:roc/plants/find_unused_imports/unused.roc , (exit 1)
+find_unused_imports (Roc): 2 files; unused_import 1
+cookbook:roc/plants/find_unused_imports/unused.roc:3: unused_import: `game.Polygon` is imported and never used: delete the line
+find_unused_imports (Roc): 2 files; unused_import 1
+── stop: fail: find_unused_imports (Roc): 2 files; unused_import 1
+=== unused.roc,cookbook:roc/plants/find_unused_imports/unused.roc (exit 1)
+find_unused_imports (Roc): 2 files; unused_import 2
+cookbook:roc/plants/find_unused_imports/unused.roc:3: unused_import: `game.Polygon` is imported and never used: delete the line
+cookbook:roc/plants/find_unused_imports/unused.roc:3: unused_import: `game.Polygon` is imported and never used: delete the line
+find_unused_imports (Roc): 2 files; unused_import 2
+── stop: fail: find_unused_imports (Roc): 2 files; unused_import 2
+=== nothing_here/*.roc (exit 0)
+find_unused_imports (Roc): 0 files; unused_import 0
+=== self_test=1 (exit 0)
+ok   cookbook:roc/plants/find_unused_imports/unused.roc
+ok   cookbook:roc/plants/find_unused_imports/unused_alias.roc
+ok   cookbook:roc/plants/find_unused_imports/unused_exposing.roc
+ok   cookbook:roc/plants/find_unused_imports/unused_file_import.roc
+ok   cookbook:roc/plants/find_unused_imports/unused_in_prose.roc
+ok   cookbook:roc/plants/find_unused_imports/unused_method_only.roc
+ok   cookbook:roc/plants/find_unused_imports/unused_tag_namesake.roc
+ok   cookbook:roc/plants/find_unused_imports/unused_beside_hosted.roc
+ok   cookbook:roc/plants/find_unused_imports/unused.roc,cookbook:roc/plants/find_unused_imports/unused_alias.roc
+ok   cookbook:roc/plants/find_unused_imports/quiet_qualified.roc
+ok   cookbook:roc/plants/find_unused_imports/quiet_annotation.roc
+ok   cookbook:roc/plants/find_unused_imports/quiet_expect.roc
+ok   cookbook:roc/plants/find_unused_imports/quiet_pattern_tag.roc
+ok   cookbook:roc/plants/find_unused_imports/quiet_tag.roc
+ok   cookbook:roc/plants/find_unused_imports/quiet_exposing.roc
+ok   cookbook:roc/plants/find_unused_imports/quiet_alias.roc
+ok   cookbook:roc/plants/find_unused_imports/quiet_interpolation.roc
+ok   cookbook:roc/plants/find_unused_imports/quiet_file_import.roc
+ok   cookbook:roc/plants/find_unused_imports/quiet_hosted.roc
+ok   cookbook:roc/plants/find_unused_imports/broken/*.roc
+find_unused_imports self_test: PASS (20 rows: each plant gives its findings and a nonzero exit, each clean case none and exit 0)

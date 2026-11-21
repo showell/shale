@@ -1,5 +1,9 @@
 -- This recipe finds import lines that the file never uses, since Roc doesn't
--- warn of one.
+-- warn of one. It is written in Roc, the app
+-- cookbook/roc/find_unused_imports/find_unused_imports.roc and the modules
+-- beside it (Imports, the rule; SelfTest, the plants' run), on Shale's Roc
+-- platform (roc_platform/README.md); this file is its launcher, so it is
+-- launched as every Shale recipe is:
 --
 --   cd <repo> && shale <shale>/cookbook/roc/find_unused_imports.shale
 --   shale cookbook:roc/find_unused_imports.shale self_test=1
@@ -39,68 +43,36 @@
 -- The output is the counts, one line per finding, and the counts again
 -- (cookbook/findings.shale). The run fails if there are findings, or if
 -- any file doesn't parse, and the files that do parse are judged either way.
--- budget: steps=800000000 arena_bytes=2000000000 output_bytes=4000000
+--
+-- **The launcher** hands every value it is given to roc_platform/run.shale in
+-- the checkout this cookbook is in (the `cookbook` mount's parent), which
+-- builds the Roc there (cached; the first build after a change to C Shale
+-- compiles the platform's host, 25 to 50 s) and runs the program rooted
+-- here, so `glob=` is this root's paths, as it was the Shale recipe's. A
+-- value the Roc script reads no `Shale.arg!` of stops the run before
+-- anything is built. Its output is the program's, then the launchers' own
+-- stops when it stops. `reads=inputs` builds and runs nothing, and prints the
+-- real path of each file the program is built from, one a line (run.shale's
+-- header), for a caller's cache key. Its goldens, the Shale original's output
+-- on the plants, are held by cookbook/roc/find_unused_imports/check_goldens.shale.
+-- The rules live twice: here, in Roc, and in cookbook/roc/imports.shale,
+-- which rewrite_method_calls.shale still reads.
+-- budget: programs=10 output_bytes=8000000
 
-const SELF_TEST = arg("self_test", "") == "1"
-const GLOB = arg("glob", "**/*.roc")
-use("cookbook:findings.shale")
-use("./parsed.shale")
-use("./gate_recipe.shale")
-use("./imports.shale")
-const CHECKS = {"unused_import"}
+const SCRIPT = "cookbook/roc/find_unused_imports/find_unused_imports.roc"
+const CHECKOUT = dirname(dirname(real("cookbook:README.md")))
+const HERE = real(".")
 
-function judge_file(f, report)
-  for imp in unused_imports(f.nodes, split(read(f.path), "\n")) do
-    push(report, {path = f.path, line = imp.line, check = "unused_import", what = imp.label .. " is imported and never used: delete the line"})
-  end
-  return nil
+-- `self_test` is read here by name, as the cookbook's full tier finds the
+-- recipes it runs `self_test=1` of. `arg_names()` is every value given; the
+-- rest are read by a name made as the run goes, so Shale's own check cannot
+-- see them: run.shale holds them to the script's reads.
+const SELF_TEST = arg("self_test", "")
+local values = {"script=" .. SCRIPT, "in=" .. HERE}
+if SELF_TEST ~= "" then push(values, "self_test=" .. SELF_TEST) end
+for name in arg_names() do
+  if name ~= "self_test" then push(values, name .. "=" .. arg(name, "")) end
 end
-function self_test()
-  local at = "cookbook:roc/plants/find_unused_imports/"
-  check_plants("find_unused_imports", "cookbook:roc/find_unused_imports.shale", CHECKS, {
-    {glob = at .. "unused.roc", counts = {unused_import = 1}, says = {"unused.roc:3: unused_import: `game.Polygon` is imported and never used"}},
-    {glob = at .. "unused_alias.roc", counts = {unused_import = 1}, says = {"`game.Distance` as `D` is imported and never used"}},
-    {glob = at .. "unused_exposing.roc", counts = {unused_import = 1}, says = {"`pf.Stdout` is imported"}},
-    {glob = at .. "unused_file_import.roc", counts = {unused_import = 1}, says = {"the file import `page` is imported"}},
-    {glob = at .. "unused_in_prose.roc", counts = {unused_import = 1}, says = {"`game.Polygon` is imported"}},
-    {glob = at .. "unused_method_only.roc", counts = {unused_import = 1}, says = {"`game.Distance` is imported"}},
-    {glob = at .. "unused_tag_namesake.roc", counts = {unused_import = 1}, says = {"`game.Other` is imported"}},
-    {glob = at .. "unused_beside_hosted.roc", counts = {unused_import = 1}, says = {"unused_beside_hosted.roc:24: unused_import: `Http` is imported"}},
-    {glob = at .. "unused.roc," .. at .. "unused_alias.roc", counts = {unused_import = 2}},
-    {glob = at .. "quiet_qualified.roc"},
-    {glob = at .. "quiet_annotation.roc"},
-    {glob = at .. "quiet_expect.roc"},
-    {glob = at .. "quiet_pattern_tag.roc"},
-    {glob = at .. "quiet_tag.roc"},
-    {glob = at .. "quiet_exposing.roc"},
-    {glob = at .. "quiet_alias.roc"},
-    {glob = at .. "quiet_interpolation.roc"},
-    {glob = at .. "quiet_file_import.roc"},
-    {glob = at .. "quiet_hosted.roc"},
-    {glob = at .. "broken/*.roc", stops = true, says = {"refused: "}},
-  })
-  return nil
-end
-
-function run_check()
-  local paths = {}
-  for g in split(GLOB, ",") do
-    for p in glob(trim(g)) do push(paths, p) end
-  end
-  local parsed = parse_roc_files(paths)
-  local report = {}
-  for f in parsed.files do judge_file(f, report) end
-  local verdict = verdict_of("find_unused_imports", CHECKS, report, #paths)
-  print_findings(verdict.summary, verdict.found)
-  fail_if_refused("find_unused_imports", parsed.refused)
-  return verdict
-end
-
--- This `fail` stands at the top level so the summary is the last line a
--- caller reads: a stop inside a function prints the calls after it.
-if SELF_TEST then
-  self_test()
-else
-  local verdict = run_check()
-  if #verdict.found > 0 then fail(verdict.summary) end
-end
+local r = run({"shale", "--root", CHECKOUT, CHECKOUT .. "/roc_platform/run.shale", "--args-stdin"}, {stdin = join(values, "\n") .. "\n", timeout_ms = 1800000, whole = 8000000})
+print(trim_end(r.out))
+if r.code ~= 0 then fail("find_unused_imports: the Roc program stopped (exit " .. r.code .. ")") end
