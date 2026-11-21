@@ -57,7 +57,7 @@
 --
 -- It is ported to Roc as cookbook/c/items/, a package, which
 -- cookbook/c/map_file.shale and the other Roc recipes over the C read; this
--- library stays for the recipes still in Shale (find_dead_code, hunt_names)
+-- library stays for the recipe still in Shale (hunt_names)
 -- and for c/check_discipline.shale's masker, and the fast tier's discipline
 -- block splits every C file with it. map_file's self-test, which held this
 -- library to its plants (cookbook/c/plants/map_file/), now holds the port.

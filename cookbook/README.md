@@ -216,9 +216,9 @@ it. So the dialect is the parser's contract: `c/items.shale` splits a file
 into its items on it, and stops, naming the file and line, at a line it
 can't account for. The C finders are built on it, or on its port to Roc,
 `c/items/`, a package the Roc ones share: map_file, list_long_functions,
-list_deep_nesting and find_clones are written in Roc on Shale's platform
-(`roc_platform/`), each its folder's app, held to its Shale original's
-goldens by that folder's `check_goldens.shale`.
+list_deep_nesting, find_clones and find_dead_code are written in Roc on
+Shale's platform (`roc_platform/`), each its folder's app, held to its
+Shale original's goldens by that folder's `check_goldens.shale`.
 
 - `c/items.shale` (library): a file's top-level items, each with its kind,
   name, lines, head, body and the names its body uses, and the masker that
@@ -230,7 +230,7 @@ goldens by that folder's `check_goldens.shale`.
   line; `tree=c` splits every file and accounts for each line (in Roc).
   `shale cookbook:c/map_file.shale file=c/script/vm.c`
 - `c/find_dead_code.shale`: finds the functions and generators no program
-  reaches, and those only tests reach, from every item's names.
+  reaches, and those only tests reach, from every item's names (in Roc).
   `shale cookbook:c/find_dead_code.shale dir=c`
 - `c/list_long_functions.shale`: lists the functions past a length in lines of
   code (comments and blank lines counted apart), by default past the tree's
