@@ -171,8 +171,8 @@ if #builds > 0 then said_builds = join(builds, ",") end
 
 -- The `build` mount, c/build: a block reads its library there. `cookbook`,
 -- this tree's own, is the discipline check's: its masker is
--- cookbook/c/items.shale, and the discipline block maps every C file with
--- cookbook/c/map_file.shale. The outer
+-- cookbook/c/items.shale, and the discipline block splits every C file with
+-- it. The outer
 -- run's `tools` mount goes with it, when there is one: the Zig tools' block
 -- speaks to its zig-ast, and the host text block to its roc-ast and go-ast.
 mkdir(OUT)

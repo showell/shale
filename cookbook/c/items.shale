@@ -55,8 +55,12 @@
 -- line as a function's `{type, name}`, or nil; `c_generator(code)` reads a
 -- `VEC_DEFINE(`, `MAP_DEFINE(` or `SLICE_TYPE(` line.
 --
--- cookbook/c/map_file.shale prints a file's items, and its `self_test=1`
--- holds this library to its plants (cookbook/c/plants/map_file/).
+-- It is ported to Roc as cookbook/c/items/, a package, which
+-- cookbook/c/map_file.shale and the other Roc recipes over the C read; this
+-- library stays for the recipes still in Shale (find_dead_code, hunt_names)
+-- and for c/check_discipline.shale's masker, and the fast tier's discipline
+-- block splits every C file with it. map_file's self-test, which held this
+-- library to its plants (cookbook/c/plants/map_file/), now holds the port.
 
 -- A string, a character literal, either, and a `/* */` comment. A line
 -- with both quotes takes them leftmost first, so a `"` in `'"'` is the

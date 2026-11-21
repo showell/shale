@@ -214,26 +214,33 @@ c/check_discipline.shale holds Shale's C to a shape a line reader can trust
 declaration a line, `//` comments), and the build fails when a file breaks
 it. So the dialect is the parser's contract: `c/items.shale` splits a file
 into its items on it, and stops, naming the file and line, at a line it
-can't account for. The C finders are built on it.
+can't account for. The C finders are built on it, or on its port to Roc,
+`c/items/`, a package the Roc ones share: map_file, list_long_functions,
+list_deep_nesting and find_clones are written in Roc on Shale's platform
+(`roc_platform/`), each its folder's app, held to its Shale original's
+goldens by that folder's `check_goldens.shale`.
 
 - `c/items.shale` (library): a file's top-level items, each with its kind,
   name, lines, head, body and the names its body uses, and the masker that
   blanks strings and comments. `use("cookbook:c/items.shale")`
+- `c/items/` (a Roc package): the same splitter in Roc, for the Roc
+  recipes. `items: "../items/main.roc"`, then `import items.Split`
 - `c/map_file.shale`: prints a file's items, one `first-last kind name` a
-  line; `tree=c` splits every file and accounts for each line.
+  line; `tree=c` splits every file and accounts for each line (in Roc).
   `shale cookbook:c/map_file.shale file=c/script/vm.c`
 - `c/find_dead_code.shale`: finds the functions and generators no program
   reaches, and those only tests reach, from every item's names.
   `shale cookbook:c/find_dead_code.shale dir=c`
 - `c/list_long_functions.shale`: lists the functions past a length in lines of
   code (comments and blank lines counted apart), by default past the tree's
-  95th percentile, with the distribution. `shale cookbook:c/list_long_functions.shale over=60`
+  95th percentile, with the distribution (in Roc). `shale cookbook:c/list_long_functions.shale over=60`
 - `c/list_deep_nesting.shale`: ranks the functions by their deepest nesting of
   braced blocks (the body is depth 1; strings and comments masked), those at
-  depth 4 or past, deepest first: functions to look at, for a reader. `shale cookbook:c/list_deep_nesting.shale min=5`
+  depth 4 or past, deepest first: functions to look at, for a reader (in
+  Roc). `shale cookbook:c/list_deep_nesting.shale min=5`
 - `c/find_clones.shale`: finds twin functions, of one shape once every name,
   number and string is masked, and runs of six or more lines alike in two
-  places, each pair with its spans and a score. `shale cookbook:c/find_clones.shale`
+  places, each pair with its spans and a score (in Roc). `shale cookbook:c/find_clones.shale`
 - `c/hunt_names.shale`: hunts for names that break c/docs/style.md's "Names"
   or say too little.
   `shale cookbook:c/hunt_names.shale`

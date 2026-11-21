@@ -90,12 +90,14 @@ launcher takes with it:
 - **packages by a relative path** in the app's header (`lib:
   "../lib/main.roc"`, then `import lib.Plural`), as roc-chat imports
   roc-markdown: that `package [Plural] {}` file and the modules it
-  exposes. This is how the recipes share their modules: the cookbook's
+  exposes. This is how the recipes share their modules. The cookbook's
   Roc ports name `cookbook/roc/lib/main.roc` in their headers as `lib`, then
   `import lib.Tree`, and its Tree, Declarations, Text and Finding were each
-  a copy in several recipes. A package reaches no effect, so what runs a
-  program or reads a file (a self-test, a word list) stays in each recipe.
-  A script's package imports no package of its own.
+  a copy in several recipes. The recipes over Shale's C name their splitter,
+  `cookbook/c/items/main.roc`, as `items`. A package reaches no effect, so
+  what runs a program or reads a file (a self-test, a word list, the C
+  itself) stays in each recipe, which hands the package the text. A
+  script's package imports no package of its own.
 
 Every file is read through Shale's store (a path out of the root stops the
 launch), copied into the cache (the root as `main.roc`, packages under
@@ -158,7 +160,10 @@ folder by folder, from `Shale.glob!` and `Shale.read!` and plain Roc.
 `folders=`, since run.shale's own `in=` is the root. Its
 `check_goldens.shale` runs it on a copy of `cookbook/roc/plants/count_roc/`.
 
-**`cookbook/zig/list_long_files/`**, **`cookbook/zig/count_comments/`**,
+**`cookbook/c/map_file/`**, **`cookbook/c/list_long_functions/`**,
+**`cookbook/c/list_deep_nesting/`**, **`cookbook/c/find_clones/`** (over
+the splitter package **`cookbook/c/items/`**, which each names by a
+relative path), **`cookbook/zig/list_long_files/`**, **`cookbook/zig/count_comments/`**,
 **`cookbook/roc/find_unused_imports/`**, **`cookbook/roc/check_families/`**,
 **`cookbook/roc/find_deep_calls/`**, **`cookbook/roc/check_vocabulary/`**,
 **`cookbook/roc/check_name_types/`**, **`cookbook/roc/find_bare_floats/`** and
@@ -167,10 +172,12 @@ launcher keeps the recipe's name and arguments, the goldens were written
 from the Shale original on plants, and `check_goldens.shale` holds them.
 count_comments' launcher builds with `opt=speed`, since its byte-by-byte
 scan runs about 60 times slower in Roc's dev build, and so does
-find_deep_calls', whose dev build took 1.6 times the Shale original's CPU,
-and count_shale_stops', which reads a transcript's JSON in Roc (its
+find_deep_calls', whose dev build took 1.6 times the Shale original's CPU;
+count_shale_stops', which reads a transcript's JSON in Roc (its
 ShaleJson module, as Shale's `json_read` reads it) and whose dev build took
-3.5 times the original's CPU over a 180 MB transcript.
+3.5 times the original's CPU over a 180 MB transcript; and the four over
+the C, whose splitter masks a line a byte at a time (the dev build took
+four times map_file's original's CPU over `tree=c`).
 **`cookbook/roc/EXAMPLES.txt`** lists every port, a line each: its Roc, its
 Shale original's path and the commit that replaced it, so a page can show
 the two side by side. Its sections (the checks on Roc code first) are the

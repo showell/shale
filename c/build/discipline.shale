@@ -4,6 +4,7 @@
 -- budget: steps=40000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
 
 use("build:lib.shale")
+use("cookbook:c/items.shale")
 
 -- ── The discipline block ────────────────────────────────────────────────
 
@@ -40,6 +41,52 @@ function canary_gcc(t)
   return "canary gcc: " .. CANARY_RIGHT
 end
 
+-- Each line of `p` in exactly one of `items`, or blank, or a `//` comment
+-- line between them, or the build stops naming the line. Gives the count of
+-- lines.
+function accounted(p, items)
+  local all = lines(read(p))
+  local owner = {}
+  for it in items do
+    local k = it.first
+    while k <= it.last do
+      if has_key(owner, "" .. k) then fail(p .. ":" .. k .. ": in two items, `" .. owner["" .. k] .. "` and `" .. it.name .. "`") end
+      owner["" .. k] = it.name
+      k = k + 1
+    end
+  end
+  local n = 0
+  for raw in all do
+    n = n + 1
+    if not has_key(owner, "" .. n) and raw ~= "" and not starts_with(raw, "//") then fail(p .. ":" .. n .. ": in no item: " .. raw) end
+  end
+  return n
+end
+
+-- Every .c and .h under c/ (c/out left out) split by
+-- cookbook/c/items.shale and accounted for, in one line. It was
+-- `cookbook:c/map_file.shale tree=c`, until map_file was ported to Roc,
+-- whose build (the platform's host after every change to C Shale, 25 to
+-- 50 s) is no fast tier's: this is the Shale splitter that
+-- c/check_discipline.shale reads with, proven here, and the Roc splitter
+-- (cookbook/c/items/) is held to its goldens in the full tier.
+function split_tree()
+  local files = {}
+  for e in walk_all("c", {kind = "file", skip = "out"}) do
+    if ends_with(e.path, ".c") or ends_with(e.path, ".h") then push(files, e.path) end
+  end
+  sort(files)
+  local total = 0
+  local count = 0
+  for p in files do
+    local items = c_items(p)
+    total = total + accounted(p, items)
+    count = count + #items
+    yield()
+  end
+  return "PASS c items: " .. #files .. " files under c, " .. total .. " lines, each in one item or between them; " .. count .. " items"
+end
+
 -- c/check_discipline.shale over the C, then its own self-test, in both
 -- tiers; then every C file split into its items by cookbook/c/items.shale,
 -- each line accounted for, so a file the splitter can't read fails the
@@ -47,7 +94,7 @@ end
 function discipline_block(t)
   print(trim(must(run_in(t, "discipline", {"shale", "c/check_discipline.shale"}, {timeout_ms = 60000, tail = 20})).out))
   print(trim(must(run_in(t, "discipline", {"shale", "c/check_discipline.shale", "self_test=1"}, {timeout_ms = 60000, tail = 20})).out))
-  print(trim(must(run_in(t, "discipline", {"shale", "cookbook:c/map_file.shale", "tree=c"}, {timeout_ms = 60000, tail = 20})).out))
+  print(split_tree())
   print(canary_tcc(t))
   if t.full then print(canary_gcc(t)) end
   return nil
