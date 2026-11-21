@@ -36,6 +36,9 @@ Shale := [].{
 	## (Shale's `ls`).
 	list! : Str => [Found(List(Str)), Missing]
 
+	## The folder made, with its parents (Shale's `mkdir`).
+	mkdir! : Str => {}
+
 	## The text and a newline on the run's output (Shale's `print`).
 	print! : Str => {}
 
@@ -62,6 +65,12 @@ Shale := [].{
 
 	## The file's text, or `Missing` when nothing is at the path.
 	read! : Str => [Found(Str), Missing]
+
+	## The Shale path's absolute OS path, for a program's argv (Shale's `real`).
+	real! : Str => Str
+
+	## The file or the folder removed, with all it holds (Shale's `remove_tree`).
+	remove_tree! : Str => {}
 
 	## Roc's own parser's tree of each file, in order (Shale's `roc_tree`,
 	## through roc-ast): its nodes, or `err`, why roc-ast refused it (`no such

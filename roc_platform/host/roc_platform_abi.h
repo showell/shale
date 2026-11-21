@@ -635,7 +635,7 @@ typedef void (*HostedFn)(void);
 
 // Hosted Function Count
 
-#define HOSTED_FUNCTION_COUNT 16
+#define HOSTED_FUNCTION_COUNT 19
 
 
 #define HOSTED_IDX_SHALE_ARG 0
@@ -644,16 +644,19 @@ typedef void (*HostedFn)(void);
 #define HOSTED_IDX_SHALE_GLOB 3
 #define HOSTED_IDX_SHALE_GREP_ALL 4
 #define HOSTED_IDX_SHALE_LIST 5
-#define HOSTED_IDX_SHALE_PRINT 6
-#define HOSTED_IDX_SHALE_RE_FIND 7
-#define HOSTED_IDX_SHALE_RE_FIND_ALL 8
-#define HOSTED_IDX_SHALE_RE_LINES 9
-#define HOSTED_IDX_SHALE_RE_MATCH 10
-#define HOSTED_IDX_SHALE_RE_REPLACE 11
-#define HOSTED_IDX_SHALE_READ 12
-#define HOSTED_IDX_SHALE_ROC_TREE 13
-#define HOSTED_IDX_SHALE_RUN 14
-#define HOSTED_IDX_SHALE_WRITE 15
+#define HOSTED_IDX_SHALE_MKDIR 6
+#define HOSTED_IDX_SHALE_PRINT 7
+#define HOSTED_IDX_SHALE_RE_FIND 8
+#define HOSTED_IDX_SHALE_RE_FIND_ALL 9
+#define HOSTED_IDX_SHALE_RE_LINES 10
+#define HOSTED_IDX_SHALE_RE_MATCH 11
+#define HOSTED_IDX_SHALE_RE_REPLACE 12
+#define HOSTED_IDX_SHALE_READ 13
+#define HOSTED_IDX_SHALE_REAL 14
+#define HOSTED_IDX_SHALE_REMOVE_TREE 15
+#define HOSTED_IDX_SHALE_ROC_TREE 16
+#define HOSTED_IDX_SHALE_RUN 17
+#define HOSTED_IDX_SHALE_WRITE 18
 
 // Argument Structures
 
@@ -713,6 +716,15 @@ typedef struct {
 typedef struct {
     RocStr arg0;
 } ShaleListArgs;
+
+/**
+ * Arguments for Shale.mkdir!
+ * Roc signature: Str => {}
+ * Refcounted fields are owned by the hosted function.
+ */
+typedef struct {
+    RocStr arg0;
+} ShaleMkdirArgs;
 
 /**
  * Arguments for Shale.print!
@@ -782,6 +794,24 @@ typedef struct {
 typedef struct {
     RocStr arg0;
 } ShaleReadArgs;
+
+/**
+ * Arguments for Shale.real!
+ * Roc signature: Str => Str
+ * Refcounted fields are owned by the hosted function.
+ */
+typedef struct {
+    RocStr arg0;
+} ShaleRealArgs;
+
+/**
+ * Arguments for Shale.remove_tree!
+ * Roc signature: Str => {}
+ * Refcounted fields are owned by the hosted function.
+ */
+typedef struct {
+    RocStr arg0;
+} ShaleRemoveTreeArgs;
 
 /**
  * Arguments for Shale.roc_tree!
@@ -869,6 +899,9 @@ extern RocList shale_grep_all(RocStr arg0, RocStr arg1);
 /* Shale.list!: Str => [Found(List(Str)), Missing] */
 extern FoundOrMissingType7 shale_list(RocStr arg0);
 
+/* Shale.mkdir!: Str => {} */
+extern void shale_mkdir(RocStr arg0);
+
 /* Shale.print!: Str => {} */
 extern void shale_print(RocStr arg0);
 
@@ -889,6 +922,12 @@ extern RocStr shale_re_replace(RocStr arg0, RocStr arg1, RocStr arg2);
 
 /* Shale.read!: Str => [Found(Str), Missing] */
 extern FoundOrMissingType11 shale_read(RocStr arg0);
+
+/* Shale.real!: Str => Str */
+extern RocStr shale_real(RocStr arg0);
+
+/* Shale.remove_tree!: Str => {} */
+extern void shale_remove_tree(RocStr arg0);
 
 /* Shale.roc_tree!: List(Str) => List({ err : Str, nodes : List({ attrs : List({ name : Str, value : Str }), col : U64, depth : U64, end_col : U64, end_line : U64, kids : List(U64), kind : Str, line : U64, parent : U64 }), path : Str }) */
 extern RocList shale_roc_tree(RocList arg0);
@@ -919,16 +958,19 @@ typedef struct {
     HostedFn shale_glob_bang;  /* index 3, C name: shale_glob */
     HostedFn shale_grep_all_bang;  /* index 4, C name: shale_grep_all */
     HostedFn shale_list_bang;  /* index 5, C name: shale_list */
-    HostedFn shale_print_bang;  /* index 6, C name: shale_print */
-    HostedFn shale_re_find_bang;  /* index 7, C name: shale_re_find */
-    HostedFn shale_re_find_all_bang;  /* index 8, C name: shale_re_find_all */
-    HostedFn shale_re_lines_bang;  /* index 9, C name: shale_re_lines */
-    HostedFn shale_re_match_bang;  /* index 10, C name: shale_re_match */
-    HostedFn shale_re_replace_bang;  /* index 11, C name: shale_re_replace */
-    HostedFn shale_read_bang;  /* index 12, C name: shale_read */
-    HostedFn shale_roc_tree_bang;  /* index 13, C name: shale_roc_tree */
-    HostedFn shale_run_bang;  /* index 14, C name: shale_run */
-    HostedFn shale_write_bang;  /* index 15, C name: shale_write */
+    HostedFn shale_mkdir_bang;  /* index 6, C name: shale_mkdir */
+    HostedFn shale_print_bang;  /* index 7, C name: shale_print */
+    HostedFn shale_re_find_bang;  /* index 8, C name: shale_re_find */
+    HostedFn shale_re_find_all_bang;  /* index 9, C name: shale_re_find_all */
+    HostedFn shale_re_lines_bang;  /* index 10, C name: shale_re_lines */
+    HostedFn shale_re_match_bang;  /* index 11, C name: shale_re_match */
+    HostedFn shale_re_replace_bang;  /* index 12, C name: shale_re_replace */
+    HostedFn shale_read_bang;  /* index 13, C name: shale_read */
+    HostedFn shale_real_bang;  /* index 14, C name: shale_real */
+    HostedFn shale_remove_tree_bang;  /* index 15, C name: shale_remove_tree */
+    HostedFn shale_roc_tree_bang;  /* index 16, C name: shale_roc_tree */
+    HostedFn shale_run_bang;  /* index 17, C name: shale_run */
+    HostedFn shale_write_bang;  /* index 18, C name: shale_write */
 } HostedFunctions;
 
 

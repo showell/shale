@@ -173,6 +173,12 @@ mkdir(p: Path) -> Nil
   stops: file_system, argument
   doc: a folder made, with its parents; a file or a tree removed
   anchor: docs/SHALE.md#the-store
+  roc: mkdir! : Str => {}
+  roc_params: path
+  roc_doc: The folder made, with its parents (Shale's `mkdir`).
+  values: none
+  driver: mkdir(q.path)
+  driver: return {}
 
 remove(p: Path) -> Nil
   impl: c builtin_remove
@@ -187,6 +193,12 @@ remove_tree(p: Path) -> Nil
   stops: file_system, argument
   doc: a folder made, with its parents; a file or a tree removed
   anchor: docs/SHALE.md#the-store
+  roc: remove_tree! : Str => {}
+  roc_params: path
+  roc_doc: The file or the folder removed, with all it holds (Shale's `remove_tree`).
+  values: none
+  driver: remove_tree(q.path)
+  driver: return {}
 
 walk(p: Path, opts?: Opts) -> List(Entry)
   impl: c builtin_walk
@@ -827,6 +839,11 @@ real(path: Path) -> Str
   stops: argument (outside the root and the mounts)
   doc: a Shale path's OS path, for an argv
   anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+  roc: real! : Str => Str
+  roc_params: path
+  roc_doc: The Shale path's absolute OS path, for a program's argv (Shale's `real`).
+  values: none
+  driver: return real(q.path)
 
 job_start(argv: List(Str), opts: Opts) -> Job
   impl: prelude linux

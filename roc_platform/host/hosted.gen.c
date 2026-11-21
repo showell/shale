@@ -12,6 +12,7 @@ typedef enum {
     HOSTED_GLOB,
     HOSTED_GREP_ALL,
     HOSTED_LIST,
+    HOSTED_MKDIR,
     HOSTED_PRINT,
     HOSTED_RE_FIND,
     HOSTED_RE_FIND_ALL,
@@ -19,6 +20,8 @@ typedef enum {
     HOSTED_RE_MATCH,
     HOSTED_RE_REPLACE,
     HOSTED_READ,
+    HOSTED_REAL,
+    HOSTED_REMOVE_TREE,
     HOSTED_ROC_TREE,
     HOSTED_RUN,
     HOSTED_WRITE,
@@ -33,6 +36,7 @@ static const Str hosted_names[] = {
     S_ITEM("glob"),
     S_ITEM("grep_all"),
     S_ITEM("list"),
+    S_ITEM("mkdir"),
     S_ITEM("print"),
     S_ITEM("re_find"),
     S_ITEM("re_find_all"),
@@ -40,6 +44,8 @@ static const Str hosted_names[] = {
     S_ITEM("re_match"),
     S_ITEM("re_replace"),
     S_ITEM("read"),
+    S_ITEM("real"),
+    S_ITEM("remove_tree"),
     S_ITEM("roc_tree"),
     S_ITEM("run"),
     S_ITEM("write"),
@@ -53,6 +59,7 @@ static const Str hosted_roc_names[] = {
     S_ITEM("Shale.glob!"),
     S_ITEM("Shale.grep_all!"),
     S_ITEM("Shale.list!"),
+    S_ITEM("Shale.mkdir!"),
     S_ITEM("Shale.print!"),
     S_ITEM("Shale.re_find!"),
     S_ITEM("Shale.re_find_all!"),
@@ -60,6 +67,8 @@ static const Str hosted_roc_names[] = {
     S_ITEM("Shale.re_match!"),
     S_ITEM("Shale.re_replace!"),
     S_ITEM("Shale.read!"),
+    S_ITEM("Shale.real!"),
+    S_ITEM("Shale.remove_tree!"),
     S_ITEM("Shale.roc_tree!"),
     S_ITEM("Shale.run!"),
     S_ITEM("Shale.write!"),
@@ -86,6 +95,10 @@ static const char HOSTED_DRIVER[] =
     "function hosted_list(q)\n"
     "  if not exists(q.path) then return {tag = \"Missing\"} end\n"
     "  return {tag = \"Found\", value = ls(q.path)}\n"
+    "end\n"
+    "function hosted_mkdir(q)\n"
+    "  mkdir(q.path)\n"
+    "  return {}\n"
     "end\n"
     "function hosted_print(q)\n"
     "  print(q.text)\n"
@@ -114,6 +127,13 @@ static const char HOSTED_DRIVER[] =
     "  if not exists(q.path) then return {tag = \"Missing\"} end\n"
     "  return {tag = \"Found\", value = read(q.path)}\n"
     "end\n"
+    "function hosted_real(q)\n"
+    "  return real(q.path)\n"
+    "end\n"
+    "function hosted_remove_tree(q)\n"
+    "  remove_tree(q.path)\n"
+    "  return {}\n"
+    "end\n"
     "function hosted_roc_tree(q)\n"
     "  return roc_tree(q.paths)\n"
     "end\n"
@@ -136,6 +156,7 @@ static const char HOSTED_DRIVER[] =
     "  if f == \"glob\" then return hosted_glob(q) end\n"
     "  if f == \"grep_all\" then return hosted_grep_all(q) end\n"
     "  if f == \"list\" then return hosted_list(q) end\n"
+    "  if f == \"mkdir\" then return hosted_mkdir(q) end\n"
     "  if f == \"print\" then return hosted_print(q) end\n"
     "  if f == \"re_find\" then return hosted_re_find(q) end\n"
     "  if f == \"re_find_all\" then return hosted_re_find_all(q) end\n"
@@ -143,6 +164,8 @@ static const char HOSTED_DRIVER[] =
     "  if f == \"re_match\" then return hosted_re_match(q) end\n"
     "  if f == \"re_replace\" then return hosted_re_replace(q) end\n"
     "  if f == \"read\" then return hosted_read(q) end\n"
+    "  if f == \"real\" then return hosted_real(q) end\n"
+    "  if f == \"remove_tree\" then return hosted_remove_tree(q) end\n"
     "  if f == \"roc_tree\" then return hosted_roc_tree(q) end\n"
     "  if f == \"run\" then return hosted_run(q) end\n"
     "  if f == \"write\" then return hosted_write(q) end\n"
@@ -177,6 +200,9 @@ static struct {
     RocStr path;
 } hosted_list_args;
 static struct {
+    RocStr path;
+} hosted_mkdir_args;
+static struct {
     RocStr text;
 } hosted_print_args;
 static struct {
@@ -204,6 +230,12 @@ static struct {
     RocStr path;
 } hosted_read_args;
 static struct {
+    RocStr path;
+} hosted_real_args;
+static struct {
+    RocStr path;
+} hosted_remove_tree_args;
+static struct {
     RocList paths;
 } hosted_roc_tree_args;
 static struct {
@@ -228,6 +260,7 @@ static union {
     bool re_match;
     RocStr re_replace;
     FoundOrMissingType11 read;
+    RocStr real;
     RocList roc_tree;
     AnonStruct1763995a077e9c1f run;
 } hosted_answer;
@@ -269,6 +302,11 @@ FoundOrMissingType7 shale_list(RocStr arg0) {
     hosted_list_args.path = arg0;
     roc_ask(HOSTED_LIST, __builtin_return_address(0));
     return hosted_answer.list;
+}
+
+void shale_mkdir(RocStr arg0) {
+    hosted_mkdir_args.path = arg0;
+    roc_ask(HOSTED_MKDIR, __builtin_return_address(0));
 }
 
 void shale_print(RocStr arg0) {
@@ -316,6 +354,17 @@ FoundOrMissingType11 shale_read(RocStr arg0) {
     hosted_read_args.path = arg0;
     roc_ask(HOSTED_READ, __builtin_return_address(0));
     return hosted_answer.read;
+}
+
+RocStr shale_real(RocStr arg0) {
+    hosted_real_args.path = arg0;
+    roc_ask(HOSTED_REAL, __builtin_return_address(0));
+    return hosted_answer.real;
+}
+
+void shale_remove_tree(RocStr arg0) {
+    hosted_remove_tree_args.path = arg0;
+    roc_ask(HOSTED_REMOVE_TREE, __builtin_return_address(0));
 }
 
 RocList shale_roc_tree(RocList arg0) {
@@ -384,152 +433,170 @@ static STATUS_MUST_USE Status hosted_request(Run *r, Pos pos, int kind, Table *q
         TRY(run_map_put(r, pos, q, S("path"), &path_8));
         return OK;
     }
+    case HOSTED_MKDIR: {
+        Value path_9;
+        TRY(hosted_put_str(r, pos, &(hosted_mkdir_args.path), &path_9));
+        TRY(run_map_put(r, pos, q, S("path"), &path_9));
+        return OK;
+    }
     case HOSTED_PRINT: {
-        Value text_9;
-        TRY(hosted_put_str(r, pos, &(hosted_print_args.text), &text_9));
-        TRY(run_map_put(r, pos, q, S("text"), &text_9));
+        Value text_10;
+        TRY(hosted_put_str(r, pos, &(hosted_print_args.text), &text_10));
+        TRY(run_map_put(r, pos, q, S("text"), &text_10));
         return OK;
     }
     case HOSTED_RE_FIND: {
-        Value text_10;
-        TRY(hosted_put_str(r, pos, &(hosted_re_find_args.text), &text_10));
-        TRY(run_map_put(r, pos, q, S("text"), &text_10));
-        Value pattern_11;
-        TRY(hosted_put_str(r, pos, &(hosted_re_find_args.pattern), &pattern_11));
-        TRY(run_map_put(r, pos, q, S("pattern"), &pattern_11));
+        Value text_11;
+        TRY(hosted_put_str(r, pos, &(hosted_re_find_args.text), &text_11));
+        TRY(run_map_put(r, pos, q, S("text"), &text_11));
+        Value pattern_12;
+        TRY(hosted_put_str(r, pos, &(hosted_re_find_args.pattern), &pattern_12));
+        TRY(run_map_put(r, pos, q, S("pattern"), &pattern_12));
         return OK;
     }
     case HOSTED_RE_FIND_ALL: {
-        Value text_12;
-        TRY(hosted_put_str(r, pos, &(hosted_re_find_all_args.text), &text_12));
-        TRY(run_map_put(r, pos, q, S("text"), &text_12));
-        Value pattern_13;
-        TRY(hosted_put_str(r, pos, &(hosted_re_find_all_args.pattern), &pattern_13));
-        TRY(run_map_put(r, pos, q, S("pattern"), &pattern_13));
+        Value text_13;
+        TRY(hosted_put_str(r, pos, &(hosted_re_find_all_args.text), &text_13));
+        TRY(run_map_put(r, pos, q, S("text"), &text_13));
+        Value pattern_14;
+        TRY(hosted_put_str(r, pos, &(hosted_re_find_all_args.pattern), &pattern_14));
+        TRY(run_map_put(r, pos, q, S("pattern"), &pattern_14));
         return OK;
     }
     case HOSTED_RE_LINES: {
-        Value text_14;
-        TRY(hosted_put_str(r, pos, &(hosted_re_lines_args.text), &text_14));
-        TRY(run_map_put(r, pos, q, S("text"), &text_14));
-        Value pattern_15;
-        TRY(hosted_put_str(r, pos, &(hosted_re_lines_args.pattern), &pattern_15));
-        TRY(run_map_put(r, pos, q, S("pattern"), &pattern_15));
+        Value text_15;
+        TRY(hosted_put_str(r, pos, &(hosted_re_lines_args.text), &text_15));
+        TRY(run_map_put(r, pos, q, S("text"), &text_15));
+        Value pattern_16;
+        TRY(hosted_put_str(r, pos, &(hosted_re_lines_args.pattern), &pattern_16));
+        TRY(run_map_put(r, pos, q, S("pattern"), &pattern_16));
         return OK;
     }
     case HOSTED_RE_MATCH: {
-        Value text_16;
-        TRY(hosted_put_str(r, pos, &(hosted_re_match_args.text), &text_16));
-        TRY(run_map_put(r, pos, q, S("text"), &text_16));
-        Value pattern_17;
-        TRY(hosted_put_str(r, pos, &(hosted_re_match_args.pattern), &pattern_17));
-        TRY(run_map_put(r, pos, q, S("pattern"), &pattern_17));
+        Value text_17;
+        TRY(hosted_put_str(r, pos, &(hosted_re_match_args.text), &text_17));
+        TRY(run_map_put(r, pos, q, S("text"), &text_17));
+        Value pattern_18;
+        TRY(hosted_put_str(r, pos, &(hosted_re_match_args.pattern), &pattern_18));
+        TRY(run_map_put(r, pos, q, S("pattern"), &pattern_18));
         return OK;
     }
     case HOSTED_RE_REPLACE: {
-        Value text_18;
-        TRY(hosted_put_str(r, pos, &(hosted_re_replace_args.text), &text_18));
-        TRY(run_map_put(r, pos, q, S("text"), &text_18));
-        Value pattern_19;
-        TRY(hosted_put_str(r, pos, &(hosted_re_replace_args.pattern), &pattern_19));
-        TRY(run_map_put(r, pos, q, S("pattern"), &pattern_19));
-        Value replacement_20;
-        TRY(hosted_put_str(r, pos, &(hosted_re_replace_args.replacement), &replacement_20));
-        TRY(run_map_put(r, pos, q, S("replacement"), &replacement_20));
+        Value text_19;
+        TRY(hosted_put_str(r, pos, &(hosted_re_replace_args.text), &text_19));
+        TRY(run_map_put(r, pos, q, S("text"), &text_19));
+        Value pattern_20;
+        TRY(hosted_put_str(r, pos, &(hosted_re_replace_args.pattern), &pattern_20));
+        TRY(run_map_put(r, pos, q, S("pattern"), &pattern_20));
+        Value replacement_21;
+        TRY(hosted_put_str(r, pos, &(hosted_re_replace_args.replacement), &replacement_21));
+        TRY(run_map_put(r, pos, q, S("replacement"), &replacement_21));
         return OK;
     }
     case HOSTED_READ: {
-        Value path_21;
-        TRY(hosted_put_str(r, pos, &(hosted_read_args.path), &path_21));
-        TRY(run_map_put(r, pos, q, S("path"), &path_21));
+        Value path_22;
+        TRY(hosted_put_str(r, pos, &(hosted_read_args.path), &path_22));
+        TRY(run_map_put(r, pos, q, S("path"), &path_22));
+        return OK;
+    }
+    case HOSTED_REAL: {
+        Value path_23;
+        TRY(hosted_put_str(r, pos, &(hosted_real_args.path), &path_23));
+        TRY(run_map_put(r, pos, q, S("path"), &path_23));
+        return OK;
+    }
+    case HOSTED_REMOVE_TREE: {
+        Value path_24;
+        TRY(hosted_put_str(r, pos, &(hosted_remove_tree_args.path), &path_24));
+        TRY(run_map_put(r, pos, q, S("path"), &path_24));
         return OK;
     }
     case HOSTED_ROC_TREE: {
-        Value paths_22;
+        Value paths_25;
         {
-            Table *list23 = NULL;
-            TRY(hosted_new_list(r, pos, (hosted_roc_tree_args.paths).length, &list23));
-            const RocStr *items24 = (hosted_roc_tree_args.paths).elements;
-            for (size_t k25 = 0; k25 < (hosted_roc_tree_args.paths).length; k25++) {
-                Value item26;
-                TRY(hosted_put_str(r, pos, &(items24[k25]), &item26));
-                TRY(run_list_push(r, pos, list23, &item26));
+            Table *list26 = NULL;
+            TRY(hosted_new_list(r, pos, (hosted_roc_tree_args.paths).length, &list26));
+            const RocStr *items27 = (hosted_roc_tree_args.paths).elements;
+            for (size_t k28 = 0; k28 < (hosted_roc_tree_args.paths).length; k28++) {
+                Value item29;
+                TRY(hosted_put_str(r, pos, &(items27[k28]), &item29));
+                TRY(run_list_push(r, pos, list26, &item29));
             }
-            value_table(&paths_22, list23);
+            value_table(&paths_25, list26);
         }
-        TRY(run_map_put(r, pos, q, S("paths"), &paths_22));
+        TRY(run_map_put(r, pos, q, S("paths"), &paths_25));
         return OK;
     }
     case HOSTED_RUN: {
-        Value spec_27;
+        Value spec_30;
         {
-            Table *map28 = NULL;
-            TRY(hosted_new_map(r, pos, &map28));
-            Value argv_29;
+            Table *map31 = NULL;
+            TRY(hosted_new_map(r, pos, &map31));
+            Value argv_32;
             {
-                Table *list30 = NULL;
-                TRY(hosted_new_list(r, pos, ((hosted_run_args.spec).argv).length, &list30));
-                const RocStr *items31 = ((hosted_run_args.spec).argv).elements;
-                for (size_t k32 = 0; k32 < ((hosted_run_args.spec).argv).length; k32++) {
-                    Value item33;
-                    TRY(hosted_put_str(r, pos, &(items31[k32]), &item33));
-                    TRY(run_list_push(r, pos, list30, &item33));
+                Table *list33 = NULL;
+                TRY(hosted_new_list(r, pos, ((hosted_run_args.spec).argv).length, &list33));
+                const RocStr *items34 = ((hosted_run_args.spec).argv).elements;
+                for (size_t k35 = 0; k35 < ((hosted_run_args.spec).argv).length; k35++) {
+                    Value item36;
+                    TRY(hosted_put_str(r, pos, &(items34[k35]), &item36));
+                    TRY(run_list_push(r, pos, list33, &item36));
                 }
-                value_table(&argv_29, list30);
+                value_table(&argv_32, list33);
             }
-            TRY(run_map_put(r, pos, map28, S("argv"), &argv_29));
-            Value keep_34;
+            TRY(run_map_put(r, pos, map31, S("argv"), &argv_32));
+            Value keep_37;
             {
-                Table *map35 = NULL;
-                TRY(hosted_new_map(r, pos, &map35));
+                Table *map38 = NULL;
+                TRY(hosted_new_map(r, pos, &map38));
                 switch (((hosted_run_args.spec).keep).tag) {
                 case HeadOrTailOrWholeTag_Head: {
-                    TRY(run_map_put_str(r, pos, map35, S("tag"), S("Head")));
-                    uint64_t payload36 = HeadOrTailOrWhole_payload_head(&((hosted_run_args.spec).keep));
-                    Value value37;
-                    value_int(&value37, (int64_t)(payload36));
-                    TRY(run_map_put(r, pos, map35, S("value"), &value37));
+                    TRY(run_map_put_str(r, pos, map38, S("tag"), S("Head")));
+                    uint64_t payload39 = HeadOrTailOrWhole_payload_head(&((hosted_run_args.spec).keep));
+                    Value value40;
+                    value_int(&value40, (int64_t)(payload39));
+                    TRY(run_map_put(r, pos, map38, S("value"), &value40));
                     break;
                 }
                 case HeadOrTailOrWholeTag_Tail: {
-                    TRY(run_map_put_str(r, pos, map35, S("tag"), S("Tail")));
-                    uint64_t payload38 = HeadOrTailOrWhole_payload_tail(&((hosted_run_args.spec).keep));
-                    Value value39;
-                    value_int(&value39, (int64_t)(payload38));
-                    TRY(run_map_put(r, pos, map35, S("value"), &value39));
+                    TRY(run_map_put_str(r, pos, map38, S("tag"), S("Tail")));
+                    uint64_t payload41 = HeadOrTailOrWhole_payload_tail(&((hosted_run_args.spec).keep));
+                    Value value42;
+                    value_int(&value42, (int64_t)(payload41));
+                    TRY(run_map_put(r, pos, map38, S("value"), &value42));
                     break;
                 }
                 case HeadOrTailOrWholeTag_Whole: {
-                    TRY(run_map_put_str(r, pos, map35, S("tag"), S("Whole")));
-                    uint64_t payload40 = HeadOrTailOrWhole_payload_whole(&((hosted_run_args.spec).keep));
-                    Value value41;
-                    value_int(&value41, (int64_t)(payload40));
-                    TRY(run_map_put(r, pos, map35, S("value"), &value41));
+                    TRY(run_map_put_str(r, pos, map38, S("tag"), S("Whole")));
+                    uint64_t payload43 = HeadOrTailOrWhole_payload_whole(&((hosted_run_args.spec).keep));
+                    Value value44;
+                    value_int(&value44, (int64_t)(payload43));
+                    TRY(run_map_put(r, pos, map38, S("value"), &value44));
                     break;
                 }
                 default: return hosted_wrong(r, pos, S("a tag the platform declares"));
                 }
-                value_table(&keep_34, map35);
+                value_table(&keep_37, map38);
             }
-            TRY(run_map_put(r, pos, map28, S("keep"), &keep_34));
-            Value timeout_ms_42;
-            value_int(&timeout_ms_42, (int64_t)((hosted_run_args.spec).timeout_ms));
-            TRY(run_map_put(r, pos, map28, S("timeout_ms"), &timeout_ms_42));
-            Value want_43;
-            TRY(hosted_put_str(r, pos, &((hosted_run_args.spec).want), &want_43));
-            TRY(run_map_put(r, pos, map28, S("want"), &want_43));
-            value_table(&spec_27, map28);
+            TRY(run_map_put(r, pos, map31, S("keep"), &keep_37));
+            Value timeout_ms_45;
+            value_int(&timeout_ms_45, (int64_t)((hosted_run_args.spec).timeout_ms));
+            TRY(run_map_put(r, pos, map31, S("timeout_ms"), &timeout_ms_45));
+            Value want_46;
+            TRY(hosted_put_str(r, pos, &((hosted_run_args.spec).want), &want_46));
+            TRY(run_map_put(r, pos, map31, S("want"), &want_46));
+            value_table(&spec_30, map31);
         }
-        TRY(run_map_put(r, pos, q, S("spec"), &spec_27));
+        TRY(run_map_put(r, pos, q, S("spec"), &spec_30));
         return OK;
     }
     case HOSTED_WRITE: {
-        Value path_44;
-        TRY(hosted_put_str(r, pos, &(hosted_write_args.path), &path_44));
-        TRY(run_map_put(r, pos, q, S("path"), &path_44));
-        Value text_45;
-        TRY(hosted_put_str(r, pos, &(hosted_write_args.text), &text_45));
-        TRY(run_map_put(r, pos, q, S("text"), &text_45));
+        Value path_47;
+        TRY(hosted_put_str(r, pos, &(hosted_write_args.path), &path_47));
+        TRY(run_map_put(r, pos, q, S("path"), &path_47));
+        Value text_48;
+        TRY(hosted_put_str(r, pos, &(hosted_write_args.text), &text_48));
+        TRY(run_map_put(r, pos, q, S("text"), &text_48));
         return OK;
     }
     default: return OK;
@@ -556,13 +623,13 @@ static STATUS_MUST_USE Status hosted_answer_from(Run *r, Pos pos, int kind, cons
     case HOSTED_GLOB:
         {
             {
-                Values items46;
-                TRY(hosted_items(r, pos, v, &items46));
-                void *elems47 = NULL;
-                TRY(hosted_list(r, pos, items46.len, sizeof(RocStr), &(hosted_answer.glob), &elems47));
-                RocStr *made48 = elems47;
-                for (size_t k49 = 0; k49 < items46.len; k49++) {
-                    TRY(hosted_str(r, pos, &at(items46, k49), &(made48[k49])));
+                Values items49;
+                TRY(hosted_items(r, pos, v, &items49));
+                void *elems50 = NULL;
+                TRY(hosted_list(r, pos, items49.len, sizeof(RocStr), &(hosted_answer.glob), &elems50));
+                RocStr *made51 = elems50;
+                for (size_t k52 = 0; k52 < items49.len; k52++) {
+                    TRY(hosted_str(r, pos, &at(items49, k52), &(made51[k52])));
                 }
             }
         }
@@ -570,25 +637,25 @@ static STATUS_MUST_USE Status hosted_answer_from(Run *r, Pos pos, int kind, cons
     case HOSTED_GREP_ALL:
         {
             {
-                Values items50;
-                TRY(hosted_items(r, pos, v, &items50));
-                void *elems51 = NULL;
-                TRY(hosted_list(r, pos, items50.len, sizeof(AnonStruct1d63bdf4a74e5a0f), &(hosted_answer.grep_all), &elems51));
-                AnonStruct1d63bdf4a74e5a0f *made52 = elems51;
-                for (size_t k53 = 0; k53 < items50.len; k53++) {
+                Values items53;
+                TRY(hosted_items(r, pos, v, &items53));
+                void *elems54 = NULL;
+                TRY(hosted_list(r, pos, items53.len, sizeof(AnonStruct1d63bdf4a74e5a0f), &(hosted_answer.grep_all), &elems54));
+                AnonStruct1d63bdf4a74e5a0f *made55 = elems54;
+                for (size_t k56 = 0; k56 < items53.len; k56++) {
                     {
-                        Value line_54;
-                        TRY(hosted_get(r, pos, &at(items50, k53), S("line"), &line_54));
+                        Value line_57;
+                        TRY(hosted_get(r, pos, &at(items53, k56), S("line"), &line_57));
                         {
-                            int64_t n55 = 0;
-                            TRY(hosted_int(r, pos, &line_54, &n55));
-                            (made52[k53]).line = (uint64_t)n55;
+                            int64_t n58 = 0;
+                            TRY(hosted_int(r, pos, &line_57, &n58));
+                            (made55[k56]).line = (uint64_t)n58;
                         }
                     }
                     {
-                        Value text_56;
-                        TRY(hosted_get(r, pos, &at(items50, k53), S("text"), &text_56));
-                        TRY(hosted_str(r, pos, &text_56, &((made52[k53]).text)));
+                        Value text_59;
+                        TRY(hosted_get(r, pos, &at(items53, k56), S("text"), &text_59));
+                        TRY(hosted_str(r, pos, &text_59, &((made55[k56]).text)));
                     }
                 }
             }
@@ -597,26 +664,26 @@ static STATUS_MUST_USE Status hosted_answer_from(Run *r, Pos pos, int kind, cons
     case HOSTED_LIST:
         {
             {
-                Value tag57;
-                TRY(hosted_get(r, pos, v, S("tag"), &tag57));
-                if (tag57.tag != VALUE_STRING) return hosted_wrong(r, pos, S("tag"));
-                if (str_eq(tag57.as.string, S("Found"))) {
-                    Value value58;
-                    TRY(hosted_get(r, pos, v, S("value"), &value58));
-                    RocList payload59;
-                    memset(&payload59, 0, sizeof payload59);
+                Value tag60;
+                TRY(hosted_get(r, pos, v, S("tag"), &tag60));
+                if (tag60.tag != VALUE_STRING) return hosted_wrong(r, pos, S("tag"));
+                if (str_eq(tag60.as.string, S("Found"))) {
+                    Value value61;
+                    TRY(hosted_get(r, pos, v, S("value"), &value61));
+                    RocList payload62;
+                    memset(&payload62, 0, sizeof payload62);
                     {
-                        Values items60;
-                        TRY(hosted_items(r, pos, &value58, &items60));
-                        void *elems61 = NULL;
-                        TRY(hosted_list(r, pos, items60.len, sizeof(RocStr), &(payload59), &elems61));
-                        RocStr *made62 = elems61;
-                        for (size_t k63 = 0; k63 < items60.len; k63++) {
-                            TRY(hosted_str(r, pos, &at(items60, k63), &(made62[k63])));
+                        Values items63;
+                        TRY(hosted_items(r, pos, &value61, &items63));
+                        void *elems64 = NULL;
+                        TRY(hosted_list(r, pos, items63.len, sizeof(RocStr), &(payload62), &elems64));
+                        RocStr *made65 = elems64;
+                        for (size_t k66 = 0; k66 < items63.len; k66++) {
+                            TRY(hosted_str(r, pos, &at(items63, k66), &(made65[k66])));
                         }
                     }
-                    hosted_answer.list = FoundOrMissingType7_make_found(payload59);
-                } else if (str_eq(tag57.as.string, S("Missing"))) {
+                    hosted_answer.list = FoundOrMissingType7_make_found(payload62);
+                } else if (str_eq(tag60.as.string, S("Missing"))) {
                     hosted_answer.list = FoundOrMissingType7_make_missing();
                 } else {
                     return hosted_wrong(r, pos, S("tag"));
@@ -624,50 +691,53 @@ static STATUS_MUST_USE Status hosted_answer_from(Run *r, Pos pos, int kind, cons
             }
         }
         return OK;
+    case HOSTED_MKDIR:
+        (void)v;
+        return OK;
     case HOSTED_PRINT:
         (void)v;
         return OK;
     case HOSTED_RE_FIND:
         {
             {
-                Value tag64;
-                TRY(hosted_get(r, pos, v, S("tag"), &tag64));
-                if (tag64.tag != VALUE_STRING) return hosted_wrong(r, pos, S("tag"));
-                if (str_eq(tag64.as.string, S("Found"))) {
-                    Value value65;
-                    TRY(hosted_get(r, pos, v, S("value"), &value65));
-                    AnonStruct9ba65f4c7e87294d payload66;
-                    memset(&payload66, 0, sizeof payload66);
+                Value tag67;
+                TRY(hosted_get(r, pos, v, S("tag"), &tag67));
+                if (tag67.tag != VALUE_STRING) return hosted_wrong(r, pos, S("tag"));
+                if (str_eq(tag67.as.string, S("Found"))) {
+                    Value value68;
+                    TRY(hosted_get(r, pos, v, S("value"), &value68));
+                    AnonStruct9ba65f4c7e87294d payload69;
+                    memset(&payload69, 0, sizeof payload69);
                     {
-                        Value at_67;
-                        TRY(hosted_get(r, pos, &value65, S("at"), &at_67));
+                        Value at_70;
+                        TRY(hosted_get(r, pos, &value68, S("at"), &at_70));
                         {
-                            int64_t n68 = 0;
-                            TRY(hosted_int(r, pos, &at_67, &n68));
-                            (payload66).at = (uint64_t)n68;
+                            int64_t n71 = 0;
+                            TRY(hosted_int(r, pos, &at_70, &n71));
+                            (payload69).at = (uint64_t)n71;
                         }
                     }
                     {
-                        Value text_69;
-                        TRY(hosted_get(r, pos, &value65, S("text"), &text_69));
-                        TRY(hosted_str(r, pos, &text_69, &((payload66).text)));
+                        Value text_72;
+                        TRY(hosted_get(r, pos, &value68, S("text"), &text_72));
+                        TRY(hosted_str(r, pos, &text_72, &((payload69).text)));
                     }
                     {
-                        Value groups_70;
-                        TRY(hosted_get(r, pos, &value65, S("groups"), &groups_70));
+                        Value groups_73;
+                        TRY(hosted_get(r, pos, &value68, S("groups"), &groups_73));
                         {
-                            Values items71;
-                            TRY(hosted_items(r, pos, &groups_70, &items71));
-                            void *elems72 = NULL;
-                            TRY(hosted_list(r, pos, items71.len, sizeof(RocStr), &((payload66).groups), &elems72));
-                            RocStr *made73 = elems72;
-                            for (size_t k74 = 0; k74 < items71.len; k74++) {
-                                TRY(hosted_str(r, pos, &at(items71, k74), &(made73[k74])));
+                            Values items74;
+                            TRY(hosted_items(r, pos, &groups_73, &items74));
+                            void *elems75 = NULL;
+                            TRY(hosted_list(r, pos, items74.len, sizeof(RocStr), &((payload69).groups), &elems75));
+                            RocStr *made76 = elems75;
+                            for (size_t k77 = 0; k77 < items74.len; k77++) {
+                                TRY(hosted_str(r, pos, &at(items74, k77), &(made76[k77])));
                             }
                         }
                     }
-                    hosted_answer.re_find = FoundOrNoMatch_make_found(payload66);
-                } else if (str_eq(tag64.as.string, S("NoMatch"))) {
+                    hosted_answer.re_find = FoundOrNoMatch_make_found(payload69);
+                } else if (str_eq(tag67.as.string, S("NoMatch"))) {
                     hosted_answer.re_find = FoundOrNoMatch_make_no_match();
                 } else {
                     return hosted_wrong(r, pos, S("tag"));
@@ -678,37 +748,37 @@ static STATUS_MUST_USE Status hosted_answer_from(Run *r, Pos pos, int kind, cons
     case HOSTED_RE_FIND_ALL:
         {
             {
-                Values items75;
-                TRY(hosted_items(r, pos, v, &items75));
-                void *elems76 = NULL;
-                TRY(hosted_list(r, pos, items75.len, sizeof(AnonStruct9ba65f4c7e87294d), &(hosted_answer.re_find_all), &elems76));
-                AnonStruct9ba65f4c7e87294d *made77 = elems76;
-                for (size_t k78 = 0; k78 < items75.len; k78++) {
+                Values items78;
+                TRY(hosted_items(r, pos, v, &items78));
+                void *elems79 = NULL;
+                TRY(hosted_list(r, pos, items78.len, sizeof(AnonStruct9ba65f4c7e87294d), &(hosted_answer.re_find_all), &elems79));
+                AnonStruct9ba65f4c7e87294d *made80 = elems79;
+                for (size_t k81 = 0; k81 < items78.len; k81++) {
                     {
-                        Value at_79;
-                        TRY(hosted_get(r, pos, &at(items75, k78), S("at"), &at_79));
+                        Value at_82;
+                        TRY(hosted_get(r, pos, &at(items78, k81), S("at"), &at_82));
                         {
-                            int64_t n80 = 0;
-                            TRY(hosted_int(r, pos, &at_79, &n80));
-                            (made77[k78]).at = (uint64_t)n80;
+                            int64_t n83 = 0;
+                            TRY(hosted_int(r, pos, &at_82, &n83));
+                            (made80[k81]).at = (uint64_t)n83;
                         }
                     }
                     {
-                        Value text_81;
-                        TRY(hosted_get(r, pos, &at(items75, k78), S("text"), &text_81));
-                        TRY(hosted_str(r, pos, &text_81, &((made77[k78]).text)));
+                        Value text_84;
+                        TRY(hosted_get(r, pos, &at(items78, k81), S("text"), &text_84));
+                        TRY(hosted_str(r, pos, &text_84, &((made80[k81]).text)));
                     }
                     {
-                        Value groups_82;
-                        TRY(hosted_get(r, pos, &at(items75, k78), S("groups"), &groups_82));
+                        Value groups_85;
+                        TRY(hosted_get(r, pos, &at(items78, k81), S("groups"), &groups_85));
                         {
-                            Values items83;
-                            TRY(hosted_items(r, pos, &groups_82, &items83));
-                            void *elems84 = NULL;
-                            TRY(hosted_list(r, pos, items83.len, sizeof(RocStr), &((made77[k78]).groups), &elems84));
-                            RocStr *made85 = elems84;
-                            for (size_t k86 = 0; k86 < items83.len; k86++) {
-                                TRY(hosted_str(r, pos, &at(items83, k86), &(made85[k86])));
+                            Values items86;
+                            TRY(hosted_items(r, pos, &groups_85, &items86));
+                            void *elems87 = NULL;
+                            TRY(hosted_list(r, pos, items86.len, sizeof(RocStr), &((made80[k81]).groups), &elems87));
+                            RocStr *made88 = elems87;
+                            for (size_t k89 = 0; k89 < items86.len; k89++) {
+                                TRY(hosted_str(r, pos, &at(items86, k89), &(made88[k89])));
                             }
                         }
                     }
@@ -719,25 +789,25 @@ static STATUS_MUST_USE Status hosted_answer_from(Run *r, Pos pos, int kind, cons
     case HOSTED_RE_LINES:
         {
             {
-                Values items87;
-                TRY(hosted_items(r, pos, v, &items87));
-                void *elems88 = NULL;
-                TRY(hosted_list(r, pos, items87.len, sizeof(AnonStruct1d63bdf4a74e5a0f), &(hosted_answer.re_lines), &elems88));
-                AnonStruct1d63bdf4a74e5a0f *made89 = elems88;
-                for (size_t k90 = 0; k90 < items87.len; k90++) {
+                Values items90;
+                TRY(hosted_items(r, pos, v, &items90));
+                void *elems91 = NULL;
+                TRY(hosted_list(r, pos, items90.len, sizeof(AnonStruct1d63bdf4a74e5a0f), &(hosted_answer.re_lines), &elems91));
+                AnonStruct1d63bdf4a74e5a0f *made92 = elems91;
+                for (size_t k93 = 0; k93 < items90.len; k93++) {
                     {
-                        Value line_91;
-                        TRY(hosted_get(r, pos, &at(items87, k90), S("line"), &line_91));
+                        Value line_94;
+                        TRY(hosted_get(r, pos, &at(items90, k93), S("line"), &line_94));
                         {
-                            int64_t n92 = 0;
-                            TRY(hosted_int(r, pos, &line_91, &n92));
-                            (made89[k90]).line = (uint64_t)n92;
+                            int64_t n95 = 0;
+                            TRY(hosted_int(r, pos, &line_94, &n95));
+                            (made92[k93]).line = (uint64_t)n95;
                         }
                     }
                     {
-                        Value text_93;
-                        TRY(hosted_get(r, pos, &at(items87, k90), S("text"), &text_93));
-                        TRY(hosted_str(r, pos, &text_93, &((made89[k90]).text)));
+                        Value text_96;
+                        TRY(hosted_get(r, pos, &at(items90, k93), S("text"), &text_96));
+                        TRY(hosted_str(r, pos, &text_96, &((made92[k93]).text)));
                     }
                 }
             }
@@ -756,17 +826,17 @@ static STATUS_MUST_USE Status hosted_answer_from(Run *r, Pos pos, int kind, cons
     case HOSTED_READ:
         {
             {
-                Value tag94;
-                TRY(hosted_get(r, pos, v, S("tag"), &tag94));
-                if (tag94.tag != VALUE_STRING) return hosted_wrong(r, pos, S("tag"));
-                if (str_eq(tag94.as.string, S("Found"))) {
-                    Value value95;
-                    TRY(hosted_get(r, pos, v, S("value"), &value95));
-                    RocStr payload96;
-                    memset(&payload96, 0, sizeof payload96);
-                    TRY(hosted_str(r, pos, &value95, &(payload96)));
-                    hosted_answer.read = FoundOrMissingType11_make_found(payload96);
-                } else if (str_eq(tag94.as.string, S("Missing"))) {
+                Value tag97;
+                TRY(hosted_get(r, pos, v, S("tag"), &tag97));
+                if (tag97.tag != VALUE_STRING) return hosted_wrong(r, pos, S("tag"));
+                if (str_eq(tag97.as.string, S("Found"))) {
+                    Value value98;
+                    TRY(hosted_get(r, pos, v, S("value"), &value98));
+                    RocStr payload99;
+                    memset(&payload99, 0, sizeof payload99);
+                    TRY(hosted_str(r, pos, &value98, &(payload99)));
+                    hosted_answer.read = FoundOrMissingType11_make_found(payload99);
+                } else if (str_eq(tag97.as.string, S("Missing"))) {
                     hosted_answer.read = FoundOrMissingType11_make_missing();
                 } else {
                     return hosted_wrong(r, pos, S("tag"));
@@ -774,132 +844,140 @@ static STATUS_MUST_USE Status hosted_answer_from(Run *r, Pos pos, int kind, cons
             }
         }
         return OK;
+    case HOSTED_REAL:
+        {
+            TRY(hosted_str(r, pos, v, &(hosted_answer.real)));
+        }
+        return OK;
+    case HOSTED_REMOVE_TREE:
+        (void)v;
+        return OK;
     case HOSTED_ROC_TREE:
         {
             {
-                Values items97;
-                TRY(hosted_items(r, pos, v, &items97));
-                void *elems98 = NULL;
-                TRY(hosted_list(r, pos, items97.len, sizeof(AnonStruct8e43eed7b6bbf36f), &(hosted_answer.roc_tree), &elems98));
-                AnonStruct8e43eed7b6bbf36f *made99 = elems98;
-                for (size_t k100 = 0; k100 < items97.len; k100++) {
+                Values items100;
+                TRY(hosted_items(r, pos, v, &items100));
+                void *elems101 = NULL;
+                TRY(hosted_list(r, pos, items100.len, sizeof(AnonStruct8e43eed7b6bbf36f), &(hosted_answer.roc_tree), &elems101));
+                AnonStruct8e43eed7b6bbf36f *made102 = elems101;
+                for (size_t k103 = 0; k103 < items100.len; k103++) {
                     {
-                        Value path_101;
-                        TRY(hosted_get(r, pos, &at(items97, k100), S("path"), &path_101));
-                        TRY(hosted_str(r, pos, &path_101, &((made99[k100]).path)));
+                        Value path_104;
+                        TRY(hosted_get(r, pos, &at(items100, k103), S("path"), &path_104));
+                        TRY(hosted_str(r, pos, &path_104, &((made102[k103]).path)));
                     }
                     {
-                        Value err_102;
-                        TRY(hosted_get(r, pos, &at(items97, k100), S("err"), &err_102));
-                        TRY(hosted_str(r, pos, &err_102, &((made99[k100]).err)));
+                        Value err_105;
+                        TRY(hosted_get(r, pos, &at(items100, k103), S("err"), &err_105));
+                        TRY(hosted_str(r, pos, &err_105, &((made102[k103]).err)));
                     }
                     {
-                        Value nodes_103;
-                        TRY(hosted_get(r, pos, &at(items97, k100), S("nodes"), &nodes_103));
+                        Value nodes_106;
+                        TRY(hosted_get(r, pos, &at(items100, k103), S("nodes"), &nodes_106));
                         {
-                            Values items104;
-                            TRY(hosted_items(r, pos, &nodes_103, &items104));
-                            void *elems105 = NULL;
-                            TRY(hosted_list(r, pos, items104.len, sizeof(AnonStructCab41e0e3e24b946), &((made99[k100]).nodes), &elems105));
-                            AnonStructCab41e0e3e24b946 *made106 = elems105;
-                            for (size_t k107 = 0; k107 < items104.len; k107++) {
+                            Values items107;
+                            TRY(hosted_items(r, pos, &nodes_106, &items107));
+                            void *elems108 = NULL;
+                            TRY(hosted_list(r, pos, items107.len, sizeof(AnonStructCab41e0e3e24b946), &((made102[k103]).nodes), &elems108));
+                            AnonStructCab41e0e3e24b946 *made109 = elems108;
+                            for (size_t k110 = 0; k110 < items107.len; k110++) {
                                 {
-                                    Value kind_108;
-                                    TRY(hosted_get(r, pos, &at(items104, k107), S("kind"), &kind_108));
-                                    TRY(hosted_str(r, pos, &kind_108, &((made106[k107]).kind)));
+                                    Value kind_111;
+                                    TRY(hosted_get(r, pos, &at(items107, k110), S("kind"), &kind_111));
+                                    TRY(hosted_str(r, pos, &kind_111, &((made109[k110]).kind)));
                                 }
                                 {
-                                    Value depth_109;
-                                    TRY(hosted_get(r, pos, &at(items104, k107), S("depth"), &depth_109));
+                                    Value depth_112;
+                                    TRY(hosted_get(r, pos, &at(items107, k110), S("depth"), &depth_112));
                                     {
-                                        int64_t n110 = 0;
-                                        TRY(hosted_int(r, pos, &depth_109, &n110));
-                                        (made106[k107]).depth = (uint64_t)n110;
+                                        int64_t n113 = 0;
+                                        TRY(hosted_int(r, pos, &depth_112, &n113));
+                                        (made109[k110]).depth = (uint64_t)n113;
                                     }
                                 }
                                 {
-                                    Value parent_111;
-                                    TRY(hosted_get(r, pos, &at(items104, k107), S("parent"), &parent_111));
+                                    Value parent_114;
+                                    TRY(hosted_get(r, pos, &at(items107, k110), S("parent"), &parent_114));
                                     {
-                                        int64_t n112 = 0;
-                                        TRY(hosted_int(r, pos, &parent_111, &n112));
-                                        (made106[k107]).parent = (uint64_t)n112;
+                                        int64_t n115 = 0;
+                                        TRY(hosted_int(r, pos, &parent_114, &n115));
+                                        (made109[k110]).parent = (uint64_t)n115;
                                     }
                                 }
                                 {
-                                    Value kids_113;
-                                    TRY(hosted_get(r, pos, &at(items104, k107), S("kids"), &kids_113));
+                                    Value kids_116;
+                                    TRY(hosted_get(r, pos, &at(items107, k110), S("kids"), &kids_116));
                                     {
-                                        Values items114;
-                                        TRY(hosted_items(r, pos, &kids_113, &items114));
-                                        void *elems115 = NULL;
-                                        TRY(hosted_list(r, pos, items114.len, sizeof(uint64_t), &((made106[k107]).kids), &elems115));
-                                        uint64_t *made116 = elems115;
-                                        for (size_t k117 = 0; k117 < items114.len; k117++) {
+                                        Values items117;
+                                        TRY(hosted_items(r, pos, &kids_116, &items117));
+                                        void *elems118 = NULL;
+                                        TRY(hosted_list(r, pos, items117.len, sizeof(uint64_t), &((made109[k110]).kids), &elems118));
+                                        uint64_t *made119 = elems118;
+                                        for (size_t k120 = 0; k120 < items117.len; k120++) {
                                             {
-                                                int64_t n118 = 0;
-                                                TRY(hosted_int(r, pos, &at(items114, k117), &n118));
-                                                made116[k117] = (uint64_t)n118;
+                                                int64_t n121 = 0;
+                                                TRY(hosted_int(r, pos, &at(items117, k120), &n121));
+                                                made119[k120] = (uint64_t)n121;
                                             }
                                         }
                                     }
                                 }
                                 {
-                                    Value line_119;
-                                    TRY(hosted_get(r, pos, &at(items104, k107), S("line"), &line_119));
+                                    Value line_122;
+                                    TRY(hosted_get(r, pos, &at(items107, k110), S("line"), &line_122));
                                     {
-                                        int64_t n120 = 0;
-                                        TRY(hosted_int(r, pos, &line_119, &n120));
-                                        (made106[k107]).line = (uint64_t)n120;
+                                        int64_t n123 = 0;
+                                        TRY(hosted_int(r, pos, &line_122, &n123));
+                                        (made109[k110]).line = (uint64_t)n123;
                                     }
                                 }
                                 {
-                                    Value col_121;
-                                    TRY(hosted_get(r, pos, &at(items104, k107), S("col"), &col_121));
+                                    Value col_124;
+                                    TRY(hosted_get(r, pos, &at(items107, k110), S("col"), &col_124));
                                     {
-                                        int64_t n122 = 0;
-                                        TRY(hosted_int(r, pos, &col_121, &n122));
-                                        (made106[k107]).col = (uint64_t)n122;
+                                        int64_t n125 = 0;
+                                        TRY(hosted_int(r, pos, &col_124, &n125));
+                                        (made109[k110]).col = (uint64_t)n125;
                                     }
                                 }
                                 {
-                                    Value end_line_123;
-                                    TRY(hosted_get(r, pos, &at(items104, k107), S("end_line"), &end_line_123));
+                                    Value end_line_126;
+                                    TRY(hosted_get(r, pos, &at(items107, k110), S("end_line"), &end_line_126));
                                     {
-                                        int64_t n124 = 0;
-                                        TRY(hosted_int(r, pos, &end_line_123, &n124));
-                                        (made106[k107]).end_line = (uint64_t)n124;
+                                        int64_t n127 = 0;
+                                        TRY(hosted_int(r, pos, &end_line_126, &n127));
+                                        (made109[k110]).end_line = (uint64_t)n127;
                                     }
                                 }
                                 {
-                                    Value end_col_125;
-                                    TRY(hosted_get(r, pos, &at(items104, k107), S("end_col"), &end_col_125));
+                                    Value end_col_128;
+                                    TRY(hosted_get(r, pos, &at(items107, k110), S("end_col"), &end_col_128));
                                     {
-                                        int64_t n126 = 0;
-                                        TRY(hosted_int(r, pos, &end_col_125, &n126));
-                                        (made106[k107]).end_col = (uint64_t)n126;
+                                        int64_t n129 = 0;
+                                        TRY(hosted_int(r, pos, &end_col_128, &n129));
+                                        (made109[k110]).end_col = (uint64_t)n129;
                                     }
                                 }
                                 {
-                                    if ((&at(items104, k107))->tag != VALUE_TABLE || (&at(items104, k107))->as.table->kind != TABLE_MAP) return hosted_wrong(r, pos, S("a map"));
-                                    const ValueMap *map127 = &(&at(items104, k107))->as.table->map;
-                                    size_t n128 = 0;
-                                    for (size_t k = 0; k < ValueMap_len(map127); k++) {
-                                        Str key = ValueMap_key_at(map127, k);
-                                        if (!(str_eq(key, S("kind")) || str_eq(key, S("depth")) || str_eq(key, S("parent")) || str_eq(key, S("kids")) || str_eq(key, S("line")) || str_eq(key, S("col")) || str_eq(key, S("end_line")) || str_eq(key, S("end_col")))) n128++;
+                                    if ((&at(items107, k110))->tag != VALUE_TABLE || (&at(items107, k110))->as.table->kind != TABLE_MAP) return hosted_wrong(r, pos, S("a map"));
+                                    const ValueMap *map130 = &(&at(items107, k110))->as.table->map;
+                                    size_t n131 = 0;
+                                    for (size_t k = 0; k < ValueMap_len(map130); k++) {
+                                        Str key = ValueMap_key_at(map130, k);
+                                        if (!(str_eq(key, S("kind")) || str_eq(key, S("depth")) || str_eq(key, S("parent")) || str_eq(key, S("kids")) || str_eq(key, S("line")) || str_eq(key, S("col")) || str_eq(key, S("end_line")) || str_eq(key, S("end_col")))) n131++;
                                     }
-                                    void *elems129 = NULL;
-                                    TRY(hosted_list(r, pos, n128, sizeof(AnonStruct82a96c5d55d63488), &((made106[k107]).attrs), &elems129));
-                                    AnonStruct82a96c5d55d63488 *made130 = elems129;
+                                    void *elems132 = NULL;
+                                    TRY(hosted_list(r, pos, n131, sizeof(AnonStruct82a96c5d55d63488), &((made109[k110]).attrs), &elems132));
+                                    AnonStruct82a96c5d55d63488 *made133 = elems132;
                                     size_t j = 0;
-                                    for (size_t k = 0; k < ValueMap_len(map127); k++) {
-                                        Str key = ValueMap_key_at(map127, k);
+                                    for (size_t k = 0; k < ValueMap_len(map130); k++) {
+                                        Str key = ValueMap_key_at(map130, k);
                                         if (str_eq(key, S("kind")) || str_eq(key, S("depth")) || str_eq(key, S("parent")) || str_eq(key, S("kids")) || str_eq(key, S("line")) || str_eq(key, S("col")) || str_eq(key, S("end_line")) || str_eq(key, S("end_col"))) continue;
                                         Value name_v;
                                         value_string(&name_v, key);
-                                        Value value_v = ValueMap_value_at(map127, k);
-                                        TRY(hosted_str(r, pos, &name_v, &made130[j].name));
-                                        TRY(hosted_str(r, pos, &value_v, &made130[j].value));
+                                        Value value_v = ValueMap_value_at(map130, k);
+                                        TRY(hosted_str(r, pos, &name_v, &made133[j].name));
+                                        TRY(hosted_str(r, pos, &value_v, &made133[j].value));
                                         j++;
                                     }
                                 }
@@ -913,18 +991,18 @@ static STATUS_MUST_USE Status hosted_answer_from(Run *r, Pos pos, int kind, cons
     case HOSTED_RUN:
         {
             {
-                Value code_131;
-                TRY(hosted_get(r, pos, v, S("code"), &code_131));
+                Value code_134;
+                TRY(hosted_get(r, pos, v, S("code"), &code_134));
                 {
-                    int64_t n132 = 0;
-                    TRY(hosted_int(r, pos, &code_131, &n132));
-                    (hosted_answer.run).code = (int64_t)n132;
+                    int64_t n135 = 0;
+                    TRY(hosted_int(r, pos, &code_134, &n135));
+                    (hosted_answer.run).code = (int64_t)n135;
                 }
             }
             {
-                Value out_133;
-                TRY(hosted_get(r, pos, v, S("out"), &out_133));
-                TRY(hosted_str(r, pos, &out_133, &((hosted_answer.run).out)));
+                Value out_136;
+                TRY(hosted_get(r, pos, v, S("out"), &out_136));
+                TRY(hosted_str(r, pos, &out_136, &((hosted_answer.run).out)));
             }
         }
         return OK;
