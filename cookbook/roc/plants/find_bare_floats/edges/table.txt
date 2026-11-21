@@ -1,0 +1,8 @@
+  # An indented comment, a line ending in CRLF, an effect's name.
+   Edges.Box: an indented line
+Edges.Signal.level: a payload's field
+Edges.run!:    a name with its bang, and spaces after the colon
+Edges.measure: a where clause's float too
+Exposing.only_tests: an exposed module's helper
+Deep.depth: a module below, read only when the glob reaches it
+Deep2: no such module
