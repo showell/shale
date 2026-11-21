@@ -14,24 +14,24 @@
 ##
 ## This root reads the word lists, runs each check on each file and prints
 ## the verdict. Its modules are beside it: one a check (PureMutator,
-## Abbreviation, ModuleDoc), what they read (Tree, Declarations, Text),
-## Finding, and SelfTest.
+## Abbreviation, ModuleDoc) and SelfTest. What they read (Tree, Declarations,
+## Text) and Finding are the cookbook's Roc library, cookbook/roc/lib/.
 ## budget: steps=800000000 arena_bytes=2000000000 output_bytes=4000000 roc_cpu_ms=600000 programs=100
-app [main!] { pf: platform "../../../roc_platform/platform/main.roc" }
+app [main!] { lib: "../lib/main.roc", pf: platform "../../../roc_platform/platform/main.roc" }
 
 import pf.Shale
+import lib.Declarations
+import lib.Finding
+import lib.Text
 import Abbreviation
-import Declarations
-import Finding
 import ModuleDoc
 import PureMutator
 import SelfTest
-import Text
 
 main! : {} => {}
 main! = |{}| {
 	if Shale.arg!("self_test", "") == "1" {
-		SelfTest.run!({})
+		SelfTest.run!(checks)
 	} else {
 		verdict = run_check!({})
 		if !(List.is_empty(verdict.found)) {
@@ -96,14 +96,17 @@ house_is_off! = |{}| {
 	house == "0"
 }
 
+## The checks, in the order the summary counts them.
+checks : List(Str)
+checks = ["pure_mutator", "abbreviation", "module_doc"]
+
 ## The summary and the finding lines, sorted (cookbook/roc/gate_recipe.shale's
 ## `verdict_of`).
 verdict_of : List(Finding), U64 -> { summary : Str, found : List(Str) }
 verdict_of = |report, file_count| {
 	sorted = List.sort_with(report, Finding.order)
-	counts = Finding.checks.map(|c| "${c} ${U64.to_str(List.count_if(sorted, |r| r.check == c))}")
-	found = sorted.map(|r| "${r.path}:${U64.to_str(r.line)}: ${r.check}: ${r.what}")
-	{ summary: "find_unclear_names (Roc): ${U64.to_str(file_count)} files; ${Str.join_with(counts, ", ")}", found }
+	found = sorted.map(Finding.line_of)
+	{ summary: "find_unclear_names (Roc): ${U64.to_str(file_count)} files; ${Finding.counts_of(sorted, checks)}", found }
 }
 
 run_check! : {} => { summary : Str, found : List(Str) }
@@ -141,20 +144,18 @@ run_check! = |{}| {
 				Found(text) => Str.split_on(text, "\n")
 				Missing => []
 			}
-			declared = Declarations.of(f.nodes, src)
+			declared = Declarations.from_file({ path: f.path, nodes: f.nodes, source_lines: src })
 			aliases = List.fold(
-				declared,
+				declared.types,
 				Dict.empty(),
-				|m, d| if d.kind == Type and !(d.is_nominal) {
+				|m, d| if !(d.is_nominal) {
 					Dict.insert(m, d.name, d.underlying)
 				} else {
 					m
 				},
 			)
-			for d in declared {
-				if d.kind == Value {
-					$report = List.concat($report, PureMutator.judge(f.path, d, aliases, terms))
-				}
+			for d in declared.values {
+				$report = List.concat($report, PureMutator.judge(f.path, d, aliases, terms))
 			}
 			if !(house_is_off!({})) {
 				$report = List.concat($report, Abbreviation.judge(f.path, f.nodes, declared, lists))

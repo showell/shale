@@ -1,9 +1,9 @@
 ## The `abbreviation` check: a name with a word short for another, read from
 ## every name a file gives or says (the launcher's header says the rule).
-import Declarations
-import Finding
-import Text
-import Tree
+import lib.Declarations
+import lib.Finding
+import lib.Text
+import lib.Tree
 
 Abbreviation := [].{
 
@@ -12,46 +12,20 @@ Abbreviation := [].{
 	Lists : { abbreviations : Set(Str), words : Set(Str), accepted : Set(Str) }
 
 	## The findings of the file at `path`, a name once a file.
-	judge : Str, List(Tree.Node), List(Declarations.Declared), Abbreviation.Lists -> List(Finding)
+	judge : Str, List(Tree.Node), Declarations, Abbreviation.Lists -> List(Finding)
 	judge = |path, tree, declared, lists| {
 		var $seen = Set.empty()
 		var $report = []
 		for given in names_given(path, tree, declared) {
 			if !(Set.contains($seen, given.name)) {
 				$seen = Set.insert($seen, given.name)
-				found = name_words(given.name).keep_if(|w| is_abbreviated(w, lists))
+				found = Text.name_words(given.name).keep_if(|w| is_abbreviated(w, lists))
 				if !(List.is_empty(found)) {
 					$report = $report.append({ path, line: given.line, check: "abbreviation", what: "`${given.name}` abbreviates: ${Str.join_with(found, ", ")}" })
 				}
 			}
 		}
 		$report
-	}
-}
-
-## A name's words, lowercased: a type's split at its capitals (`NodeInfo`
-## gives `node`, `info`), a field's at its underscores.
-name_words : Str -> List(Str)
-name_words = |name| {
-	var $out = []
-	var $current = []
-	for b in Str.to_utf8(name) {
-		if b == 95 {
-			if !(List.is_empty($current)) {
-				$out = $out.append(Text.lower_bytes($current))
-			}
-			$current = []
-		} else if Text.is_upper(b) and !(List.is_empty($current)) {
-			$out = $out.append(Text.lower_bytes($current))
-			$current = [b]
-		} else {
-			$current = $current.append(b)
-		}
-	}
-	if List.is_empty($current) {
-		$out
-	} else {
-		$out.append(Text.lower_bytes($current))
 	}
 }
 
@@ -73,7 +47,7 @@ is_short_abbreviation : Str, Abbreviation.Lists -> Bool
 is_short_abbreviation = |w, lists| {
 	bytes = Str.to_utf8(w)
 	n = List.len(bytes)
-	if n < 2 or n > 4 or !(List.all(bytes, Text.is_lower)) {
+	if n < 2 or n > 4 or !(List.all(bytes, Text.is_small_letter)) {
 		Bool.False
 	} else {
 		!(is_plain_short_word(w, lists))
@@ -84,19 +58,19 @@ is_short_abbreviation = |w, lists| {
 ## `trie`, `tri`, `try`), none for a word ending as no plural does.
 plural_stems : Str -> List(Str)
 plural_stems = |w| {
-	n = Text.byte_count(w)
+	n = w.count_utf8_bytes()
 	no_plural = ["ss", "us", "is", "as", "os"].any(|e| Str.ends_with(w, e))
 	if n < 3 or !(Str.ends_with(w, "s")) or no_plural {
 		return []
 	}
-	one = [Text.bytes_of(w, 0, n - 1)]
+	one = [Text.bytes_of(w, { start: 0, count: n - 1 })]
 	two = if Str.ends_with(w, "es") and n > 3 {
-		one.append(Text.bytes_of(w, 0, n - 2))
+		one.append(Text.bytes_of(w, { start: 0, count: n - 2 }))
 	} else {
 		one
 	}
 	if Str.ends_with(w, "ies") and n > 4 {
-		two.append("${Text.bytes_of(w, 0, n - 3)}y")
+		two.append("${Text.bytes_of(w, { start: 0, count: n - 3 })}y")
 	} else {
 		two
 	}
@@ -107,7 +81,7 @@ is_whole_stem : Str, Abbreviation.Lists -> Bool
 is_whole_stem = |stem, lists|
 	if Set.contains(lists.accepted, stem) {
 		Bool.True
-	} else if Text.byte_count(stem) <= 4 {
+	} else if stem.count_utf8_bytes() <= 4 {
 		is_plain_short_word(stem, lists)
 	} else {
 		!(Set.contains(lists.abbreviations, stem))
@@ -117,7 +91,7 @@ is_whole_stem = |stem, lists|
 ## the rule).
 is_abbreviated : Str, Abbreviation.Lists -> Bool
 is_abbreviated = |word, lists| {
-	letters = Str.to_utf8(word).keep_if(|b| Text.is_lower(b) or Text.is_digit(b))
+	letters = Str.to_utf8(word).keep_if(|b| Text.is_small_letter(b) or Text.is_digit(b))
 	whole = Str.from_utf8_lossy(letters)
 	if Set.contains(lists.accepted, whole) {
 		return Bool.False
@@ -136,7 +110,7 @@ is_abbreviated = |word, lists| {
 	if Set.contains(lists.abbreviations, w) {
 		return Bool.True
 	}
-	if Text.byte_count(w) <= 4 and is_plain_short_word(w, lists) {
+	if w.count_utf8_bytes() <= 4 and is_plain_short_word(w, lists) {
 		return Bool.False
 	}
 	stems = plural_stems(w)
@@ -170,15 +144,17 @@ tag_named = |tree, at| {
 	}
 }
 
-## The names a file gives or says, with the line each appears on.
-names_given : Str, List(Tree.Node), List(Declarations.Declared) -> List({ name : Str, line : U64 })
+## The names a file gives or says, with the line each appears on: the
+## module's, what it declares in file order, then its parameters, locals and
+## tags.
+names_given : Str, List(Tree.Node), Declarations -> List({ name : Str, line : U64 })
 names_given = |path, tree, declared| {
 	var $out = if Tree.is_app(tree) {
 		[]
 	} else {
 		[{ name: Tree.module_name(path), line: 1 }]
 	}
-	for d in declared {
+	for d in declared_in_file_order(declared) {
 		$out = $out.append({ name: d.name, line: d.line })
 	}
 	var $i = 0
@@ -193,4 +169,23 @@ names_given = |path, tree, declared| {
 		}
 	}
 	$out
+}
+
+## What the file declares, its types, fields and values together, in file
+## order: by the place of each one's node.
+declared_in_file_order : Declarations -> List({ place : U64, name : Str, line : U64 })
+declared_in_file_order = |declared| {
+	types = declared.types.map(|d| { place: d.place, name: d.name, line: d.line })
+	fields = declared.fields.map(|d| { place: d.place, name: d.name, line: d.line })
+	values = declared.values.map(|d| { place: d.place, name: d.name, line: d.line })
+	types.concat(fields).concat(values).sort_with(
+		|first, second|
+			if first.place < second.place {
+				Before
+			} else if first.place > second.place {
+				After
+			} else {
+				Same
+			},
+	)
 }

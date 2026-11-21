@@ -3,21 +3,20 @@
 ## its findings, its exit and what it says (cookbook/roc/gate_recipe.shale's
 ## `check_plants`).
 import pf.Shale
-import Finding
-import Text
+import lib.Text
 
 SelfTest := [].{
 
-	## Each row run as a child of its own, through `launcher`; a check no row
-	## fires fails too, since it could be blind.
-	run! : {} => {}
-	run! = |{}| {
+	## Each row run as a child of its own, through `launcher`; a check of
+	## `checks` no row fires fails too, since it could be blind.
+	run! : List(Str) => {}
+	run! = |checks| {
 		var $wrong = 0
 		var $fired = Set.empty()
 		for row in rows {
 			argv = List.concat(["shale", launcher, "glob=${row.glob}"], row.args)
 			r = Shale.run!({ argv, keep: Whole(4000000), timeout_ms: 120000, want: "" })
-			faults = row_faults!(row, r)
+			faults = row_faults!(row, r, checks)
 			for pair in row.counts {
 				$fired = Set.insert($fired, pair.0)
 			}
@@ -29,7 +28,7 @@ SelfTest := [].{
 				Shale.print!(r.out)
 			}
 		}
-		for check in Finding.checks {
+		for check in checks {
 			if !(Set.contains($fired, check)) {
 				Shale.print!("FAIL `${check}` has no plant")
 				$wrong = $wrong + 1
@@ -103,8 +102,8 @@ last_said = |out| List.fold(
 
 ## What is wrong with one row's run (cookbook/roc/gate_recipe.shale's
 ## `row_faults`).
-row_faults! : Row, { code : I64, out : Str } => List(Str)
-row_faults! = |row, r| {
+row_faults! : Row, { code : I64, out : Str }, List(Str) => List(Str)
+row_faults! = |row, r, checks| {
 	must_fail = row.stops or !(List.is_empty(row.counts))
 	var $faults = []
 	if must_fail and r.code == 0 {
@@ -113,7 +112,7 @@ row_faults! = |row, r| {
 	if !(must_fail) and r.code != 0 {
 		$faults = $faults.append("it exited ${I64.to_str(r.code)}")
 	}
-	for check in Finding.checks {
+	for check in checks {
 		found = List.len(Shale.re_lines!(r.out, "^[^ ]+:[0-9]+: ${check}: "))
 		wanted = List.fold(
 			row.counts,

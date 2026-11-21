@@ -3,24 +3,24 @@
 ## rule). A package's or platform's main.roc says which modules it keeps to
 ## itself, so it reads files through the platform.
 import pf.Shale
-import Declarations
-import Finding
-import Text
-import Tree
+import lib.Declarations
+import lib.Finding
+import lib.Text
+import lib.Tree
 
 ModuleDoc := [].{
 
 	## The findings of the file at `path`, none for an app.
-	judge! : Str, List(Tree.Node), List(Declarations.Declared), List(Str) => List(Finding)
+	judge! : Str, List(Tree.Node), Declarations, List(Str) => List(Finding)
 	judge! = |path, tree, declared, src| {
 		if Tree.is_app(tree) {
 			return []
 		}
 		name = Tree.module_name(path)
 		type_line = List.fold(
-			declared,
+			declared.types,
 			0,
-			|at, d| if d.kind == Type and d.name == name and d.owner == "" {
+			|at, d| if d.name == name and d.owner == "" {
 				d.line
 			} else {
 				at
@@ -30,7 +30,11 @@ ModuleDoc := [].{
 			return []
 		}
 		top = opening_comment(src)
-		above_type = Str.trim(Text.line_at(src, type_line - 1))
+		above_type = if type_line > 1 {
+			Str.trim(Text.line_at(src, type_line - 1))
+		} else {
+			""
+		}
 		opens_with_doc = Str.starts_with(List.first(top) ?? "", "##")
 		has_doc = opens_with_doc or (type_line > 1 and Str.starts_with(above_type, "##"))
 		kept_to_itself = (
