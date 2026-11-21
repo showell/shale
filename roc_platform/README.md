@@ -161,13 +161,16 @@ folder by folder, from `Shale.glob!` and `Shale.read!` and plain Roc.
 **`cookbook/zig/list_long_files/`**, **`cookbook/zig/count_comments/`**,
 **`cookbook/roc/find_unused_imports/`**, **`cookbook/roc/check_families/`**,
 **`cookbook/roc/find_deep_calls/`**, **`cookbook/roc/check_vocabulary/`**,
-**`cookbook/roc/check_name_types/`** and **`cookbook/roc/find_bare_floats/`**
-are ported the same way: the
+**`cookbook/roc/check_name_types/`**, **`cookbook/roc/find_bare_floats/`** and
+**`cookbook/count_shale_stops/`** are ported the same way: the
 launcher keeps the recipe's name and arguments, the goldens were written
 from the Shale original on plants, and `check_goldens.shale` holds them.
 count_comments' launcher builds with `opt=speed`, since its byte-by-byte
 scan runs about 60 times slower in Roc's dev build, and so does
-find_deep_calls', whose dev build took 1.6 times the Shale original's CPU.
+find_deep_calls', whose dev build took 1.6 times the Shale original's CPU,
+and count_shale_stops', which reads a transcript's JSON in Roc (its
+ShaleJson module, as Shale's `json_read` reads it) and whose dev build took
+3.5 times the original's CPU over a 180 MB transcript.
 **`cookbook/roc/EXAMPLES.txt`** lists every port, a line each: its Roc, its
 Shale original's path and the commit that replaced it, so a page can show
 the two side by side. Its sections (the checks on Roc code first) are the

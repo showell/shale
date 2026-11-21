@@ -16,12 +16,34 @@
 --   shale cookbook:count_shale_stops.shale
 --   shale cookbook:count_shale_stops.shale since=2026-11-14T19:50
 --
--- budget: steps=2000000000 reads=100000 read_bytes=4000000000 arena_bytes=4000000000
+-- It is written in Roc, cookbook/count_shale_stops/count_shale_stops.roc and
+-- the modules beside it (ShaleJson and JsonString, a line read as Shale's
+-- `json_read` reads it; Transcript, the fields; Tally, the counts and
+-- tables), on Shale's Roc platform (roc_platform/README.md); this file is
+-- its launcher. It names the newest transcript itself, since the platform
+-- gives no file's time, and hands that and the values it is given to
+-- roc_platform/run.shale in the checkout this cookbook is in (the `cookbook`
+-- mount's parent), which builds the Roc there (cached; the first build
+-- after a change to C Shale compiles the platform's host, 25 to 50 s) and
+-- runs the program rooted here, so a `transcript=` path is this root's.
+--
+-- It is built with `opt=speed`: every byte of a line that can hold a call
+-- or an answer is read as JSON in Roc, and over a 180 MB transcript Roc's
+-- dev build took 6.6 s of CPU where the Shale original, whose `json_read` is
+-- C, took 1.9 s; the speed build takes 1.6 to 1.8 s, for about 30 s of build
+-- once, then cached. Its goldens, the Shale original's output on the
+-- plants, are held by cookbook/count_shale_stops/check_goldens.shale.
+-- budget: programs=10
 
+const SCRIPT = "cookbook/count_shale_stops/count_shale_stops.roc"
+const CHECKOUT = dirname(dirname(real("cookbook:README.md")))
+
+-- Each value is read here by its name, so a misspelled one stops the run
+-- before anything is built; `since` and `most` are handed on only when
+-- given, so their defaults have one home, the Roc.
 const TRANSCRIPT = arg("transcript", "")
-const SINCE = arg("since", "")
-const MOST = arg("most", 20)
-const PART = 8 * 1024 * 1024
+const SINCE = arg("since", nil)
+const MOST = arg("most", nil)
 
 function newest_transcript()
   local best = nil
@@ -37,128 +59,11 @@ function newest_transcript()
   return best
 end
 
--- Whether a JSON value read back is a list: Shale has no `type`, so by the
--- first byte of its JSON.
-function is_list(v)
-  return starts_with(json_write(v), "[")
-end
-
--- A tool result's text: a string, or a list of parts with `text`.
-function result_text(content)
-  if not is_list(content) then return content end
-  local parts = {}
-  for c in content do
-    if has_key(c, "text") then push(parts, c.text) end
-  end
-  return join(parts, "\n")
-end
-
-function launch_kind(command)
-  if find(command, "shale") == nil then return "" end
-  if re_find(command, "shale[^\\n]*<<'[A-Za-z]+'") ~= nil then return "heredoc" end
-  if re_find(command, "shale[^\\n]*\\.shale") ~= nil then return "script" end
-  return ""
-end
-
--- One stop's line, with quoted values blanked, for grouping.
-function stop_key(text)
-  local m = re_find(text, "── stopped at [^:]+:[0-9]+:[0-9]+[^:]*: ([^\\n]*)")
-  if m == nil then return nil end
-  local said = m.groups[1]
-  local cut = find(said, " (")
-  if cut ~= nil then said = sub(said, 1, cut - 1) end
-  said = re_replace(said, "\"[^\"]*\"", "\"…\"")
-  if #said > 110 then said = sub(said, 1, 110) .. "…" end
-  return said
-end
-
-function bump(counts, key)
-  counts[key] = get(counts, key, 0) + 1
-end
-
-function ranked(counts)
-  local rows = {}
-  for k in keys(counts) do push(rows, {n = counts[k], what = k}) end
-  sort(rows, "n", "desc")
-  local top = {}
-  for r in rows do if #top < MOST then push(top, r) end end
-  return top
-end
-
 local path = TRANSCRIPT
 if path == "" then path = newest_transcript() end
-
-local calls = {}
-local tally = {heredoc = 0, script = 0}
-local ends = {}
-local stop_kinds = {}
-local stop_lines = {}
-local builtins = {}
-local programs = {}
-local at = 0
-local done = false
-while not done do
-  local part = read_lines(path, at, PART)
-  for l in part.lines do
-    local is_call = find(l, "\"tool_use\"") ~= nil and find(l, "\"Bash\"") ~= nil
-    local is_answer = find(l, "\"tool_result\"") ~= nil
-    if is_call or is_answer then
-      local v = json_read(l)
-      local recent = SINCE == "" or get(v, "timestamp", "") >= SINCE
-      local content = v.message.content
-      if recent and is_list(content) then
-        for c in content do
-          if c.type == "tool_use" and c.name == "Bash" then
-            local kind = launch_kind(c.input.command)
-            if kind ~= "" then
-              calls[c.id] = kind
-              tally[kind] = tally[kind] + 1
-              if kind == "heredoc" then
-                for b in re_find_all(c.input.command, "([a-z_][a-z0-9_]*)\\(") do bump(builtins, b.groups[1]) end
-                for p in re_find_all(c.input.command, "run\\(\\{\"([^\"]+)\"") do bump(programs, p.groups[1]) end
-              end
-            end
-          elseif c.type == "tool_result" and has_key(calls, c.tool_use_id) then
-            local text = result_text(c.content)
-            local kind = calls[c.tool_use_id]
-            local key = stop_key(text)
-            if key ~= nil and starts_with(key, "fail:") then
-              bump(ends, kind .. ", stopped by its own `fail` (a check's verdict)")
-            elseif key ~= nil then
-              bump(ends, kind .. ", stopped by Shale")
-              bump(stop_kinds, split(key, ":")[1])
-              bump(stop_lines, key)
-            elseif find(text, "shale-gate:") ~= nil then
-              bump(ends, kind .. ", refused by the gate")
-            elseif find(text, "denied") ~= nil and get(c, "is_error", false) then
-              bump(ends, kind .. ", denied by the harness")
-            elseif get(c, "is_error", false) then
-              bump(ends, kind .. ", nonzero exit, no stop line")
-            else
-              bump(ends, kind .. ", ran")
-            end
-          end
-        end
-      end
-    end
-  end
-  at = part.next
-  done = part.done
-end
-
-print(path)
-print(tally.heredoc .. " heredocs, " .. tally.script .. " script launches" .. (SINCE == "" and "" or ", since " .. SINCE))
-print("")
-print(table(ranked(ends), {"n", "what"}))
-print("")
-print("Shale's stops, by kind (a script's own `fail` left out):")
-print(table(ranked(stop_kinds), {"n", "what"}))
-print("")
-print("Shale's stops, by message:")
-print(table(ranked(stop_lines), {"n", "what"}))
-print("")
-print("calls in heredocs (builtins and the script's own functions):")
-print(table(ranked(builtins), {"n", "what"}))
-print("")
-print("programs heredocs run:")
-print(table(ranked(programs), {"n", "what"}))
+local values = {"script=" .. SCRIPT, "in=" .. real("."), "opt=speed", "transcript=" .. path}
+if SINCE ~= nil then push(values, "since=" .. SINCE) end
+if MOST ~= nil then push(values, "most=" .. MOST) end
+local r = run({"shale", "--root", CHECKOUT, CHECKOUT .. "/roc_platform/run.shale", "--args-stdin"}, {stdin = join(values, "\n") .. "\n", timeout_ms = 1800000, whole = 4000000})
+print(trim_end(r.out))
+if r.code ~= 0 then fail("count_shale_stops: the Roc program stopped (exit " .. r.code .. ")") end

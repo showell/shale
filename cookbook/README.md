@@ -56,7 +56,10 @@ checkouts, and `<lanes>` the one that holds your lanes.
 - `check_syntax.shale`: checks each file's syntax by its kind (Zig, Roc, JS,
   Shale, Python, shell). `shale cookbook:check_syntax.shale files=src/a.zig,roc/Walk.roc`
 - `count_shale_stops.shale`: counts how an agent's Shale launches went, from
-  a Claude Code transcript. `shale cookbook:count_shale_stops.shale` (`since=`, `transcript=`)
+  a Claude Code transcript; the launcher of a Roc script
+  (`count_shale_stops/`, on `roc_platform/`, its JSON read in Roc as Shale's
+  `json_read` reads it, held to its goldens by that folder's
+  `check_goldens.shale`). `shale cookbook:count_shale_stops.shale` (`since=`, `transcript=`, `most=`)
 - `fetch_page.shale`: fetches a page and prints its status and the lines that
   matter, or waits until it says something. `shale cookbook:fetch_page.shale url=https://example.org/version`
 - `find_phrase.shale`: finds a phrase in wrapped prose, across line breaks,
