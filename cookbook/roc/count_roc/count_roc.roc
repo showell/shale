@@ -1,6 +1,10 @@
-## count_roc counts a Roc project, folder by folder: its modules and their
-## lines, the same for its test modules, and its `expect`s. These are the
-## numbers a landing page or a review quotes. Its launcher,
+## count_roc is a test-density report for a tree of Roc projects: folder by
+## folder, its modules and their lines, the same for its test modules, and
+## its `expect`s. For one app's size, `roc loc main.roc` counts what its
+## imports reach; count_roc counts every `.roc` file under each folder,
+## with a row a folder, so it sees a whole tree of apps, the tests `roc loc`
+## doesn't count, and the modules no import reaches (specs a test root
+## alone imports). Its launcher,
 ## cookbook/roc/count_roc.shale, is how it is run, and says the arguments.
 ##
 ##   cd ~/showell_repos && shale cookbook:roc/count_roc.shale in=roc-chat,roc-markdown/package
@@ -30,7 +34,7 @@ Markers : { tests : List(Str), skips : List(Str) }
 main! : {} => {}
 main! = |{}| {
 	markers = {
-		tests: literals(Shale.arg!("tests", "/gates/,/tests/,Tests.roc,Expects.roc,_test.roc")),
+		tests: literals(Shale.arg!("tests", default_tests)),
 		skips: literals(Shale.arg!("skip", "")),
 	}
 	var $counts = []
@@ -39,6 +43,11 @@ main! = |{}| {
 	}
 	Shale.print!(count_table($counts))
 }
+
+## The literals of a test module's path unless `tests=` is given: the
+## folders and file endings our Roc repos give their tests, specs and gates.
+default_tests : Str
+default_tests = "/gates/,/tests/,Tests.roc,Expects.roc,_test.roc,Spec.roc,Specs.roc,/specs"
 
 ## A comma-separated list's items, each trimmed, the empty ones dropped.
 literals : Str -> List(Str)

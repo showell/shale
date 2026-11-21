@@ -9,8 +9,10 @@ Each file is a case of a rule in cookbook/roc/count_roc.shale's header:
   comment). Its last line has no newline, and still counts.
 - `app/Empty.roc`: no lines at all.
 - `app/tests/Helper.roc`, `app/gates/Gate.roc`, `app/ThingTests.roc`,
-  `app/MathExpects.roc`, `app/thing_test.roc`: a test module by each of the
+  `app/MathExpects.roc`, `app/thing_test.roc`, `app/ThingSpec.roc`,
+  `app/Specs.roc`, `app/specs_platform.roc`: a test module by each of the
   default `tests` literals.
+- `app/Speck.roc`: a module whose name only starts like a spec's.
 - `app/tutorial/Book.roc`: the module `skip=/tutorial/` leaves out.
 - `app/.hidden/Hidden.roc`: a hidden folder, never counted.
 - `app/notes.txt`: no Roc, never read.

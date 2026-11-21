@@ -2,7 +2,9 @@
 -- lines of Roc, the same for its tests, and its `expect`s, the numbers a
 -- landing page or a review quotes. A module is a test's when its path holds
 -- one of `tests`' literals (by default `/gates/`, `/tests/`, `Tests.roc`,
--- `Expects.roc` and `_test.roc`); `skip` names more literals whose modules
+-- `Expects.roc`, `_test.roc`, `Spec.roc`, `Specs.roc` and `/specs`, so
+-- roc-chat's and roc-markdown's spec modules and their specs' platforms
+-- count as tests); `skip` names more literals whose modules
 -- are left out (a book's builder inside an app's folder, say). Build output
 -- (zig-out, .zig-cache and every hidden folder) is never counted, and a
 -- folder that isn't there stops the run.

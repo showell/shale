@@ -1,32 +1,32 @@
 === in=app (exit 0)
 place  modules  lines  test_modules  test_lines  expects
-app          3     21             5          18       13
+app          4     23             8          26       14
 === in=app,lib (exit 0)
 place  modules  lines  test_modules  test_lines  expects
-app          3     21             5          18       13
+app          4     23             8          26       14
 lib          1      5             0           0        1
 === in=lib , app, (exit 0)
 place  modules  lines  test_modules  test_lines  expects
 lib          1      5             0           0        1
-app          3     21             5          18       13
+app          4     23             8          26       14
 === in=app skip=/tutorial/ (exit 0)
 place  modules  lines  test_modules  test_lines  expects
-app          2     16             5          18       12
+app          3     18             8          26       13
 === in=app skip=Main.roc, /tests/ (exit 0)
 place  modules  lines  test_modules  test_lines  expects
-app          2      5             4          13        5
+app          3      7             7          21        6
 === in=app tests= (exit 0)
 place  modules  lines  test_modules  test_lines  expects
-app          8     39             0           0       13
+app         12     49             0           0       14
 === in=app tests=Book.roc (exit 0)
 place  modules  lines  test_modules  test_lines  expects
-app          7     34             1           5       13
+app         11     44             1           5       14
 ===  (exit 0)
 place  modules  lines  test_modules  test_lines  expects
-.            4     26             5          18       14
+.            5     28             8          26       15
 === in=. (exit 0)
 place  modules  lines  test_modules  test_lines  expects
-.            4     26             5          18       14
+.            5     28             8          26       15
 === in= (exit 0)
 place  modules  lines  test_modules  test_lines  expects
 === in=no_such_folder (exit 1)

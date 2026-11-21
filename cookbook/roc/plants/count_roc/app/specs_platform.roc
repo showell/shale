@@ -1,0 +1,2 @@
+platform ""
+    requires { main : Str }
