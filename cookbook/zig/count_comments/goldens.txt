@@ -1,0 +1,88 @@
+===  (exit 0)
+file                   code  doc  plain  per100  words  loud  dated
+src/loud.zig              1    0     11  1100.0  2.9       6      0
+src/dated.zig             1    0     14  1400.0  2.2       0      7
+src/docs.zig              1    3      2  500.0   3.6       0      0
+src/empty.zig             0    0      0  -       -         0      0
+src/nested/deep.zig       1    0      1  100.0   1.0       0      0
+src/only_comments.zig     0    0      2  -       1.5       0      0
+src/plain.zig             3    0      2  66.7    5.0       0      0
+tools/tool.zig            1    0      0  0.0     -         0      0
+build.zig                 2    0      1  50.0    2.0       0      0
+9 files: 10 code lines, 36 comment lines (3 doc, 33 plain), 360.0 per 100, 2.7 words a line, 6 loud, 7 dated
+=== top=2 (exit 0)
+file           code  doc  plain  per100  words  loud  dated
+src/loud.zig      1    0     11  1100.0  2.9       6      0
+src/dated.zig     1    0     14  1400.0  2.2       0      7
+9 files: 10 code lines, 36 comment lines (3 doc, 33 plain), 360.0 per 100, 2.7 words a line, 6 loud, 7 dated
+=== top=0 (exit 0)
+file                   code  doc  plain  per100  words  loud  dated
+src/loud.zig              1    0     11  1100.0  2.9       6      0
+src/dated.zig             1    0     14  1400.0  2.2       0      7
+src/docs.zig              1    3      2  500.0   3.6       0      0
+src/empty.zig             0    0      0  -       -         0      0
+src/nested/deep.zig       1    0      1  100.0   1.0       0      0
+src/only_comments.zig     0    0      2  -       1.5       0      0
+src/plain.zig             3    0      2  66.7    5.0       0      0
+tools/tool.zig            1    0      0  0.0     -         0      0
+build.zig                 2    0      1  50.0    2.0       0      0
+9 files: 10 code lines, 36 comment lines (3 doc, 33 plain), 360.0 per 100, 2.7 words a line, 6 loud, 7 dated
+=== top=-1 (exit 0)
+file                   code  doc  plain  per100  words  loud  dated
+src/loud.zig              1    0     11  1100.0  2.9       6      0
+src/dated.zig             1    0     14  1400.0  2.2       0      7
+src/docs.zig              1    3      2  500.0   3.6       0      0
+src/empty.zig             0    0      0  -       -         0      0
+src/nested/deep.zig       1    0      1  100.0   1.0       0      0
+src/only_comments.zig     0    0      2  -       1.5       0      0
+src/plain.zig             3    0      2  66.7    5.0       0      0
+tools/tool.zig            1    0      0  0.0     -         0      0
+build.zig                 2    0      1  50.0    2.0       0      0
+9 files: 10 code lines, 36 comment lines (3 doc, 33 plain), 360.0 per 100, 2.7 words a line, 6 loud, 7 dated
+=== files=src/loud.zig,src/dated.zig (exit 0)
+file           code  doc  plain  per100  words  loud  dated
+src/loud.zig      1    0     11  1100.0  2.9       6      0
+src/dated.zig     1    0     14  1400.0  2.2       0      7
+2 files: 2 code lines, 25 comment lines (0 doc, 25 plain), 1250.0 per 100, 2.5 words a line, 6 loud, 7 dated
+=== files=src/*.zig,src/loud.zig, build.zig  (exit 0)
+file                   code  doc  plain  per100  words  loud  dated
+src/loud.zig              1    0     11  1100.0  2.9       6      0
+src/dated.zig             1    0     14  1400.0  2.2       0      7
+src/docs.zig              1    3      2  500.0   3.6       0      0
+src/empty.zig             0    0      0  -       -         0      0
+src/only_comments.zig     0    0      2  -       1.5       0      0
+src/plain.zig             3    0      2  66.7    5.0       0      0
+build.zig                 2    0      1  50.0    2.0       0      0
+7 files: 8 code lines, 35 comment lines (3 doc, 32 plain), 437.5 per 100, 2.7 words a line, 6 loud, 7 dated
+=== files=other/x.zig,src/**/*.zig (exit 0)
+file                   code  doc  plain  per100  words  loud  dated
+src/loud.zig              1    0     11  1100.0  2.9       6      0
+other/x.zig               1    0      1  100.0   3.0       1      1
+src/dated.zig             1    0     14  1400.0  2.2       0      7
+src/docs.zig              1    3      2  500.0   3.6       0      0
+src/empty.zig             0    0      0  -       -         0      0
+src/nested/deep.zig       1    0      1  100.0   1.0       0      0
+src/only_comments.zig     0    0      2  -       1.5       0      0
+src/plain.zig             3    0      2  66.7    5.0       0      0
+8 files: 8 code lines, 36 comment lines (3 doc, 33 plain), 450.0 per 100, 2.7 words a line, 7 loud, 8 dated
+=== dir=src files=*.zig (exit 0)
+file               code  doc  plain  per100  words  loud  dated
+loud.zig              1    0     11  1100.0  2.9       6      0
+dated.zig             1    0     14  1400.0  2.2       0      7
+docs.zig              1    3      2  500.0   3.6       0      0
+empty.zig             0    0      0  -       -         0      0
+only_comments.zig     0    0      2  -       1.5       0      0
+plain.zig             3    0      2  66.7    5.0       0      0
+6 files: 6 code lines, 34 comment lines (3 doc, 31 plain), 566.7 per 100, 2.8 words a line, 6 loud, 7 dated
+=== dir=src files=nested/deep.zig,missing.zig (exit 0)
+file             code  doc  plain  per100  words  loud  dated
+nested/deep.zig     1    0      1  100.0   1.0       0      0
+1 files: 1 code lines, 1 comment lines (0 doc, 1 plain), 100.0 per 100, 1.0 words a line, 0 loud, 0 dated
+=== dir=src (exit 1)
+── stop: fail: count_comments: no file matches src/**/*.zig,tools/*.zig,build.zig under src
+=== files=missing.zig (exit 1)
+── stop: fail: count_comments: no file matches missing.zig under .
+=== files=nothing/*.zig (exit 1)
+── stop: fail: count_comments: no file matches nothing/*.zig under .
+=== top=abc (exit 1)
+── stop: fail: count_comments: top=abc is not an integer

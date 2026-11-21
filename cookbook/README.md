@@ -246,7 +246,9 @@ can't account for. The C finders are built on it.
 - `zig/check_stacking.shale`: finds groups of three or more items on one
   line, and with `write=1` stacks them. `shale cookbook:zig/check_stacking.shale`
 - `zig/count_comments.shale`: counts how much each file's comments say, and
-  how loudly. `shale cookbook:zig/count_comments.shale top=10`
+  how loudly; the launcher of a one-file Roc script
+  (`zig/count_comments/count_comments.roc`, on `roc_platform/`, held to its
+  goldens by that folder's `check_goldens.shale`). `shale cookbook:zig/count_comments.shale top=10`
 - `zig/find_bool_flags.shale`: finds `bool` parameters that calls pass as bare
   literals. `shale cookbook:zig/find_bool_flags.shale`
 - `zig/find_clones.shale`: finds the same code in two places.

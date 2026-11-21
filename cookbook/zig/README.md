@@ -92,7 +92,8 @@ skipped:
 - `find_clones.shale`: the same code in two places, runs of alike lines in
   one file or two. Code may be alike on purpose: each find is a question.
 - `count_comments.shale`: per Zig file, its code, doc and plain comment
-  lines, the ratio, and the loud and dated comments.
+  lines, the ratio, and the loud and dated comments. It is the launcher of
+  a Roc script, `count_comments/count_comments.roc`, on Shale's Roc platform.
 - `hunt_alignment_math.shale`: where a compiler copies alignment
   arithmetic instead of asking the one place that knows it. Written for the
   Roc compiler (roc-lang/roc#12641 is its archetype).
