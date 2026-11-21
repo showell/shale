@@ -148,6 +148,13 @@ the checkout's and the program runs where the caller is. That folder's
 from the Shale original on the plants, and the full tier runs it with the
 cookbook's self-tests.
 
+**`cookbook/roc/count_roc/count_roc.roc`** is the small one, a file a Roc
+reader can take in at once: a Roc project's modules, lines and `expect`s,
+folder by folder, from `Shale.glob!` and `Shale.read!` and plain Roc.
+`cookbook/roc/count_roc.shale` is its launcher, and hands its `in=` on as
+`folders=`, since run.shale's own `in=` is the root. Its
+`check_goldens.shale` runs it on a copy of `cookbook/roc/plants/count_roc/`.
+
 ## Pitfalls
 
 - `RocStr` is `bytes, capacity, length`, while `RocList` is `elements,

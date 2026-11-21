@@ -129,7 +129,9 @@ checkouts, and `<lanes>` the one that holds your lanes.
 - `roc/compare_machine_code.shale`: says whether two builds of a Roc archive
   or program hold the same machine code, procedure by procedure. `shale cookbook:roc/compare_machine_code.shale old=a.a new=b.a`
 - `roc/count_roc.shale`: counts a Roc project's modules, lines, test modules,
-  test lines and `expect`s, for each folder given. `cd <repos> && shale cookbook:roc/count_roc.shale in=roc-apps/basic`
+  test lines and `expect`s, for each folder given; the launcher of a
+  one-file Roc script (`roc/count_roc/count_roc.roc`, on `roc_platform/`,
+  held to its goldens by that folder's `check_goldens.shale`). `cd <repos> && shale cookbook:roc/count_roc.shale in=roc-apps/basic`
 - `roc/declared.shale` (library): what a file declares, and a name's words,
   read from its parse tree. `use("cookbook:roc/declared.shale")`
 - `roc/doc_names.shale` (library): the backticked names in a file's comments,

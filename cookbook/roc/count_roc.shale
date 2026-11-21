@@ -4,52 +4,36 @@
 -- one of `tests`' literals (by default `/gates/`, `/tests/`, `Tests.roc`,
 -- `Expects.roc` and `_test.roc`); `skip` names more literals whose modules
 -- are left out (a book's builder inside an app's folder, say). Build output
--- (zig-out, .zig-cache and every hidden folder) is never counted.
+-- (zig-out, .zig-cache and every hidden folder) is never counted, and a
+-- folder that isn't there stops the run.
 --
 --   cd ~/showell_repos && shale shale/cookbook/roc/count_roc.shale in=roc-apps/basic,roc-markdown/package
 --   cd ~/showell_repos && shale shale/cookbook/roc/count_roc.shale in=roc-apps/canvas_apps/safari skip=/tutorial/
 --
--- budget: steps=400000000 reads=50000 arena_bytes=1000000000
+-- It is written in Roc, cookbook/roc/count_roc/count_roc.roc, run on Shale's
+-- Roc platform (roc_platform/README.md); this file is its launcher. It hands
+-- the values it is given to roc_platform/run.shale in the checkout this
+-- cookbook is in (the `cookbook` mount's parent), which builds the Roc there
+-- (cached; the first build after a change to C Shale compiles the platform's
+-- host, 25 to 50 s) and runs the program rooted here, so `in`'s folders are
+-- this root's paths. `in` reaches the program as `folders`, since run.shale
+-- takes `in=` for the root it runs in. Its goldens, the Shale original's
+-- output on the plants, are held by cookbook/roc/count_roc/check_goldens.shale.
+-- budget: programs=10
 
-const IN = arg("in", ".")
-const TESTS = arg("tests", "/gates/,/tests/,Tests.roc,Expects.roc,_test.roc")
-const SKIP = arg("skip", "")
+const SCRIPT = "cookbook/roc/count_roc/count_roc.roc"
+const CHECKOUT = dirname(dirname(real("cookbook:README.md")))
 
-function literals(s)
-  local out = {}
-  for x in split(s, ",") do
-    if trim(x) ~= "" then push(out, trim(x)) end
-  end
-  return out
-end
-
-function holds_any(path, lits)
-  for l in lits do
-    if contains(path, l) then return true end
-  end
-  return false
-end
-
-const TEST_LITS = literals(TESTS)
-const SKIP_LITS = literals(SKIP)
-
-local rows = {}
-for place in literals(IN) do
-  local row = {place = place, modules = 0, lines = 0, test_modules = 0, test_lines = 0, expects = 0}
-  for e in walk_all(place, {kind = "file", skip = ".*", like = "*.roc"}) do
-    if not contains(e.path, "/zig-out/") and not holds_any(e.path, SKIP_LITS) then
-      local text = read(e.path)
-      local n = count_lines(e.path)
-      row.expects = row.expects + #re_lines(text, "^\\s*expect\\b")
-      if holds_any(e.path, TEST_LITS) then
-        row.test_modules = row.test_modules + 1
-        row.test_lines = row.test_lines + n
-      else
-        row.modules = row.modules + 1
-        row.lines = row.lines + n
-      end
-    end
-  end
-  push(rows, row)
-end
-print(table(rows, {"place", "modules", "lines", "test_modules", "test_lines", "expects"}))
+-- Each value is handed on only when it was given, so the defaults have one
+-- home, the Roc. Each is read here by its name, so a misspelled one stops the
+-- run before anything is built.
+const FOLDERS = arg("in", nil)
+const TESTS = arg("tests", nil)
+const SKIP = arg("skip", nil)
+local values = {"script=" .. SCRIPT, "in=" .. real(".")}
+if FOLDERS ~= nil then push(values, "folders=" .. FOLDERS) end
+if TESTS ~= nil then push(values, "tests=" .. TESTS) end
+if SKIP ~= nil then push(values, "skip=" .. SKIP) end
+local r = run({"shale", "--root", CHECKOUT, CHECKOUT .. "/roc_platform/run.shale", "--args-stdin"}, {stdin = join(values, "\n") .. "\n", timeout_ms = 600000, whole = 4000000})
+print(trim_end(r.out))
+if r.code ~= 0 then fail("count_roc: the Roc program stopped (exit " .. r.code .. ")") end
