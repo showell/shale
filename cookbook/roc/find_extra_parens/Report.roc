@@ -18,28 +18,52 @@ Report := [].{
 
 	## The report over `paths`. Under `house=0`, the house style
 	## (cookbook/roc/house.shale's `paren_if` and `lambda_if`) is left out.
-	make! : List(Str) => Report.Report
-	make! = |paths| {
+	## `settled` is what a rewrite already knows of a file it read last,
+	## unchanged since: `""` for no finding, else why it was refused
+	## (`Report.refusal_of`); those files are not read again, as Roc's arena
+	## frees nothing and a large tree's second parse would not fit beside its
+	## first.
+	make! : List(Str), Dict(Str, Str) => Report.Report
+	make! = |paths, settled| {
 		house = Report.read_house!({})
+		unsettled = paths.keep_if(|path| !(settled.contains(path)))
+		parsed = if unsettled.is_empty() {
+			[]
+		} else {
+			Shale.roc_tree!(unsettled)
+		}
 		var $findings = []
 		var $refused = []
-		for file in Shale.roc_tree!(paths) {
-			if file.err == "" {
-				source_lines = Report.read_text!(file.path).split_on("\n")
-				for found in Checks.findings_in(file.nodes, source_lines) {
-					if is_kept(house, found.check) {
-						$findings = $findings.append({
-							path: file.path,
-							line: found.line,
-							check: found.check,
-							what: Text.trim(Text.line_at(source_lines, found.line)),
-						})
+		$next : U64
+		var $next = 0
+		for path in paths {
+			match settled.get(path) {
+				Ok(refusal) =>
+					if refusal != "" {
+						$refused = $refused.append(refusal)
+					}
+				Err(_) => {
+					file = match parsed.get($next) {
+						Ok(found) => found
+						Err(_) => crash "Report.make!: roc_tree! gave fewer files than it was asked for"
+					}
+					$next = $next + 1
+					if file.err == "" {
+						source_lines = Report.read_text!(file.path).split_on("\n")
+						for found in Checks.findings_in(file.nodes, source_lines) {
+							if is_kept(house, found.check) {
+								$findings = $findings.append({
+									path: file.path,
+									line: found.line,
+									check: found.check,
+									what: Text.trim(Text.line_at(source_lines, found.line)),
+								})
+							}
+						}
+					} else {
+						$refused = $refused.append(Report.refusal_of(file.path, file.err))
 					}
 				}
-			} else if file.err.starts_with(file.path) {
-				$refused = $refused.append(file.err)
-			} else {
-				$refused = $refused.append("${file.path}: ${file.err}")
 			}
 		}
 		house_note = match house {
@@ -50,6 +74,16 @@ Report := [].{
 		summary = "find_extra_parens (Roc): ${paths.len().to_str()} files; ${counts}${house_note}"
 		{ summary, findings: $findings, refused: $refused }
 	}
+
+	## Why roc-ast refused a file, beginning with its path
+	## (cookbook/roc/parsed.shale's `parse_roc_files`).
+	refusal_of : Str, Str -> Str
+	refusal_of = |path, err|
+		if err.starts_with(path) {
+			err
+		} else {
+			"${path}: ${err}"
+		}
 
 	## Whether `house=0` leaves the house style out (cookbook/roc/house.shale).
 	read_house! : {} => [Kept, LeftOut]

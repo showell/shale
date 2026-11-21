@@ -35,8 +35,8 @@ SelfTest := [].{
 			Shale.write!(copy_of(path), Report.read_text!(path))
 		}
 		roc = Rewriting.roc_bin!(Bool.True)
-		_ = Rewriting.rewrite!(copies, roc)
-		left = Report.make!(copies)
+		rewritten = Rewriting.rewrite!(copies, roc)
+		left = Report.make!(copies, rewritten.settled)
 		for finding in left.findings {
 			$wrong = $wrong.append("left after the rewrite: ${Finding.line_of(finding)}")
 		}
@@ -50,7 +50,7 @@ SelfTest := [].{
 				$wrong = $wrong.append("${copy}: not as ${want}")
 			}
 		}
-		if Rewriting.rewrite!(copies, roc) != 0 {
+		if Rewriting.rewrite!(copies, roc).made != 0 {
 			$wrong = $wrong.append("a second rewrite changed something")
 		}
 		Shale.remove_tree!(scratch)

@@ -12,23 +12,33 @@ import lib.Tree
 Rewriting := [].{
 
 	## Rewrites `paths` until a pass changes nothing, and answers how many
-	## edits it made.
-	rewrite! : List(Str), Str => U64
+	## edits it made and what it knows of each file it read last: `settled`,
+	## `""` for a file with no finding, else why roc-ast refused it
+	## (Report.make!'s `settled`). Such a file is read no more, since no edit
+	## will touch it, so a large tree is parsed whole once, not four times a
+	## pass, which Roc's arena (it frees nothing) would not hold.
+	rewrite! : List(Str), Str => { made : U64, settled : Dict(Str, Str) }
 	rewrite! = |paths, roc| {
 		$made : U64
 		var $made = 0
+		var $live = paths
+		var $settled = Dict.empty()
 		var $changed = Bool.True
 		while $changed {
 			$changed = Bool.False
 			for check in Checks.names {
-				count = rewrite_check!(paths, check, roc)
-				if count > 0 {
-					$made = $made + count
+				pass = rewrite_check!($live, check, roc)
+				$live = pass.live
+				for (path, verdict) in pass.settled {
+					$settled = $settled.insert(path, verdict)
+				}
+				if pass.made > 0 {
+					$made = $made + pass.made
 					$changed = Bool.True
 				}
 			}
 		}
-		$made
+		{ made: $made, settled: $settled }
 	}
 
 	## The OS path of the Roc to rewrite with: in a self-test the pin every
@@ -52,51 +62,66 @@ Rewriting := [].{
 	}
 }
 
-## Makes one kind of edit across `paths`, and answers how many it made.
-rewrite_check! : List(Str), Str, Str => U64
+## Makes one kind of edit across `paths`, and answers how many it made, which
+## files had a finding of any check (the files still worth reading) and what
+## is settled of the rest, each `(path, verdict)` as `rewrite!` keeps it.
+rewrite_check! : List(Str), Str, Str => { made : U64, live : List(Str), settled : List((Str, Str)) }
 rewrite_check! = |paths, check, roc| {
 	$made : U64
 	var $made = 0
 	var $touched = []
-	for file in Shale.roc_tree!(paths) {
-		if file.err == "" {
-			count = rewrite_file!({ path: file.path, nodes: file.nodes }, check)
-			if count > 0 {
-				$made = $made + count
-				$touched = $touched.append(file.path)
+	var $live = []
+	var $settled = []
+	if !(paths.is_empty()) {
+		for file in Shale.roc_tree!(paths) {
+			if file.err == "" {
+				done = rewrite_file!({ path: file.path, nodes: file.nodes }, check)
+				if done.found_any {
+					$live = $live.append(file.path)
+				} else {
+					$settled = $settled.append((file.path, ""))
+				}
+				if done.made > 0 {
+					$made = $made + done.made
+					$touched = $touched.append(file.path)
+				}
+			} else {
+				$settled = $settled.append((file.path, Report.refusal_of(file.path, file.err)))
 			}
 		}
 	}
 	if !($touched.is_empty()) {
 		format!($touched, roc)
 	}
-	$made
+	{ made: $made, live: $live, settled: $settled }
 }
 
-## One kind of edit in one file, and how many it made. A finding inside
-## another's span of the same kind is safe: its brackets are its own.
-rewrite_file! : { path : Str, nodes : List(Tree.Node) }, Str => U64
+## One kind of edit in one file: how many it made, and whether the file had a
+## finding of any check. A finding inside another's span of the same kind is
+## safe: its brackets are its own.
+rewrite_file! : { path : Str, nodes : List(Tree.Node) }, Str => { made : U64, found_any : Bool }
 rewrite_file! = |file, check| {
 	text = Report.read_text!(file.path)
 	source_lines = text.split_on("\n")
 	findings = Checks.findings_in(file.nodes, source_lines)
 	bytes = text.to_utf8()
 	source = { path: file.path, text: bytes, nodes: file.nodes }
+	found_any = !(findings.is_empty())
 	match Edits.for_check(source, findings, check) {
 		Err(why) => {
 			Shale.fail!(why)
-			0
+			{ made: 0, found_any }
 		}
-		Ok([]) => 0
+		Ok([]) => { made: 0, found_any }
 		Ok(edits) =>
 			match Edits.applied(bytes, edits) {
 				Err(why) => {
 					Shale.fail!(why)
-					0
+					{ made: 0, found_any }
 				}
 				Ok(rewritten) => {
 					Shale.write!(file.path, Str.from_utf8_lossy(rewritten))
-					edits.len()
+					{ made: edits.len(), found_any }
 				}
 			}
 	}

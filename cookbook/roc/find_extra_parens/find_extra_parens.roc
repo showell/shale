@@ -38,12 +38,15 @@ main! = |{}| {
 	}
 	write = Shale.arg!("write", "") == "1"
 	paths = Shale.glob!(pattern)
-	if write {
+	settled = if write {
 		refuse_house_rewrite!({})
-		made = Rewriting.rewrite!(paths, Rewriting.roc_bin!(Bool.False))
-		Shale.print!("find_extra_parens: ${made.to_str()} edits")
+		rewritten = Rewriting.rewrite!(paths, Rewriting.roc_bin!(Bool.False))
+		Shale.print!("find_extra_parens: ${rewritten.made.to_str()} edits")
+		rewritten.settled
+	} else {
+		Dict.empty()
 	}
-	found = Report.make!(paths)
+	found = Report.make!(paths, settled)
 	print_findings!(found.summary, found.findings.map(Finding.line_of))
 	fail_if_refused!(found.refused)
 	if self_test {
