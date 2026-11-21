@@ -128,6 +128,12 @@ are passed in):
   [check_goldens.shale](find_unused_imports/check_goldens.shale) holds it to
   its goldens.
 
+The Roc recipes share one package, [lib/](lib/main.roc): `Tree` (Roc's
+tree of a file read), `Declarations` (what a file declares), `Text` (text
+cut and ordered as Shale's builtins do it) and `Finding` (a check's finding,
+ordered and printed). A recipe's app names it in its header, `lib:
+"../lib/main.roc"`, and imports `lib.Tree`.
+
 `hunt_names`, `check_errors` and `check_boundaries` can also ask Roc's type
 checker for types: add `types=1 root=<app>`, where the app imports the
 files read, or several apps separated by commas. A file that no app

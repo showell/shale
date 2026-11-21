@@ -1,8 +1,9 @@
 -- This recipe checks that modules which look alike are spelled alike, and
 -- that one type name means one thing. It is written in Roc, the app
--- cookbook/roc/check_families/check_families.roc and the modules beside it
--- (Family and Twin, the checks; Declarations and Tree, what they read; Text,
--- Finding and SelfTest), on Shale's Roc platform (roc_platform/README.md);
+-- cookbook/roc/check_families/check_families.roc, the modules beside it
+-- (Family and Twin, the checks; SelfTest) and the cookbook's Roc library
+-- (cookbook/roc/lib/: Declarations, Tree, Text and Finding), on Shale's Roc
+-- platform (roc_platform/README.md);
 -- this file is its launcher, so it is launched as every Shale recipe is:
 --
 --   cd <repo> && shale <shale>/cookbook/roc/check_families.shale

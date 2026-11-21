@@ -2,7 +2,8 @@
 ## cookbook/roc/plants/find_bare_floats/ run through the launcher, held to its
 ## findings, its exit and what it says (cookbook/roc/gate_recipe.shale's
 ## `check_plants`). It copies cookbook/roc/check_families/SelfTest.roc's
-## runner, on purpose, until the Roc recipes share a library.
+## runner, on purpose: a row is run through `Shale.run!`, and
+## cookbook/roc/lib/, a package, reaches no effect.
 import pf.Shale
 
 SelfTest := [].{

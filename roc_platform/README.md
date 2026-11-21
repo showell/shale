@@ -90,9 +90,12 @@ launcher takes with it:
 - **packages by a relative path** in the app's header (`lib:
   "../lib/main.roc"`, then `import lib.Plural`), as roc-chat imports
   roc-markdown: that `package [Plural] {}` file and the modules it
-  exposes. This is how recipes would share a module (a lib folder
-  beside them in cookbook/roc, say), though none does yet: what Roc does itself
-  stays in each recipe. A script's package imports no package of its own.
+  exposes. This is how the recipes share their modules: the cookbook's
+  Roc ports name `cookbook/roc/lib/` (`lib: "../lib/main.roc"`, then
+  `import lib.Tree`), whose Tree, Declarations, Text and Finding were each
+  a copy in several recipes. A package reaches no effect, so what runs a
+  program or reads a file (a self-test, a word list) stays in each recipe.
+  A script's package imports no package of its own.
 
 Every file is read through Shale's store (a path out of the root stops the
 launch), copied into the cache (the root as `main.roc`, packages under
@@ -138,8 +141,8 @@ object, so it runs when a Roc build is asked for, outside the tiers.
 **`cookbook/roc/find_unclear_names/`** is a recipe in Roc: its app's root
 is `find_unclear_names.roc` (the word lists, the run, the verdict), and
 beside it are a module a check (`PureMutator`, `Abbreviation`,
-`ModuleDoc`), what the checks read (`Tree`, `Declarations`, `Text`),
-`Finding` and `SelfTest`, each under 500 lines.
+`ModuleDoc`) and `SelfTest`, each under 500 lines; what the checks read
+(`Tree`, `Declarations`, `Text`) and `Finding` are `cookbook/roc/lib/`'s.
 `cookbook/roc/find_unclear_names.shale` is its launcher. The
 launcher hands its values to `run.shale` in the checkout its cookbook is in
 (the `cookbook` mount's parent) with `in=` its own root, so the build is

@@ -1,11 +1,11 @@
 -- This recipe finds every bare `F64` in a project's declarations, for a project
 -- that keeps its floats inside unit types. What must stay a float is named in
 -- the project's table, with a reason. It is written in Roc, the app
--- cookbook/roc/find_bare_floats/find_bare_floats.roc and the modules beside it
--- (Floats, the rule; TestHelpers and Exceptions, what it spares; Tree and
--- Text, what they read; Finding and SelfTest), on Shale's Roc platform
--- (roc_platform/README.md); this file is its launcher, so it is launched as
--- every Shale recipe is:
+-- cookbook/roc/find_bare_floats/find_bare_floats.roc, the modules beside it
+-- (Floats, the rule; TestHelpers and Exceptions, what it spares; SelfTest)
+-- and the cookbook's Roc library (cookbook/roc/lib/: Tree, Text and
+-- Finding), on Shale's Roc platform (roc_platform/README.md); this file is
+-- its launcher, so it is launched as every Shale recipe is:
 --
 --   cd <repo> && shale cookbook:roc/find_bare_floats.shale table=bare_floats.txt
 --   shale cookbook:roc/find_bare_floats.shale self_test=1

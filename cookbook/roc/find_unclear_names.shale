@@ -1,9 +1,10 @@
 -- This recipe finds names and top comments that say less than they should: a
 -- pure function named like a mutation, an abbreviation in a name, and a
 -- module with no doc or with history where its doc belongs. It is written in
--- Roc, the app cookbook/roc/find_unclear_names/find_unclear_names.roc and the
--- modules beside it (one a check, and what they read), run on Shale's Roc
--- platform (roc_platform/README.md); this file is its launcher, so it is
+-- Roc, the app cookbook/roc/find_unclear_names/find_unclear_names.roc, the
+-- modules beside it (one a check) and what they read, the cookbook's Roc
+-- library (cookbook/roc/lib/), run on Shale's Roc platform
+-- (roc_platform/README.md); this file is its launcher, so it is
 -- launched as every Shale recipe is:
 --
 --   cd <repo> && shale <shale>/cookbook/roc/find_unclear_names.shale

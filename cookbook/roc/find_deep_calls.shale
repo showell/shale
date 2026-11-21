@@ -3,9 +3,10 @@
 -- out. The Roc style guide (roc-apps docs/roc-style.md) asks for code that
 -- reads left to right instead: a method chain, a pipe, or a named middle
 -- step. It is written in Roc, the app
--- cookbook/roc/find_deep_calls/find_deep_calls.roc and the modules beside it
--- (Nest, the rule; Tree, what it reads; Finding; SelfTest, the plants'
--- check), on Shale's Roc platform (roc_platform/README.md), reading each
+-- cookbook/roc/find_deep_calls/find_deep_calls.roc, the modules beside it
+-- (Nest, the rule; NestFinding; SelfTest, the plants' check) and the
+-- cookbook's Roc library (cookbook/roc/lib/: Tree and Text, what it reads),
+-- on Shale's Roc platform (roc_platform/README.md), reading each
 -- file's syntax tree from Roc's own parser (`Shale.roc_tree!`); this file
 -- is its launcher, so it is launched as every Shale recipe is:
 --

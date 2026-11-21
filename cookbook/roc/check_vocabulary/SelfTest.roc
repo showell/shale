@@ -2,8 +2,8 @@
 ## cookbook/roc/plants/check_vocabulary/ run through the launcher, held to
 ## its findings, its exit and what it says (cookbook/roc/gate_recipe.shale's
 ## `check_plants`). It copies cookbook/roc/check_families/SelfTest.roc's
-## running and judging of a row, on purpose, until the Roc recipes share a
-## library.
+## running and judging of a row, on purpose: a row is run through
+## `Shale.run!`, and cookbook/roc/lib/, a package, reaches no effect.
 import pf.Shale
 
 SelfTest := [].{

@@ -1,11 +1,12 @@
 -- This recipe finds names that disagree with their types: a number left bare
 -- beside a typed one, a constant that means "none" but has an ordinary type,
 -- and, given a project's table, a word whose names must hold one type. It is
--- written in Roc, the app cookbook/roc/check_name_types/check_name_types.roc
--- and the modules beside it (NameType, BareBesideUnit and NoValue, the
--- checks; Declarations, Tree, Text and WordTable, what they read; Finding and
--- SelfTest), on Shale's Roc platform (roc_platform/README.md); this file is
--- its launcher, so it is launched as every Shale recipe is:
+-- written in Roc, the app cookbook/roc/check_name_types/check_name_types.roc,
+-- the modules beside it (NameType, BareBesideUnit and NoValue, the checks;
+-- Words, the table they read; SelfTest) and the cookbook's Roc library
+-- (cookbook/roc/lib/: Declarations, Tree, Text and Finding), on Shale's Roc
+-- platform (roc_platform/README.md); this file is its launcher, so it is
+-- launched as every Shale recipe is:
 --
 --   cd <repo> && shale <shale>/cookbook/roc/check_name_types.shale table=name_types.txt
 --   shale cookbook:roc/check_name_types.shale self_test=1

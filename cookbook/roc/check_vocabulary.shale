@@ -2,11 +2,11 @@
 -- keeps a file of them, and the recipe reports each identifier and comment
 -- in its .roc files that uses a word the file retires. The word lists belong
 -- to the project, so none is built in here. It is written in Roc, the app
--- cookbook/roc/check_vocabulary/check_vocabulary.roc and the modules beside
--- it (Retired, the checks; Identifiers, Tree, Words and Text, what they
--- read; Finding and SelfTest), on Shale's Roc platform
--- (roc_platform/README.md); this file is its launcher, so it is launched as
--- every Shale recipe is:
+-- cookbook/roc/check_vocabulary/check_vocabulary.roc, the modules beside it
+-- (Retired, the checks; Identifiers and Words, what they read; SelfTest) and
+-- the cookbook's Roc library (cookbook/roc/lib/: Tree, Text and Finding), on
+-- Shale's Roc platform (roc_platform/README.md); this file is its launcher,
+-- so it is launched as every Shale recipe is:
 --
 --   cd <repo> && shale <shale>/cookbook/roc/check_vocabulary.shale words=vocabulary.txt
 --   shale cookbook:roc/check_vocabulary.shale self_test=1
