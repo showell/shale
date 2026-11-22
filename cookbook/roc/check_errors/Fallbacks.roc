@@ -11,8 +11,8 @@
 ## With the types, a finding names the fallback's type and the tags the
 ## lookup fails with. Each `??` is judged by the three in that order.
 import pf.Shale
-import Forest
 import lib.Finding
+import lib.Forest
 import lib.RocTypes
 
 Fallbacks := [].{

@@ -17,9 +17,9 @@
 ## This root reads the optionals' words (`Shale.read!`), globs the files
 ## (`Shale.glob!`), gathers the types (Types, through `Shale.run!`), has
 ## Roc's parser read the files (`Shale.roc_tree!`) and prints the verdict
-## (`Shale.print!`, `Shale.fail!`). Its modules are beside it: the files'
-## trees joined (Forest), a module a check or two (ErrorAlias, OptionalTag,
-## Fallbacks), Types and SelfTest; Tree, Text, Finding and RocTypes are the
+## (`Shale.print!`, `Shale.fail!`). Its modules are beside it: a module a
+## check or two (ErrorAlias, OptionalTag, Fallbacks), Types and SelfTest;
+## Tree, Forest (the files' trees joined), Text, Finding and RocTypes are the
 ## cookbook's Roc library, cookbook/roc/lib/.
 ## budget: steps=400000000 arena_bytes=3000000000 output_bytes=4000000 programs=100
 app [main!] { lib: "../lib/main.roc", pf: platform "../../../roc_platform/platform/main.roc" }
@@ -28,7 +28,7 @@ import pf.Shale
 import ErrorAlias
 import Fallbacks
 import lib.Finding
-import Forest
+import lib.Forest
 import OptionalTag
 import SelfTest
 import lib.Text

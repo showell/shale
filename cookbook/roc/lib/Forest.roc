@@ -1,10 +1,10 @@
 ## Every parsed file's tree joined into one list of nodes, as the Shale
-## original joins them: each node's `parent` and `kids` are places in the
-## joined list, counted from 1, a file's root's parent 0, and each node keeps
-## its file's path. Nodes are in source order, each before its kids, so a
+## originals of check_errors and check_boundaries join them: each node's
+## `parent` and `kids` are places in the joined list, counted from 1, a
+## file's root's parent 0, and each node keeps its file's path. Nodes are in source order, each before its kids, so a
 ## subtree runs from its root to its last descendant, and a node with no line
 ## of its own takes the next line in the list, across a file's end.
-import lib.Tree
+import Tree
 
 Forest := {
 	nodes : List(Tree.Node),

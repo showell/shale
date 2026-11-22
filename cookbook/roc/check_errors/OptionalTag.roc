@@ -4,8 +4,8 @@
 ## the tag's line; with no payload there, the union is a mode with two ways
 ## (`[Words, None]`). A tag in an expression or a pattern is a finding once a
 ## file, at its first use, only when no type in the files checked names it.
-import Forest
 import lib.Finding
+import lib.Forest
 import lib.Text
 
 OptionalTag := [].{

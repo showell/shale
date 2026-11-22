@@ -7,8 +7,8 @@
 ## for `Answer` in Access.roc). Only top-level and module-member annotations
 ## are read. An error declared outside the files checked can't be judged, and
 ## is counted by name for the summary.
-import Forest
 import lib.Finding
+import lib.Forest
 import lib.Tree
 
 ErrorAlias := [].{

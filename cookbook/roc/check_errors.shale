@@ -68,10 +68,10 @@
 -- point at a line that names its tag.
 --
 -- It is written in Roc, the app cookbook/roc/check_errors/check_errors.roc,
--- the modules beside it (Forest, the files' trees joined; ErrorAlias,
--- OptionalTag and Fallbacks, the checks; Types, roc-types run; SelfTest) and
--- the cookbook's Roc library (cookbook/roc/lib/: Tree, Text, Finding and
--- RocTypes), on Shale's Roc platform (roc_platform/README.md); this file is
+-- the modules beside it (ErrorAlias, OptionalTag and Fallbacks, the checks;
+-- Types, roc-types run; SelfTest) and the cookbook's Roc library
+-- (cookbook/roc/lib/: Tree, Forest, Text, Finding and RocTypes), on
+-- Shale's Roc platform (roc_platform/README.md); this file is
 -- its launcher, so it is launched as every Shale recipe is.
 --
 -- **The launcher** hands every value it is given to roc_platform/run.shale in
