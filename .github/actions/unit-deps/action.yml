@@ -60,14 +60,14 @@ runs:
 
     # The roc_tree tests and the Roc recipes' self-tests read Roc's parser's
     # tree from ~/tools/roc-ast/bin/roc-ast (its --flat): the asset that
-    # github.com/showell/roc-ast's `release` names, published in roc-apps's
-    # toolchain release (8 MB, static, baseline CPU), its checksum checked,
+    # github.com/showell/roc-ast's `release` names, published as that repo's
+    # release roc-ast-flat1-0.1.0_RC1 (static, baseline CPU), its checksum checked,
     # so it always runs here; without it the tests fail, never skip.
     - name: Install roc-ast
       shell: bash
       run: |
-        curl -fsSL -o /tmp/roc-ast.tar.gz https://github.com/showell/roc-apps/releases/download/toolchain-2026-10-30-0602c5f/roc-ast-flat1-0602c5f-linux-x86_64.tar.gz
-        echo "5ccb92676cecb41a8b9251737eb418470cd94d7557c9fc5ebf4e2d89e540f8c5  /tmp/roc-ast.tar.gz" | sha256sum -c -
+        curl -fsSL -o /tmp/roc-ast.tar.gz https://github.com/showell/roc-ast/releases/download/roc-ast-flat1-0.1.0_RC1/roc-ast-flat1-0.1.0_RC1-linux-x86_64.tar.gz
+        echo "820c8f41e478f7343f8fba62c3a0cfc961301654e07888dc49a3319bdc67b751  /tmp/roc-ast.tar.gz" | sha256sum -c -
         mkdir -p ~/tools/roc-ast
         tar -xzf /tmp/roc-ast.tar.gz -C ~/tools/roc-ast
         test -x ~/tools/roc-ast/bin/roc-ast

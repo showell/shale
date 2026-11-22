@@ -59,7 +59,7 @@ Plants := [].{
 		{ ..typed("ProvenFails", "TypedApp", 1, 2), left: 2, why: "roc check: type mismatch" },
 		{ ..plain("Unrooted"), types: Bool.True, stop: "the types need root=" },
 		{ ..plain("NotApp"), types: Bool.True, root: "Proven", stop: "is not an app" },
-		{ ..plain("Pin"), types: Bool.True, root: "TypedApp", stop: "roc-types reads Roc nightly-2026-11-03-34bd006", tree_pin: "nightly-2026-10-29-a0a9fc2" },
+		{ ..plain("Pin"), types: Bool.True, root: "TypedApp", stop: "roc-types reads Roc 0.1.0_RC1", tree_pin: "nightly-2026-10-29-a0a9fc2" },
 		{ ..typed("Second", "TypedApp,SecondApp", 1, 0), left: 0 },
 		# A file no root reaches is listed, and the run goes on to the next.
 		{ ..typed("Unreached", "TypedApp,SecondApp", 1, 0), file: "Proven", beside: "Unreached", left: 0, unreached: 1 },

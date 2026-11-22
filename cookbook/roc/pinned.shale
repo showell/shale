@@ -6,4 +6,4 @@
 -- `SELF_TEST_PIN` from this file's text.
 
 -- Every recipe's self-test runs this Roc. CI installs it from roc-apps's release.
-const SELF_TEST_PIN = "nightly-2026-11-03-34bd006"
+const SELF_TEST_PIN = "0.1.0_RC1"

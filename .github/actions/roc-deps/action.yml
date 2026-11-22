@@ -1,9 +1,9 @@
 # The Roc the cookbook's Roc self-tests are judged by, for test.yml and
-# c-full.yml alike: the Roc nightly at cookbook/roc/pinned.shale's
-# SELF_TEST_PIN and roc-types built for that pin, both under ~/tools, each
-# download's checksum checked.
+# c-full.yml alike: the Roc at cookbook/roc/pinned.shale's SELF_TEST_PIN
+# and roc-types built for that pin, both under ~/tools, each download's
+# checksum checked.
 name: roc-deps
-description: the pinned Roc nightly and roc-types under ~/tools
+description: the pinned Roc and roc-types under ~/tools
 
 runs:
   using: composite
@@ -16,8 +16,8 @@ runs:
     - name: Install roc-types
       shell: bash
       run: |
-        url=https://github.com/showell/roc-apps/releases/download/roc-types-2026-11-16/roc-types-3-34bd006-linux-x86_64.tar.gz
-        sha=cd845659c8f6e167d0dff543f7a342fe41c361f7d5f1f4fdb8597a2e35a2f527
+        url=https://github.com/showell/roc-types/releases/download/roc-types-1-0.1.0_RC1/roc-types-1-0.1.0_RC1-linux-x86_64.tar.gz
+        sha=e4dc859dcff19fc625ba567452bc033934eb6aa2ec4621ec337576a4f4d8603d
         curl -fsSL -o /tmp/roc-types.tar.gz "$url"
         echo "$sha  /tmp/roc-types.tar.gz" | sha256sum -c -
         mkdir -p ~/tools/roc-types
@@ -26,17 +26,17 @@ runs:
 
     # The Roc rewrites' self-tests (cookbook/roc/rewrite_method_calls.shale and
     # check_stacking.shale) are judged by the compiler itself, at
-    # tools:roc-nightly-2026-11-03-34bd006/roc (cookbook/roc/pinned.shale's
-    # SELF_TEST_PIN, roc-types' pin): Roc's own nightly release, its checksum
-    # checked. The runner's CPU has the SHA extension the stock build needs.
+    # tools:roc-0.1.0_RC1/roc (cookbook/roc/pinned.shale's SELF_TEST_PIN,
+    # roc-types' pin): roc-lang/roc's release 0.1.0_RC1, its checksum the one
+    # GitHub publishes for it, and its `roc version` the pin.
     - name: Install Roc
       shell: bash
       run: |
-        curl -fsSL -o /tmp/roc.tar.gz https://github.com/roc-lang/nightlies/releases/download/nightly-2026-11-03-34bd006/roc_nightly-linux_x86_64-2026-11-03-34bd006.tar.gz
-        echo "d5c769579edd8e26114b5a89c16e7e074295649a6721a620c98a090eb2bb62c7  /tmp/roc.tar.gz" | sha256sum -c -
-        mkdir -p ~/tools/roc-nightly-2026-11-03-34bd006
-        tar -xzf /tmp/roc.tar.gz -C ~/tools/roc-nightly-2026-11-03-34bd006 --strip-components=1
-        test -x ~/tools/roc-nightly-2026-11-03-34bd006/roc
+        curl -fsSL -o /tmp/roc.tar.gz https://github.com/roc-lang/roc/releases/download/0.1.0_RC1/roc-linux_x86_64-0.1.0_RC1.tar.gz
+        echo "043c426ea85dcdbd427951eaed246f0c10c171d988f2598782233a6dae43379d  /tmp/roc.tar.gz" | sha256sum -c -
+        mkdir -p ~/tools/roc-0.1.0_RC1
+        tar -xzf /tmp/roc.tar.gz -C ~/tools/roc-0.1.0_RC1 --strip-components=1
+        test "$(~/tools/roc-0.1.0_RC1/roc version)" = "Roc compiler version 0.1.0_RC1"
 
     # A second nightly, which rewrite_method_calls' goldens pin a copy of the
     # plants to (its Pin case): the tree's Roc is then another than the one
