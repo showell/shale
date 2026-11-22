@@ -41,10 +41,10 @@ typedef struct {
     FlatKids kids;
     // 0 for a node the tool gives no span (Roc's `args`, `statements`).
     size_t line;
-    size_t col;
+    size_t column;
     size_t end_line;
-    size_t end_col;
-    FlatAttrs attrs;
+    size_t end_column;
+    FlatAttrs attributes;
 } FlatNode;
 
 VEC_DEFINE(FlatNodes, FlatNode)
@@ -94,7 +94,7 @@ static void flat_names(FlatTool tool, FlatNames *out) {
 static Names flat_reserved(void) {
     static const Str names[] = {
         S_ITEM("kind"), S_ITEM("depth"), S_ITEM("parent"), S_ITEM("kids"),
-        S_ITEM("line"), S_ITEM("col"), S_ITEM("end_line"), S_ITEM("end_col"),
+        S_ITEM("line"), S_ITEM("column"), S_ITEM("end_line"), S_ITEM("end_column"),
     };
     Names n = {names, sizeof names / sizeof *names};
     return n;
@@ -189,15 +189,15 @@ static STATUS_MUST_USE Status flat_add_attr(Arena *a, FlatFile *file, size_t nod
             return OK;
         }
     }
-    FlatAttrs *attrs = &at(file->nodes, node - 1).attrs;
-    for (size_t k = 0; k < attrs->len; k++) {
-        if (str_eq(at(*attrs, k).name, shown)) {
+    FlatAttrs *attributes = &at(file->nodes, node - 1).attributes;
+    for (size_t k = 0; k < attributes->len; k++) {
+        if (str_eq(at(*attributes, k).name, shown)) {
             *why = S("an attribute twice in one node");
             return OK;
         }
     }
     FlatAttr x = {shown, value};
-    return FlatAttrs_push(attrs, x);
+    return FlatAttrs_push(attributes, x);
 }
 
 SLICE_TYPE(FlatFields, Str);
@@ -410,8 +410,8 @@ static int64_t flat_int(size_t n) {
     return (int64_t)n;
 }
 
-// One node as Shale's map: `{kind, depth, parent, kids, line, col, end_line,
-// end_col}` in that order, then its attributes in theirs.
+// One node as Shale's map: `{kind, depth, parent, kids, line, column,
+// end_line, end_column}` in that order, then its attributes in theirs.
 static STATUS_MUST_USE Status flat_node_value(Run *r, Pos pos, const FlatNode *nd, Value *out) {
     Table *m = NULL;
     TRY(run_new_table(r, pos, &m));
@@ -431,11 +431,11 @@ static STATUS_MUST_USE Status flat_node_value(Run *r, Pos pos, const FlatNode *n
     value_table(&kids_v, kids);
     TRY(run_map_put(r, pos, m, S("kids"), &kids_v));
     TRY(run_map_put_int(r, pos, m, S("line"), flat_int(nd->line)));
-    TRY(run_map_put_int(r, pos, m, S("col"), flat_int(nd->col)));
+    TRY(run_map_put_int(r, pos, m, S("column"), flat_int(nd->column)));
     TRY(run_map_put_int(r, pos, m, S("end_line"), flat_int(nd->end_line)));
-    TRY(run_map_put_int(r, pos, m, S("end_col"), flat_int(nd->end_col)));
-    for (size_t k = 0; k < nd->attrs.len; k++) {
-        const FlatAttr *x = &at(nd->attrs, k);
+    TRY(run_map_put_int(r, pos, m, S("end_column"), flat_int(nd->end_column)));
+    for (size_t k = 0; k < nd->attributes.len; k++) {
+        const FlatAttr *x = &at(nd->attributes, k);
         Str name = {0};
         if (!arena_dup(r->ctx.values, x->name, &name)) return run_values_oom(r, pos);
         TRY(flat_put_text(r, pos, m, name, x->value));
@@ -541,8 +541,9 @@ static STATUS_MUST_USE Status flat_read(Run *r, Pos pos, Str text, FlatTool tool
 
 // `host("roc_tree", out, ending)` and `host("go_tree", out, ending)`, the
 // ending "whole" or "cut" (FlatEnding): `{files = {{path, nodes}, ...}[,
-// said]}`, each node `{kind, depth, parent, kids, line, col, end_line,
-// end_col}` and its attributes. Charges the text's bytes, then a step a node.
+// said]}`, each node `{kind, depth, parent, kids, line, column,
+// end_line, end_column}` and its attributes. Charges the text's bytes,
+// then a step a node.
 static STATUS_MUST_USE Status host_flat_tree(Run *r, Pos pos, ConstValues args, FlatTool tool, Value *out) {
     FlatNames n;
     flat_names(tool, &n);

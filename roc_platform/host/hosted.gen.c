@@ -858,8 +858,8 @@ static STATUS_MUST_USE Status hosted_answer_from(Run *r, Pos pos, int kind, cons
                 Values items100;
                 TRY(hosted_items(r, pos, v, &items100));
                 void *elems101 = NULL;
-                TRY(hosted_list(r, pos, items100.len, sizeof(AnonStruct8e43eed7b6bbf36f), &(hosted_answer.roc_tree), &elems101));
-                AnonStruct8e43eed7b6bbf36f *made102 = elems101;
+                TRY(hosted_list(r, pos, items100.len, sizeof(AnonStruct7c4f25fe62b1580), &(hosted_answer.roc_tree), &elems101));
+                AnonStruct7c4f25fe62b1580 *made102 = elems101;
                 for (size_t k103 = 0; k103 < items100.len; k103++) {
                     {
                         Value path_104;
@@ -878,8 +878,8 @@ static STATUS_MUST_USE Status hosted_answer_from(Run *r, Pos pos, int kind, cons
                             Values items107;
                             TRY(hosted_items(r, pos, &nodes_106, &items107));
                             void *elems108 = NULL;
-                            TRY(hosted_list(r, pos, items107.len, sizeof(AnonStructCab41e0e3e24b946), &((made102[k103]).nodes), &elems108));
-                            AnonStructCab41e0e3e24b946 *made109 = elems108;
+                            TRY(hosted_list(r, pos, items107.len, sizeof(AnonStruct7be1c6ff8a366523), &((made102[k103]).nodes), &elems108));
+                            AnonStruct7be1c6ff8a366523 *made109 = elems108;
                             for (size_t k110 = 0; k110 < items107.len; k110++) {
                                 {
                                     Value kind_111;
@@ -932,12 +932,12 @@ static STATUS_MUST_USE Status hosted_answer_from(Run *r, Pos pos, int kind, cons
                                     }
                                 }
                                 {
-                                    Value col_124;
-                                    TRY(hosted_get(r, pos, &at(items107, k110), S("col"), &col_124));
+                                    Value column_124;
+                                    TRY(hosted_get(r, pos, &at(items107, k110), S("column"), &column_124));
                                     {
                                         int64_t n125 = 0;
-                                        TRY(hosted_int(r, pos, &col_124, &n125));
-                                        (made109[k110]).col = (uint64_t)n125;
+                                        TRY(hosted_int(r, pos, &column_124, &n125));
+                                        (made109[k110]).column = (uint64_t)n125;
                                     }
                                 }
                                 {
@@ -950,12 +950,12 @@ static STATUS_MUST_USE Status hosted_answer_from(Run *r, Pos pos, int kind, cons
                                     }
                                 }
                                 {
-                                    Value end_col_128;
-                                    TRY(hosted_get(r, pos, &at(items107, k110), S("end_col"), &end_col_128));
+                                    Value end_column_128;
+                                    TRY(hosted_get(r, pos, &at(items107, k110), S("end_column"), &end_column_128));
                                     {
                                         int64_t n129 = 0;
-                                        TRY(hosted_int(r, pos, &end_col_128, &n129));
-                                        (made109[k110]).end_col = (uint64_t)n129;
+                                        TRY(hosted_int(r, pos, &end_column_128, &n129));
+                                        (made109[k110]).end_column = (uint64_t)n129;
                                     }
                                 }
                                 {
@@ -964,15 +964,15 @@ static STATUS_MUST_USE Status hosted_answer_from(Run *r, Pos pos, int kind, cons
                                     size_t n131 = 0;
                                     for (size_t k = 0; k < ValueMap_len(map130); k++) {
                                         Str key = ValueMap_key_at(map130, k);
-                                        if (!(str_eq(key, S("kind")) || str_eq(key, S("depth")) || str_eq(key, S("parent")) || str_eq(key, S("kids")) || str_eq(key, S("line")) || str_eq(key, S("col")) || str_eq(key, S("end_line")) || str_eq(key, S("end_col")))) n131++;
+                                        if (!(str_eq(key, S("kind")) || str_eq(key, S("depth")) || str_eq(key, S("parent")) || str_eq(key, S("kids")) || str_eq(key, S("line")) || str_eq(key, S("column")) || str_eq(key, S("end_line")) || str_eq(key, S("end_column")))) n131++;
                                     }
                                     void *elems132 = NULL;
-                                    TRY(hosted_list(r, pos, n131, sizeof(AnonStruct82a96c5d55d63488), &((made109[k110]).attrs), &elems132));
+                                    TRY(hosted_list(r, pos, n131, sizeof(AnonStruct82a96c5d55d63488), &((made109[k110]).attributes), &elems132));
                                     AnonStruct82a96c5d55d63488 *made133 = elems132;
                                     size_t j = 0;
                                     for (size_t k = 0; k < ValueMap_len(map130); k++) {
                                         Str key = ValueMap_key_at(map130, k);
-                                        if (str_eq(key, S("kind")) || str_eq(key, S("depth")) || str_eq(key, S("parent")) || str_eq(key, S("kids")) || str_eq(key, S("line")) || str_eq(key, S("col")) || str_eq(key, S("end_line")) || str_eq(key, S("end_col"))) continue;
+                                        if (str_eq(key, S("kind")) || str_eq(key, S("depth")) || str_eq(key, S("parent")) || str_eq(key, S("kids")) || str_eq(key, S("line")) || str_eq(key, S("column")) || str_eq(key, S("end_line")) || str_eq(key, S("end_column"))) continue;
                                         Value name_v;
                                         value_string(&name_v, key);
                                         Value value_v = ValueMap_value_at(map130, k);

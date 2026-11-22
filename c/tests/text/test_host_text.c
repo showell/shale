@@ -121,15 +121,15 @@ TEST(flat_tree_reads_nodes_parents_depths_kids_spans_and_attributes_two_files_an
                      "print(host(\"json_write\", t))\n"),
                ran_budgets());
     EXPECT_OK_IN(&x.r.ctx, x.ran);
-    EXPECT_STR(buf_view(&x.r.out), S("{\"files\":[{\"path\":\"/x/a.roc\",\"nodes\":[{\"kind\":\"file\",\"depth\":0,\"parent\":0,\"kids\":[2],\"line\":1,\"col\":1,\"end_line\":5,\"end_col\":14},{\"kind\":\"statements\",\"depth\":1,\"parent\":1,\"kids\":[3],\"line\":0,\"col\":0,\"end_line\":0,\"end_col\":0},{\"kind\":\"e-binop\",\"depth\":2,\"parent\":2,\"kids\":[4],\"line\":5,\"col\":8,\"end_line\":5,\"end_col\":14,\"op\":\"==\"},{\"kind\":\"e-ident\",\"depth\":3,\"parent\":3,\"kids\":[],\"line\":5,\"col\":8,\"end_line\":5,\"end_col\":10,\"raw\":\"x\"}]},{\"path\":\"/x/b.roc\",\"nodes\":[{\"kind\":\"file\",\"depth\":0,\"parent\":0,\"kids\":[],\"line\":1,\"col\":1,\"end_line\":1,\"end_col\":2,\"line_doc\":\"k\\tq\\\\\"}]}],\"said\":\"/x/c.roc: refused\"}\n"));
-    EXPECT_EQ(x.r.steps, 746);
+    EXPECT_STR(buf_view(&x.r.out), S("{\"files\":[{\"path\":\"/x/a.roc\",\"nodes\":[{\"kind\":\"file\",\"depth\":0,\"parent\":0,\"kids\":[2],\"line\":1,\"column\":1,\"end_line\":5,\"end_column\":14},{\"kind\":\"statements\",\"depth\":1,\"parent\":1,\"kids\":[3],\"line\":0,\"column\":0,\"end_line\":0,\"end_column\":0},{\"kind\":\"e-binop\",\"depth\":2,\"parent\":2,\"kids\":[4],\"line\":5,\"column\":8,\"end_line\":5,\"end_column\":14,\"op\":\"==\"},{\"kind\":\"e-ident\",\"depth\":3,\"parent\":3,\"kids\":[],\"line\":5,\"column\":8,\"end_line\":5,\"end_column\":10,\"raw\":\"x\"}]},{\"path\":\"/x/b.roc\",\"nodes\":[{\"kind\":\"file\",\"depth\":0,\"parent\":0,\"kids\":[],\"line\":1,\"column\":1,\"end_line\":1,\"end_column\":2,\"line_doc\":\"k\\tq\\\\\"}]}],\"said\":\"/x/c.roc: refused\"}\n"));
+    EXPECT_EQ(x.r.steps, 778);
     ran_free(&x);
 }
 
 TEST(flat_tree_refuses_a_line_that_does_not_read_naming_its_line_and_why) {
     static Ran x;
     ran_source(&x, S("function rt(s) return host(\"roc_tree\", \"roc-ast flat 1 p\\n\" .. s, \"whole\") end\n"
-                     "for s in {\"n\\t0\\tfile\\t1\\t1\\t1\\t2\\n\", \"== /x\\nn\\t0\\tfile\\t1\\t1\\t1\\n\", \"== /x\\nn\\t0\\tfile\\t1\\t1\\t1\\t2\\t9\\n\", \"== /x\\nn\\t1\\tfile\\t1\\t1\\t1\\t2\\n\", \"== /x\\nn\\t0\\tfile\\t1\\t1\\t1\\t2\\na\\t2\\traw\\tx\\n\", \"== /x\\nn\\t0\\tfile\\t1\\t1\\t1\\t2\\na\\t0\\traw\\tx\\n\", \"== /x\\nn\\t0\\tfile\\t1\\t1\\t1\\t2\\na\\t1\\traw\\n\", \"== /x\\nn\\t0\\tfile\\t1\\t1\\t1\\t2\\na\\t1\\traw\\tx\\\\q\\n\", \"== /x\\nn\\t0\\tfile\\t1\\t1\\t1\\t2\\na\\t1\\traw\\tx\\\\\\n\", \"== /x\\nn\\t0\\t\\t1\\t1\\t1\\t2\\n\", \"== /x\\nn\\t0\\tfile\\tx\\t1\\t1\\t2\\n\", \"== /x\\nn\\t-1\\tfile\\t1\\t1\\t1\\t2\\n\", \"== /x\\nn\\t0\\tfile\\t_1\\t1\\t1\\t2\\n\", \"== /x\\nn\\t0\\tfile\\t18446744073709551616\\t1\\t1\\t2\\n\", \"== /x\\nn\\t0\\tfile\\t1\\t1\\t1\\t2\\na\\t1\\traw\\tx\\na\\t1\\traw\\ty\\n\", \"== /x\\nn\\t0\\tfile\\t1\\t1\\t1\\t2\\na\\t1\\tend-col\\tx\\n\", \"== /x\\nn\\tq\\tfile\\t1\\t1\\t1\\t2\\n\", \"== /x\\nn\\t0\\tfile\\t1\\t1\\t1\\t2\\na\\tz\\traw\\tx\\n\", \"== /x\\nn\\t0\\tfi\\\\le\\t1\\t1\\t1\\t2\\n\"} do\n"
+                     "for s in {\"n\\t0\\tfile\\t1\\t1\\t1\\t2\\n\", \"== /x\\nn\\t0\\tfile\\t1\\t1\\t1\\n\", \"== /x\\nn\\t0\\tfile\\t1\\t1\\t1\\t2\\t9\\n\", \"== /x\\nn\\t1\\tfile\\t1\\t1\\t1\\t2\\n\", \"== /x\\nn\\t0\\tfile\\t1\\t1\\t1\\t2\\na\\t2\\traw\\tx\\n\", \"== /x\\nn\\t0\\tfile\\t1\\t1\\t1\\t2\\na\\t0\\traw\\tx\\n\", \"== /x\\nn\\t0\\tfile\\t1\\t1\\t1\\t2\\na\\t1\\traw\\n\", \"== /x\\nn\\t0\\tfile\\t1\\t1\\t1\\t2\\na\\t1\\traw\\tx\\\\q\\n\", \"== /x\\nn\\t0\\tfile\\t1\\t1\\t1\\t2\\na\\t1\\traw\\tx\\\\\\n\", \"== /x\\nn\\t0\\t\\t1\\t1\\t1\\t2\\n\", \"== /x\\nn\\t0\\tfile\\tx\\t1\\t1\\t2\\n\", \"== /x\\nn\\t-1\\tfile\\t1\\t1\\t1\\t2\\n\", \"== /x\\nn\\t0\\tfile\\t_1\\t1\\t1\\t2\\n\", \"== /x\\nn\\t0\\tfile\\t18446744073709551616\\t1\\t1\\t2\\n\", \"== /x\\nn\\t0\\tfile\\t1\\t1\\t1\\t2\\na\\t1\\traw\\tx\\na\\t1\\traw\\ty\\n\", \"== /x\\nn\\t0\\tfile\\t1\\t1\\t1\\t2\\na\\t1\\tend-column\\tx\\n\", \"== /x\\nn\\tq\\tfile\\t1\\t1\\t1\\t2\\n\", \"== /x\\nn\\t0\\tfile\\t1\\t1\\t1\\t2\\na\\tz\\traw\\tx\\n\", \"== /x\\nn\\t0\\tfi\\\\le\\t1\\t1\\t1\\t2\\n\"} do\n"
                      "  print(attempt(rt, s).error)\n"
                      "end\n"),
                ran_budgets());
@@ -153,7 +153,7 @@ TEST(flat_tree_refuses_a_line_that_does_not_read_naming_its_line_and_why) {
                      "`roc_tree`: roc-ast's output line 3 is not a tree's: a node's parent\n"
                      "`roc_tree`: roc-ast's output line 4 is not a tree's: an attribute's node\n"
                      "`roc_tree`: roc-ast's output line 3 is not a tree's: a bad escape\n"));
-    EXPECT_EQ(x.r.steps, 2951);
+    EXPECT_EQ(x.r.steps, 2954);
     ran_free(&x);
 }
 
@@ -189,9 +189,9 @@ TEST(flat_tree_reads_each_tools_header_as_its_own_and_refuses_another) {
                      "`roc_tree`: roc-ast's output line 3 is not a tree's: roc-ast's --flat is another format than 1, the one this Shale reads: `shale install.shale` in a checkout of https://github.com/showell/roc-ast installs the matching roc-ast\n"
                      "`go_tree`: go-ast's output line 1 is not a tree's: no `go-ast flat 1` header: an older go-ast, or not its --flat; Shale's `shale tools/go_ast/install.shale` installs the one this Shale reads\n"
                      "`go_tree`: go-ast's output line 1 is not a tree's: go-ast's --flat is another format than 1, the one this Shale reads: Shale's `shale tools/go_ast/install.shale` installs the matching go-ast\n"
-                     "{\"files\":[{\"path\":\"/x/a.go\",\"nodes\":[{\"kind\":\"File\",\"depth\":0,\"parent\":0,\"kids\":[2],\"line\":1,\"col\":1,\"end_line\":3,\"end_col\":2},{\"kind\":\"Ident\",\"depth\":1,\"parent\":1,\"kids\":[],\"line\":1,\"col\":9,\"end_line\":1,\"end_col\":10,\"role\":\"Name\",\"name\":\"a\"}]}]}\n"
+                     "{\"files\":[{\"path\":\"/x/a.go\",\"nodes\":[{\"kind\":\"File\",\"depth\":0,\"parent\":0,\"kids\":[2],\"line\":1,\"column\":1,\"end_line\":3,\"end_column\":2},{\"kind\":\"Ident\",\"depth\":1,\"parent\":1,\"kids\":[],\"line\":1,\"column\":9,\"end_line\":1,\"end_column\":10,\"role\":\"Name\",\"name\":\"a\"}]}]}\n"
                      "{\"files\":[]}\t{\"files\":[]}\n"));
-    EXPECT_EQ(x.r.steps, 1906);
+    EXPECT_EQ(x.r.steps, 1919);
     ran_free(&x);
 }
 
@@ -204,8 +204,8 @@ TEST(flat_tree_ends_the_trees_at_a_line_that_does_not_read_in_a_cut_output) {
                ran_budgets());
     EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("`roc_tree`: roc-ast's output line 6 is not a tree's: an attribute line without its three fields\n"
-                     "{\"files\":[{\"path\":\"/x/a.roc\",\"nodes\":[{\"kind\":\"file\",\"depth\":0,\"parent\":0,\"kids\":[],\"line\":1,\"col\":1,\"end_line\":1,\"end_col\":2}]},{\"path\":\"/x/b.roc\",\"nodes\":[{\"kind\":\"file\",\"depth\":0,\"parent\":0,\"kids\":[],\"line\":1,\"col\":1,\"end_line\":1,\"end_col\":2}]}],\"said\":\"a\\t1\\trawerror: IsDir\"}\n"));
-    EXPECT_EQ(x.r.steps, 489);
+                     "{\"files\":[{\"path\":\"/x/a.roc\",\"nodes\":[{\"kind\":\"file\",\"depth\":0,\"parent\":0,\"kids\":[],\"line\":1,\"column\":1,\"end_line\":1,\"end_column\":2}]},{\"path\":\"/x/b.roc\",\"nodes\":[{\"kind\":\"file\",\"depth\":0,\"parent\":0,\"kids\":[],\"line\":1,\"column\":1,\"end_line\":1,\"end_column\":2}]}],\"said\":\"a\\t1\\trawerror: IsDir\"}\n"));
+    EXPECT_EQ(x.r.steps, 502);
     ran_free(&x);
 }
 

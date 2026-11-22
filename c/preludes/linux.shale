@@ -604,7 +604,7 @@ end
 -- **ROC FILES' TREES, FROM ROC'S OWN PARSER**: each path run through
 -- roc-ast (`tools:roc-ast/bin/roc-ast --flat`, github.com/showell/roc-ast) and
 -- its lines read in the host: one `{path, nodes, err}` a path, in order. A node
--- is `{kind, depth, parent, kids, line, col, end_line, end_col}` and the
+-- is `{kind, depth, parent, kids, line, column, end_line, end_column}` and the
 -- attributes Roc's tree gives it (`raw`, `name`, `method`, `op`, `type`,
 -- `field`, a positional string as `value`), `parent` and `kids` indices
 -- into `nodes`. A missing file's `err` is "no such file", and no program

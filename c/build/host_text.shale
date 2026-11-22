@@ -85,7 +85,7 @@ create("bad.roc", "module [x]\n\nx = = 1\n")
 create("empty.roc", "")
 for f in roc_tree({"a.roc", "bad.roc", "gone.roc", "empty.roc", "a.roc"}) do
   print(f.path, #f.nodes, f.err)
-  for n in f.nodes do print(n.kind, n.depth, n.parent, #n.kids, n.line, n.col, n.end_line, n.end_col, get(n, "raw", "")) end
+  for n in f.nodes do print(n.kind, n.depth, n.parent, #n.kids, n.line, n.column, n.end_line, n.end_column, get(n, "raw", "")) end
 end
 print(#roc_tree({}))
 ]==]},
@@ -94,7 +94,7 @@ create("a.go", "package a\n\nfunc f(x int) int { return x + 1 }\n")
 create("bad.go", "package a\nfunc (\n")
 for f in go_tree({"a.go", "bad.go", "gone.go"}) do
   print(f.path, #f.nodes, f.err)
-  for n in f.nodes do print(n.kind, n.depth, n.parent, #n.kids, n.line, n.col, get(n, "role", ""), get(n, "name", "")) end
+  for n in f.nodes do print(n.kind, n.depth, n.parent, #n.kids, n.line, n.column, get(n, "role", ""), get(n, "name", "")) end
 end
 ]==]},
 }

@@ -171,8 +171,8 @@ typedef struct FoundOrMissingType7 FoundOrMissingType7;
 typedef struct FoundOrNoMatch FoundOrNoMatch;
 typedef struct AnonStruct9ba65f4c7e87294d AnonStruct9ba65f4c7e87294d;
 typedef struct FoundOrMissingType11 FoundOrMissingType11;
-typedef struct AnonStruct8e43eed7b6bbf36f AnonStruct8e43eed7b6bbf36f;
-typedef struct AnonStructCab41e0e3e24b946 AnonStructCab41e0e3e24b946;
+typedef struct AnonStruct7c4f25fe62b1580 AnonStruct7c4f25fe62b1580;
+typedef struct AnonStruct7be1c6ff8a366523 AnonStruct7be1c6ff8a366523;
 typedef struct AnonStruct82a96c5d55d63488 AnonStruct82a96c5d55d63488;
 typedef struct AnonStruct1763995a077e9c1f AnonStruct1763995a077e9c1f;
 typedef struct AnonStruct389780dd35a9c209 AnonStruct389780dd35a9c209;
@@ -382,75 +382,75 @@ static inline RocStr FoundOrMissingType11_payload_found(const FoundOrMissingType
 }
 
 #if UINTPTR_MAX == UINT64_MAX
-struct AnonStruct8e43eed7b6bbf36f {
+struct AnonStruct7c4f25fe62b1580 {
     RocStr err;
     RocList nodes;
     RocStr path;
 };
-ROC_STATIC_ASSERT(sizeof(AnonStruct8e43eed7b6bbf36f) == 72, "AnonStruct8e43eed7b6bbf36f size mismatch");
-ROC_STATIC_ASSERT(ROC_ALIGNOF(AnonStruct8e43eed7b6bbf36f) == 8, "AnonStruct8e43eed7b6bbf36f alignment mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStruct8e43eed7b6bbf36f, err) == 0, "AnonStruct8e43eed7b6bbf36f.err offset mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStruct8e43eed7b6bbf36f, nodes) == 24, "AnonStruct8e43eed7b6bbf36f.nodes offset mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStruct8e43eed7b6bbf36f, path) == 48, "AnonStruct8e43eed7b6bbf36f.path offset mismatch");
+ROC_STATIC_ASSERT(sizeof(AnonStruct7c4f25fe62b1580) == 72, "AnonStruct7c4f25fe62b1580 size mismatch");
+ROC_STATIC_ASSERT(ROC_ALIGNOF(AnonStruct7c4f25fe62b1580) == 8, "AnonStruct7c4f25fe62b1580 alignment mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7c4f25fe62b1580, err) == 0, "AnonStruct7c4f25fe62b1580.err offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7c4f25fe62b1580, nodes) == 24, "AnonStruct7c4f25fe62b1580.nodes offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7c4f25fe62b1580, path) == 48, "AnonStruct7c4f25fe62b1580.path offset mismatch");
 #else
-struct AnonStruct8e43eed7b6bbf36f {
+struct AnonStruct7c4f25fe62b1580 {
     RocStr err;
     RocList nodes;
     RocStr path;
 };
-ROC_STATIC_ASSERT(sizeof(AnonStruct8e43eed7b6bbf36f) == 36, "AnonStruct8e43eed7b6bbf36f size mismatch");
-ROC_STATIC_ASSERT(ROC_ALIGNOF(AnonStruct8e43eed7b6bbf36f) == 4, "AnonStruct8e43eed7b6bbf36f alignment mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStruct8e43eed7b6bbf36f, err) == 0, "AnonStruct8e43eed7b6bbf36f.err offset mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStruct8e43eed7b6bbf36f, nodes) == 12, "AnonStruct8e43eed7b6bbf36f.nodes offset mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStruct8e43eed7b6bbf36f, path) == 24, "AnonStruct8e43eed7b6bbf36f.path offset mismatch");
+ROC_STATIC_ASSERT(sizeof(AnonStruct7c4f25fe62b1580) == 36, "AnonStruct7c4f25fe62b1580 size mismatch");
+ROC_STATIC_ASSERT(ROC_ALIGNOF(AnonStruct7c4f25fe62b1580) == 4, "AnonStruct7c4f25fe62b1580 alignment mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7c4f25fe62b1580, err) == 0, "AnonStruct7c4f25fe62b1580.err offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7c4f25fe62b1580, nodes) == 12, "AnonStruct7c4f25fe62b1580.nodes offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7c4f25fe62b1580, path) == 24, "AnonStruct7c4f25fe62b1580.path offset mismatch");
 #endif
 
 #if UINTPTR_MAX == UINT64_MAX
-struct AnonStructCab41e0e3e24b946 {
-    uint64_t col;
+struct AnonStruct7be1c6ff8a366523 {
+    uint64_t column;
     uint64_t depth;
-    uint64_t end_col;
+    uint64_t end_column;
     uint64_t end_line;
     uint64_t line;
     uint64_t parent;
-    RocList attrs;
+    RocList attributes;
     RocList kids;
     RocStr kind;
 };
-ROC_STATIC_ASSERT(sizeof(AnonStructCab41e0e3e24b946) == 120, "AnonStructCab41e0e3e24b946 size mismatch");
-ROC_STATIC_ASSERT(ROC_ALIGNOF(AnonStructCab41e0e3e24b946) == 8, "AnonStructCab41e0e3e24b946 alignment mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, col) == 0, "AnonStructCab41e0e3e24b946.col offset mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, depth) == 8, "AnonStructCab41e0e3e24b946.depth offset mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, end_col) == 16, "AnonStructCab41e0e3e24b946.end_col offset mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, end_line) == 24, "AnonStructCab41e0e3e24b946.end_line offset mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, line) == 32, "AnonStructCab41e0e3e24b946.line offset mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, parent) == 40, "AnonStructCab41e0e3e24b946.parent offset mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, attrs) == 48, "AnonStructCab41e0e3e24b946.attrs offset mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, kids) == 72, "AnonStructCab41e0e3e24b946.kids offset mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, kind) == 96, "AnonStructCab41e0e3e24b946.kind offset mismatch");
+ROC_STATIC_ASSERT(sizeof(AnonStruct7be1c6ff8a366523) == 120, "AnonStruct7be1c6ff8a366523 size mismatch");
+ROC_STATIC_ASSERT(ROC_ALIGNOF(AnonStruct7be1c6ff8a366523) == 8, "AnonStruct7be1c6ff8a366523 alignment mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7be1c6ff8a366523, column) == 0, "AnonStruct7be1c6ff8a366523.column offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7be1c6ff8a366523, depth) == 8, "AnonStruct7be1c6ff8a366523.depth offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7be1c6ff8a366523, end_column) == 16, "AnonStruct7be1c6ff8a366523.end_column offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7be1c6ff8a366523, end_line) == 24, "AnonStruct7be1c6ff8a366523.end_line offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7be1c6ff8a366523, line) == 32, "AnonStruct7be1c6ff8a366523.line offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7be1c6ff8a366523, parent) == 40, "AnonStruct7be1c6ff8a366523.parent offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7be1c6ff8a366523, attributes) == 48, "AnonStruct7be1c6ff8a366523.attributes offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7be1c6ff8a366523, kids) == 72, "AnonStruct7be1c6ff8a366523.kids offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7be1c6ff8a366523, kind) == 96, "AnonStruct7be1c6ff8a366523.kind offset mismatch");
 #else
-struct AnonStructCab41e0e3e24b946 {
-    uint64_t col;
+struct AnonStruct7be1c6ff8a366523 {
+    uint64_t column;
     uint64_t depth;
-    uint64_t end_col;
+    uint64_t end_column;
     uint64_t end_line;
     uint64_t line;
     uint64_t parent;
-    RocList attrs;
+    RocList attributes;
     RocList kids;
     RocStr kind;
 };
-ROC_STATIC_ASSERT(sizeof(AnonStructCab41e0e3e24b946) == 88, "AnonStructCab41e0e3e24b946 size mismatch");
-ROC_STATIC_ASSERT(ROC_ALIGNOF(AnonStructCab41e0e3e24b946) == 8, "AnonStructCab41e0e3e24b946 alignment mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, col) == 0, "AnonStructCab41e0e3e24b946.col offset mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, depth) == 8, "AnonStructCab41e0e3e24b946.depth offset mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, end_col) == 16, "AnonStructCab41e0e3e24b946.end_col offset mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, end_line) == 24, "AnonStructCab41e0e3e24b946.end_line offset mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, line) == 32, "AnonStructCab41e0e3e24b946.line offset mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, parent) == 40, "AnonStructCab41e0e3e24b946.parent offset mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, attrs) == 48, "AnonStructCab41e0e3e24b946.attrs offset mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, kids) == 60, "AnonStructCab41e0e3e24b946.kids offset mismatch");
-ROC_STATIC_ASSERT(offsetof(AnonStructCab41e0e3e24b946, kind) == 72, "AnonStructCab41e0e3e24b946.kind offset mismatch");
+ROC_STATIC_ASSERT(sizeof(AnonStruct7be1c6ff8a366523) == 88, "AnonStruct7be1c6ff8a366523 size mismatch");
+ROC_STATIC_ASSERT(ROC_ALIGNOF(AnonStruct7be1c6ff8a366523) == 8, "AnonStruct7be1c6ff8a366523 alignment mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7be1c6ff8a366523, column) == 0, "AnonStruct7be1c6ff8a366523.column offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7be1c6ff8a366523, depth) == 8, "AnonStruct7be1c6ff8a366523.depth offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7be1c6ff8a366523, end_column) == 16, "AnonStruct7be1c6ff8a366523.end_column offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7be1c6ff8a366523, end_line) == 24, "AnonStruct7be1c6ff8a366523.end_line offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7be1c6ff8a366523, line) == 32, "AnonStruct7be1c6ff8a366523.line offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7be1c6ff8a366523, parent) == 40, "AnonStruct7be1c6ff8a366523.parent offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7be1c6ff8a366523, attributes) == 48, "AnonStruct7be1c6ff8a366523.attributes offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7be1c6ff8a366523, kids) == 60, "AnonStruct7be1c6ff8a366523.kids offset mismatch");
+ROC_STATIC_ASSERT(offsetof(AnonStruct7be1c6ff8a366523, kind) == 72, "AnonStruct7be1c6ff8a366523.kind offset mismatch");
 #endif
 
 #if UINTPTR_MAX == UINT64_MAX
@@ -620,9 +620,9 @@ typedef FoundOrMissingType7 FoundOrMissing;
 typedef AnonStruct9ba65f4c7e87294d FoundOrNoMatchFound;
 typedef AnonStruct9ba65f4c7e87294d ShaleReFindAll;
 typedef AnonStruct1d63bdf4a74e5a0f ShaleReLines;
-typedef AnonStruct8e43eed7b6bbf36f ShaleRocTree;
-typedef AnonStructCab41e0e3e24b946 ShaleRocTreeNodes;
-typedef AnonStruct82a96c5d55d63488 ShaleRocTreeNodesAttrs;
+typedef AnonStruct7c4f25fe62b1580 ShaleRocTree;
+typedef AnonStruct7be1c6ff8a366523 ShaleRocTreeNodes;
+typedef AnonStruct82a96c5d55d63488 ShaleRocTreeNodesAttributes;
 typedef AnonStruct389780dd35a9c209 ShaleRunArg0;
 typedef AnonStruct1763995a077e9c1f ShaleRun;
 
@@ -815,7 +815,7 @@ typedef struct {
 
 /**
  * Arguments for Shale.roc_tree!
- * Roc signature: List(Str) => List({ err : Str, nodes : List({ attrs : List({ name : Str, value : Str }), col : U64, depth : U64, end_col : U64, end_line : U64, kids : List(U64), kind : Str, line : U64, parent : U64 }), path : Str })
+ * Roc signature: List(Str) => List({ err : Str, nodes : List({ attributes : List({ name : Str, value : Str }), column : U64, depth : U64, end_column : U64, end_line : U64, kids : List(U64), kind : Str, line : U64, parent : U64 }), path : Str })
  * Refcounted fields are owned by the hosted function.
  */
 typedef struct {
@@ -929,7 +929,7 @@ extern RocStr shale_real(RocStr arg0);
 /* Shale.remove_tree!: Str => {} */
 extern void shale_remove_tree(RocStr arg0);
 
-/* Shale.roc_tree!: List(Str) => List({ err : Str, nodes : List({ attrs : List({ name : Str, value : Str }), col : U64, depth : U64, end_col : U64, end_line : U64, kids : List(U64), kind : Str, line : U64, parent : U64 }), path : Str }) */
+/* Shale.roc_tree!: List(Str) => List({ err : Str, nodes : List({ attributes : List({ name : Str, value : Str }), column : U64, depth : U64, end_column : U64, end_line : U64, kids : List(U64), kind : Str, line : U64, parent : U64 }), path : Str }) */
 extern RocList shale_roc_tree(RocList arg0);
 
 /* Shale.run!: { argv : List(Str), keep : [Head(U64), Tail(U64), Whole(U64)], timeout_ms : U64, want : Str } => { code : I64, out : Str } */

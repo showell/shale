@@ -425,12 +425,12 @@ function bt_to_shale(g, t, src, ctype, dst, ind)
   return out
 end
 
--- Whether a record's field is its map's rest: `attrs : List({ name : Str,
--- value : Str })` takes every entry of the Shale map that the record's other
+-- Whether a record's field is its map's rest: `attributes : List({ name :
+-- Str, value : Str })` takes every entry of the Shale map that the record's other
 -- fields don't name, in the map's order, each value a string (a roc_tree
 -- node's attributes, whose names vary by node).
 function bt_is_rest(f)
-  if f.name ~= "attrs" or f.t.k ~= "list" or f.t.of.k ~= "rec" or #f.t.of.fields ~= 2 then return false end
+  if f.name ~= "attributes" or f.t.k ~= "list" or f.t.of.k ~= "rec" or #f.t.of.fields ~= 2 then return false end
   local a = f.t.of.fields[1]
   local b = f.t.of.fields[2]
   return a.name == "name" and a.t.k == "str" and b.name == "value" and b.t.k == "str"
