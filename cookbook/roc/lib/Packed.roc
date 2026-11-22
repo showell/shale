@@ -1,5 +1,5 @@
-## The groups that stay packed whatever the stacking rule says, as
-## cookbook/roc/groups.shale reads them: a row of literals, read at a glance,
+## The groups that stay packed whatever the stacking rule says, as the Shale
+## groups.shale read them: a row of literals, read at a glance,
 ## and numeric data, such as a polygon's points. A number is a literal or a
 ## negative written `(0.0 - 0.5)`; a flat number record is a record of
 ## numbers, `{ x: 0.5, y: (0.0 - 0.25) }`; and a number list is a list of two

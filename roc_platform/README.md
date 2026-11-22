@@ -171,9 +171,9 @@ path), **`cookbook/zig/list_long_files/`**, **`cookbook/zig/count_comments/`**,
 **`cookbook/roc/check_errors/`** (which runs roc-types too, for `types=1`),
 **`cookbook/roc/hunt_names/`** (roc-types too),
 **`cookbook/roc/check_boundaries/`** (roc-types too),
-**`cookbook/count_shale_stops/`**, **`cookbook/roc/find_extra_parens/`**
-and **`cookbook/roc/check_stacking/`** are ported the same way: the
-launcher keeps the recipe's name and arguments, the goldens were written
+**`cookbook/count_shale_stops/`**, **`cookbook/roc/find_extra_parens/`**,
+**`cookbook/roc/check_stacking/`** and **`cookbook/roc/wrap_long_lines/`**
+are ported the same way: the launcher keeps the recipe's name and arguments, the goldens were written
 from the Shale original on plants, and `check_goldens.shale` holds them.
 count_comments' launcher builds with `opt=speed`, since its byte-by-byte
 scan runs about 60 times slower in Roc's dev build, and so does
@@ -190,11 +190,15 @@ parse of a large tree would not fit (`real!`, `mkdir!` and `remove_tree!`
 were exported for it: `roc fmt`'s argv and the self-test's scratch copy).
 check_stacking rewrites too, and its goldens hold the same; its reading of
 the bracket groups and the stacking rule is the library's `Groups`,
-`Stacking` and `Packed` (`cookbook/roc/lib/`), the Shale
-`cookbook/roc/groups.shale`'s line for line, its regular expressions
-matched by hand. Its dev build took 0.8 times the original's CPU over
-roc-apps' projects, and runs the whole of roc-apps at once, where the
-original runs out of its 2 GB arena.
+`Stacking` and `Packed` (`cookbook/roc/lib/`), the Shale groups.shale's
+line for line, its regular expressions matched by hand. Its dev build took
+0.8 times the original's CPU over roc-apps' projects, and runs the whole of
+roc-apps at once, where the original runs out of its 2 GB arena.
+wrap_long_lines rewrites by the same library, so it is the stacking rule's
+one home and groups.shale is gone; its goldens run on copies of the plants
+with a `roc-version`, which Shale's checkout has none of. Its dev build
+took 0.8 times the original's CPU (`roc fmt`'s runs included) over copies
+of roc-chat, roc-screensaver and roc-apps' projects.
 **`cookbook/roc/EXAMPLES.txt`** lists every port, a line each: its Roc, its
 Shale original's path and the commit that replaced it, so a page can show
 the two side by side. Its sections (the checks on Roc code first) are the

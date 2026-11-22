@@ -168,8 +168,6 @@ checkouts, and `<lanes>` the one that holds your lanes.
   `check_goldens.shale`). `shale cookbook:roc/find_unused_imports.shale`
 - `roc/gate_recipe.shale` (library): what the recipes that gate a build
   share, their verdict and their plants' self-test. `use("cookbook:roc/gate_recipe.shale")`
-- `roc/groups.shale` (library): Roc's bracket groups and the stacking rule.
-  `use("cookbook:roc/groups.shale")`
 - `roc/headers.shale` (library): which names a file's header dictates.
   `use("cookbook:roc/headers.shale")`
 - `roc/house.shale` (library): the checks that are our house style alone.
@@ -204,7 +202,9 @@ checkouts, and `<lanes>` the one that holds your lanes.
 - `roc/types.shale` (library): every expression's type, from Roc's own type
   checker. `use("cookbook:roc/types.shale")`
 - `roc/wrap_long_lines.shale`: shortens long Roc lines by letting `roc fmt`
-  lay out their groups. `shale cookbook:roc/wrap_long_lines.shale dir=roc width=100`
+  lay out their groups; the launcher of a Roc script (`roc/wrap_long_lines/`,
+  on `roc_platform/`, held to its goldens by that folder's
+  `check_goldens.shale`). `shale cookbook:roc/wrap_long_lines.shale dir=roc width=100`
 
 ## c/: Shale's own C
 

@@ -163,7 +163,10 @@ imports is checked without types, listed at the end, and fails the run.
   `width=` by adding a trailing comma to a group, so `roc fmt` lays it out
   one item a line, and lists the lines it leaves. It rewrites a copy and
   writes the folder once the rewrite has finished, so a run that stops
-  leaves the folder as it was.
+  leaves the folder as it was. It is the launcher of a Roc script
+  ([wrap_long_lines/](wrap_long_lines/)), whose stacking rule is the Roc
+  library's `Stacking.roc`, the rule's one home, which `check_stacking`
+  reads too.
 
       cd <repo> && shale <shale>/cookbook/roc/wrap_long_lines.shale dir=roc width=100
 
@@ -232,11 +235,6 @@ beside them). Each header lists its functions.
   the output limit cuts a long list.
 - [pinned.shale](pinned.shale): the path of the Roc compiler a repo's
   `roc-version` names.
-- [groups.shale](groups.shale): the stacking rule and the bracket groups,
-  as `wrap_long_lines` reads them. `check_stacking`'s Roc reads them the
-  same way, ported line for line to the Roc library's `Groups.roc`,
-  `Stacking.roc` and `Packed.roc`, so after `wrap_long_lines` it finds no
-  group to stack: a change to the rule is made in both.
 - [types.shale](types.shale): runs
   [roc-types](https://github.com/showell/roc-types) for one app or several.
 - [declared.shale](declared.shale): what the naming recipes read out of a

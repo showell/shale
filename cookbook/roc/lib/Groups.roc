@@ -1,6 +1,6 @@
-## Roc's bracket groups read from a file's lines, as cookbook/roc/groups.shale
-## reads them for check_stacking and wrap_long_lines: each pair of brackets or
-## a lambda's `|...|`, where it opens and closes, its items counted by the
+## Roc's bracket groups read from a file's lines, for check_stacking and
+## wrap_long_lines (ported from the Shale groups.shale): each pair of
+## brackets or a lambda's `|...|`, where it opens and closes, its items counted by the
 ## commas at its own depth and its tokens. A token is a name (a dotted path
 ## like `Angle.Bearing` is one), a number, a string or a character;
 ## punctuation and operators are none. The rule the groups are judged by is

@@ -1,6 +1,7 @@
-## The stacking rule, cookbook/roc/groups.shale's, over Groups' groups: a
-## group of three or more items and `tokens` or more tokens stacks, one item
-## a line, and any other group sits on one line while that line fits `width`.
+## The stacking rule's one home, over Groups' groups (ported from the Shale
+## groups.shale, since retired): a group of three or more items and `tokens`
+## or more tokens stacks, one item a line, and any other group sits on one
+## line while that line fits `width`.
 ## A function type's arguments can't take a trailing comma, and a row of
 ## literals or a line of numeric data stays packed. The rewrite's own pieces
 ## are here too: the group a line's rewrite gives a trailing comma, the

@@ -10,7 +10,8 @@
 -- the rows and data that stay packed, with Bytes, Headers, Finding and
 -- Text), on Shale's Roc platform (roc_platform/README.md); this file is its
 -- launcher, so it is launched as every Shale recipe is. The Shale reading it
--- was ported from, cookbook/roc/groups.shale, is still wrap_long_lines'.
+-- was ported from, groups.shale, is gone: wrap_long_lines' Roc reads the
+-- same library, the stacking rule's one home.
 --
 --   cd <repo> && shale <shale>/cookbook/roc/check_stacking.shale glob=chat/**/*.roc
 --   cd <repo> && shale <shale>/cookbook/roc/check_stacking.shale glob=chat/**/*.roc write=1
