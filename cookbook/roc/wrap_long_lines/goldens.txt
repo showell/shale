@@ -1,0 +1,1928 @@
+=== copy=roc (exit 0)
+roc: pass 1: 1 trailing commas added or taken out
+roc: pass 2: 0 trailing commas added or taken out
+roc: 1 files rewritten
+still over 100: 1 code lines with nothing to stack, 1 wide only for their strings, 2 of numeric data, 1 comment lines
+roc/function_type.roc:4 (103): nothing to stack: run_all_the_steps : (List(U64), Str, U64 -> List(U64)), (List(U64), Str, U64 -> List(U64)) -> List(U64)
+still over 100: 1 code lines with nothing to stack, 1 wide only for their strings, 2 of numeric data, 1 comment lines
+--- roc/annotation.roc
+module [apply, three]
+
+# A function type's arguments can't take a trailing comma, so they stay.
+three : U8, U8, U8 -> U8
+three = |a, b, c| a + b + c
+
+apply : (U8, U8, U8 -> U8) -> U8
+apply = |_| 0
+--- roc/at_the_cap.roc
+module [deep]
+
+# Seven groups, one a pass, so the eighth pass changes nothing.
+deep = f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, c, d, e, g, h, i)))))))
+--- roc/both_ways.roc
+module [sun_pos]
+
+# The record of types stacks, and the arguments that only name its fields sit
+# on one line.
+sun_pos : { heading : Angle.Bearing, clock : Clock, cam_focal : F64 } -> Sky.SunPos
+sun_pos = |
+	{
+		heading,
+		clock,
+		cam_focal,
+	},
+| {
+	heading
+}
+--- roc/five.roc
+module [call, stacked]
+
+# Five tokens stay on one line, and a stacked five joins it.
+call = f(a, b, c, d, e)
+
+stacked = f(
+	a,
+	b,
+	c,
+	d,
+	e,
+)
+--- roc/function_type.roc
+module [run_all_the_steps]
+
+# A function type in parentheses can't take a trailing comma, so this wide line stays, and is listed.
+run_all_the_steps : (List(U64), Str, U64 -> List(U64)), (List(U64), Str, U64 -> List(U64)) -> List(U64)
+run_all_the_steps = |_, _| []
+--- roc/nested.roc
+module [both]
+
+# The outer list is stacked first, then each big call inside it.
+both = [f(a, b, c), g(d, e, h, i, j, k), l]
+--- roc/numbers.roc
+module [names, near, polygon, samples, shape]
+
+# A list of numbers stays packed, however many items it has.
+near = [(0.0 - 0.5), 1.25, (0.0 - 2.0), 3.75]
+
+samples = [0.5, 1.25, (0.0 - 2.0), 3.75, 4.0, 5.5, 6.25, 7.0, 8.5, 9.75, 10.0, 11.5, 12.25, 13.0, 14.5, 15.75]
+
+# A wide line holding a list of flat number records is data: nothing on it is
+# stacked.
+polygon = { color: 7, gradients: [], points: [{ x: 0.1, y: 0.2 }, { x: (0.0 - 0.3), y: 0.4 }, { x: 0.5, y: 0.6 }] }
+
+# A record that fits is stacked, but the number list inside stays packed.
+shape = { name: tri, size: 3, points: [(0.0 - 1.0), (0.0 - 2.0), 3.0, 4.0] }
+
+# A list of names is not data, so it is stacked.
+names = [alpha, beta, gamma, delta, epsilon, zeta]
+--- roc/platform_targets.roc
+platform ""
+	requires {
+		step : U8 -> U8
+	}
+	exposes []
+	packages {}
+	provides { "s": host }
+	targets: {
+		x64musl: {
+			inputs: ["crt1.o", "host.o", app, "libc.a", "libm.a", "libz.a"],
+			output: Archive,
+		},
+		wasm32: {
+			inputs: [app],
+			output: Archive,
+		},
+	}
+
+# `roc fmt` lays out the `targets:` section by itself, whatever its commas say.
+host : U8 -> U8
+host = |a| step(a)
+--- roc/three.roc
+module [call, point]
+
+# Six tokens in three or more items are stacked.
+call = f(a, b, c, d, e, g)
+
+point = { x: 1, y: 2, z: 3 }
+--- roc/two.roc
+module [call, full, pair]
+
+# Two items stay on one line, however many tokens they hold.
+call = f(a, b)
+
+pair = { x: 1, y: 2 }
+
+full = { x: g(a, b, c), y: h(a, b, c) }
+--- roc/wide_string_arm.roc
+module [describe, joined]
+
+# The string makes the arm's line wide, and the list pattern beside it would
+# leave it as wide, so the pattern stays on one line and the line is counted.
+describe : List(U8) -> Str
+describe = |bytes|
+	match bytes {
+		[_, _] => "two bytes, the first and the second, which this sentence describes at considerable length"
+		_ => "other"
+	}
+
+# A near miss: the call around the string is what runs past the width, so it stacks.
+joined : Str, Str -> Str
+joined = |first, second| Str.concat(
+	"a fairly long string literal that takes room on this line",
+	first.concat(second),
+)
+=== copy=roc tokens=6 (exit 0)
+roc: pass 1: 11 trailing commas added or taken out
+roc: pass 2: 2 trailing commas added or taken out
+roc: pass 3: 1 trailing commas added or taken out
+roc: pass 4: 1 trailing commas added or taken out
+roc: pass 5: 1 trailing commas added or taken out
+roc: pass 6: 1 trailing commas added or taken out
+roc: pass 7: 1 trailing commas added or taken out
+roc: pass 8: 0 trailing commas added or taken out
+roc: 7 files rewritten
+still over 100: 1 code lines with nothing to stack, 1 wide only for their strings, 2 of numeric data, 1 comment lines
+roc/function_type.roc:4 (103): nothing to stack: run_all_the_steps : (List(U64), Str, U64 -> List(U64)), (List(U64), Str, U64 -> List(U64)) -> List(U64)
+still over 100: 1 code lines with nothing to stack, 1 wide only for their strings, 2 of numeric data, 1 comment lines
+--- roc/annotation.roc
+module [apply, three]
+
+# A function type's arguments can't take a trailing comma, so they stay.
+three : U8, U8, U8 -> U8
+three = |a, b, c| a + b + c
+
+apply : (U8, U8, U8 -> U8) -> U8
+apply = |_| 0
+--- roc/at_the_cap.roc
+module [deep]
+
+# Seven groups, one a pass, so the eighth pass changes nothing.
+deep = f(
+	a,
+	b,
+	f(
+		a,
+		b,
+		f(
+			a,
+			b,
+			f(
+				a,
+				b,
+				f(
+					a,
+					b,
+					f(
+						a,
+						b,
+						f(
+							a,
+							b,
+							c,
+							d,
+							e,
+							g,
+							h,
+							i,
+						),
+					),
+				),
+			),
+		),
+	),
+)
+--- roc/both_ways.roc
+module [sun_pos]
+
+# The record of types stacks, and the arguments that only name its fields sit
+# on one line.
+sun_pos : {
+	heading : Angle.Bearing,
+	clock : Clock,
+	cam_focal : F64,
+} -> Sky.SunPos
+sun_pos = |{ heading, clock, cam_focal }| {
+	heading
+}
+--- roc/five.roc
+module [call, stacked]
+
+# Five tokens stay on one line, and a stacked five joins it.
+call = f(a, b, c, d, e)
+
+stacked = f(a, b, c, d, e)
+--- roc/function_type.roc
+module [run_all_the_steps]
+
+# A function type in parentheses can't take a trailing comma, so this wide line stays, and is listed.
+run_all_the_steps : (List(U64), Str, U64 -> List(U64)), (List(U64), Str, U64 -> List(U64)) -> List(U64)
+run_all_the_steps = |_, _| []
+--- roc/nested.roc
+module [both]
+
+# The outer list is stacked first, then each big call inside it.
+both = [
+	f(a, b, c),
+	g(
+		d,
+		e,
+		h,
+		i,
+		j,
+		k,
+	),
+	l,
+]
+--- roc/numbers.roc
+module [names, near, polygon, samples, shape]
+
+# A list of numbers stays packed, however many items it has.
+near = [(0.0 - 0.5), 1.25, (0.0 - 2.0), 3.75]
+
+samples = [0.5, 1.25, (0.0 - 2.0), 3.75, 4.0, 5.5, 6.25, 7.0, 8.5, 9.75, 10.0, 11.5, 12.25, 13.0, 14.5, 15.75]
+
+# A wide line holding a list of flat number records is data: nothing on it is
+# stacked.
+polygon = { color: 7, gradients: [], points: [{ x: 0.1, y: 0.2 }, { x: (0.0 - 0.3), y: 0.4 }, { x: 0.5, y: 0.6 }] }
+
+# A record that fits is stacked, but the number list inside stays packed.
+shape = {
+	name: tri,
+	size: 3,
+	points: [(0.0 - 1.0), (0.0 - 2.0), 3.0, 4.0],
+}
+
+# A list of names is not data, so it is stacked.
+names = [
+	alpha,
+	beta,
+	gamma,
+	delta,
+	epsilon,
+	zeta,
+]
+--- roc/platform_targets.roc
+platform ""
+	requires {
+		step : U8 -> U8
+	}
+	exposes []
+	packages {}
+	provides { "s": host }
+	targets: {
+		x64musl: {
+			inputs: ["crt1.o", "host.o", app, "libc.a", "libm.a", "libz.a"],
+			output: Archive,
+		},
+		wasm32: {
+			inputs: [app],
+			output: Archive,
+		},
+	}
+
+# `roc fmt` lays out the `targets:` section by itself, whatever its commas say.
+host : U8 -> U8
+host = |a| step(a)
+--- roc/three.roc
+module [call, point]
+
+# Six tokens in three or more items are stacked.
+call = f(
+	a,
+	b,
+	c,
+	d,
+	e,
+	g,
+)
+
+point = {
+	x: 1,
+	y: 2,
+	z: 3,
+}
+--- roc/two.roc
+module [call, full, pair]
+
+# Two items stay on one line, however many tokens they hold.
+call = f(a, b)
+
+pair = { x: 1, y: 2 }
+
+full = { x: g(a, b, c), y: h(a, b, c) }
+--- roc/wide_string_arm.roc
+module [describe, joined]
+
+# The string makes the arm's line wide, and the list pattern beside it would
+# leave it as wide, so the pattern stays on one line and the line is counted.
+describe : List(U8) -> Str
+describe = |bytes|
+	match bytes {
+		[_, _] => "two bytes, the first and the second, which this sentence describes at considerable length"
+		_ => "other"
+	}
+
+# A near miss: the call around the string is what runs past the width, so it stacks.
+joined : Str, Str -> Str
+joined = |first, second| Str.concat(
+	"a fairly long string literal that takes room on this line",
+	first.concat(second),
+)
+=== copy=roc width=60 (exit 0)
+roc: pass 1: 3 trailing commas added or taken out
+roc: pass 2: 1 trailing commas added or taken out
+roc: pass 3: 1 trailing commas added or taken out
+roc: pass 4: 1 trailing commas added or taken out
+roc: pass 5: 0 trailing commas added or taken out
+roc: 3 files rewritten
+still over 60: 2 code lines with nothing to stack, 2 wide only for their strings, 3 of numeric data, 11 comment lines
+roc/function_type.roc:4 (103): nothing to stack: run_all_the_steps : (List(U64), Str, U64 -> List(U64)), (List(U64), Str, U64 -> List(U64)) -> List(U64)
+roc/platform_targets.roc:10 (76): nothing to stack: inputs: ["crt1.o", "host.o", app, "libc.a", "libm.a", "libz.a"],
+still over 60: 2 code lines with nothing to stack, 2 wide only for their strings, 3 of numeric data, 11 comment lines
+--- roc/annotation.roc
+module [apply, three]
+
+# A function type's arguments can't take a trailing comma, so they stay.
+three : U8, U8, U8 -> U8
+three = |a, b, c| a + b + c
+
+apply : (U8, U8, U8 -> U8) -> U8
+apply = |_| 0
+--- roc/at_the_cap.roc
+module [deep]
+
+# Seven groups, one a pass, so the eighth pass changes nothing.
+deep = f(
+	a,
+	b,
+	f(
+		a,
+		b,
+		f(
+			a,
+			b,
+			f(
+				a,
+				b,
+				f(a, b, f(a, b, f(a, b, c, d, e, g, h, i))),
+			),
+		),
+	),
+)
+--- roc/both_ways.roc
+module [sun_pos]
+
+# The record of types stacks, and the arguments that only name its fields sit
+# on one line.
+sun_pos : {
+	heading : Angle.Bearing,
+	clock : Clock,
+	cam_focal : F64,
+} -> Sky.SunPos
+sun_pos = |
+	{
+		heading,
+		clock,
+		cam_focal,
+	},
+| {
+	heading
+}
+--- roc/five.roc
+module [call, stacked]
+
+# Five tokens stay on one line, and a stacked five joins it.
+call = f(a, b, c, d, e)
+
+stacked = f(
+	a,
+	b,
+	c,
+	d,
+	e,
+)
+--- roc/function_type.roc
+module [run_all_the_steps]
+
+# A function type in parentheses can't take a trailing comma, so this wide line stays, and is listed.
+run_all_the_steps : (List(U64), Str, U64 -> List(U64)), (List(U64), Str, U64 -> List(U64)) -> List(U64)
+run_all_the_steps = |_, _| []
+--- roc/nested.roc
+module [both]
+
+# The outer list is stacked first, then each big call inside it.
+both = [f(a, b, c), g(d, e, h, i, j, k), l]
+--- roc/numbers.roc
+module [names, near, polygon, samples, shape]
+
+# A list of numbers stays packed, however many items it has.
+near = [(0.0 - 0.5), 1.25, (0.0 - 2.0), 3.75]
+
+samples = [0.5, 1.25, (0.0 - 2.0), 3.75, 4.0, 5.5, 6.25, 7.0, 8.5, 9.75, 10.0, 11.5, 12.25, 13.0, 14.5, 15.75]
+
+# A wide line holding a list of flat number records is data: nothing on it is
+# stacked.
+polygon = { color: 7, gradients: [], points: [{ x: 0.1, y: 0.2 }, { x: (0.0 - 0.3), y: 0.4 }, { x: 0.5, y: 0.6 }] }
+
+# A record that fits is stacked, but the number list inside stays packed.
+shape = { name: tri, size: 3, points: [(0.0 - 1.0), (0.0 - 2.0), 3.0, 4.0] }
+
+# A list of names is not data, so it is stacked.
+names = [alpha, beta, gamma, delta, epsilon, zeta]
+--- roc/platform_targets.roc
+platform ""
+	requires {
+		step : U8 -> U8
+	}
+	exposes []
+	packages {}
+	provides { "s": host }
+	targets: {
+		x64musl: {
+			inputs: ["crt1.o", "host.o", app, "libc.a", "libm.a", "libz.a"],
+			output: Archive,
+		},
+		wasm32: {
+			inputs: [app],
+			output: Archive,
+		},
+	}
+
+# `roc fmt` lays out the `targets:` section by itself, whatever its commas say.
+host : U8 -> U8
+host = |a| step(a)
+--- roc/three.roc
+module [call, point]
+
+# Six tokens in three or more items are stacked.
+call = f(a, b, c, d, e, g)
+
+point = { x: 1, y: 2, z: 3 }
+--- roc/two.roc
+module [call, full, pair]
+
+# Two items stay on one line, however many tokens they hold.
+call = f(a, b)
+
+pair = { x: 1, y: 2 }
+
+full = { x: g(a, b, c), y: h(a, b, c) }
+--- roc/wide_string_arm.roc
+module [describe, joined]
+
+# The string makes the arm's line wide, and the list pattern beside it would
+# leave it as wide, so the pattern stays on one line and the line is counted.
+describe : List(U8) -> Str
+describe = |bytes|
+	match bytes {
+		[_, _] => "two bytes, the first and the second, which this sentence describes at considerable length"
+		_ => "other"
+	}
+
+# A near miss: the call around the string is what runs past the width, so it stacks.
+joined : Str, Str -> Str
+joined = |first, second| Str.concat(
+	"a fairly long string literal that takes room on this line",
+	first.concat(second),
+)
+=== copy=roc tokens=6 write=0 (exit 0)
+roc: pass 1: 11 trailing commas added or taken out
+roc: pass 2: 2 trailing commas added or taken out
+roc: pass 3: 1 trailing commas added or taken out
+roc: pass 4: 1 trailing commas added or taken out
+roc: pass 5: 1 trailing commas added or taken out
+roc: pass 6: 1 trailing commas added or taken out
+roc: pass 7: 1 trailing commas added or taken out
+roc: pass 8: 0 trailing commas added or taken out
+report, nothing written: still over 100: 1 code lines with nothing to stack, 1 wide only for their strings, 2 of numeric data, 1 comment lines
+roc/function_type.roc:4 (103): nothing to stack: run_all_the_steps : (List(U64), Str, U64 -> List(U64)), (List(U64), Str, U64 -> List(U64)) -> List(U64)
+report, nothing written: still over 100: 1 code lines with nothing to stack, 1 wide only for their strings, 2 of numeric data, 1 comment lines
+--- roc/annotation.roc
+module [apply, three]
+
+# A function type's arguments can't take a trailing comma, so they stay.
+three : U8, U8, U8 -> U8
+three = |a, b, c| a + b + c
+
+apply : (U8, U8, U8 -> U8) -> U8
+apply = |_| 0
+--- roc/at_the_cap.roc
+module [deep]
+
+# Seven groups, one a pass, so the eighth pass changes nothing.
+deep = f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, c, d, e, g, h, i)))))))
+--- roc/both_ways.roc
+module [sun_pos]
+
+# The record of types stacks, and the arguments that only name its fields sit
+# on one line.
+sun_pos : { heading : Angle.Bearing, clock : Clock, cam_focal : F64 } -> Sky.SunPos
+sun_pos = |
+	{
+		heading,
+		clock,
+		cam_focal,
+	},
+| {
+	heading
+}
+--- roc/five.roc
+module [call, stacked]
+
+# Five tokens stay on one line, and a stacked five joins it.
+call = f(a, b, c, d, e)
+
+stacked = f(
+	a,
+	b,
+	c,
+	d,
+	e,
+)
+--- roc/function_type.roc
+module [run_all_the_steps]
+
+# A function type in parentheses can't take a trailing comma, so this wide line stays, and is listed.
+run_all_the_steps : (List(U64), Str, U64 -> List(U64)), (List(U64), Str, U64 -> List(U64)) -> List(U64)
+run_all_the_steps = |_, _| []
+--- roc/nested.roc
+module [both]
+
+# The outer list is stacked first, then each big call inside it.
+both = [f(a, b, c), g(d, e, h, i, j, k), l]
+--- roc/numbers.roc
+module [names, near, polygon, samples, shape]
+
+# A list of numbers stays packed, however many items it has.
+near = [(0.0 - 0.5), 1.25, (0.0 - 2.0), 3.75]
+
+samples = [0.5, 1.25, (0.0 - 2.0), 3.75, 4.0, 5.5, 6.25, 7.0, 8.5, 9.75, 10.0, 11.5, 12.25, 13.0, 14.5, 15.75]
+
+# A wide line holding a list of flat number records is data: nothing on it is
+# stacked.
+polygon = { color: 7, gradients: [], points: [{ x: 0.1, y: 0.2 }, { x: (0.0 - 0.3), y: 0.4 }, { x: 0.5, y: 0.6 }] }
+
+# A record that fits is stacked, but the number list inside stays packed.
+shape = { name: tri, size: 3, points: [(0.0 - 1.0), (0.0 - 2.0), 3.0, 4.0] }
+
+# A list of names is not data, so it is stacked.
+names = [alpha, beta, gamma, delta, epsilon, zeta]
+--- roc/platform_targets.roc
+platform ""
+	requires {
+		step : U8 -> U8
+	}
+	exposes []
+	packages {}
+	provides { "s": host }
+	targets: {
+		x64musl: {
+			inputs: ["crt1.o", "host.o", app, "libc.a", "libm.a", "libz.a"],
+			output: Archive,
+		},
+		wasm32: {
+			inputs: [app],
+			output: Archive,
+		},
+	}
+
+# `roc fmt` lays out the `targets:` section by itself, whatever its commas say.
+host : U8 -> U8
+host = |a| step(a)
+--- roc/three.roc
+module [call, point]
+
+# Six tokens in three or more items are stacked.
+call = f(a, b, c, d, e, g)
+
+point = { x: 1, y: 2, z: 3 }
+--- roc/two.roc
+module [call, full, pair]
+
+# Two items stay on one line, however many tokens they hold.
+call = f(a, b)
+
+pair = { x: 1, y: 2 }
+
+full = { x: g(a, b, c), y: h(a, b, c) }
+--- roc/wide_string_arm.roc
+module [describe, joined]
+
+# The string makes the arm's line wide, and the list pattern beside it would
+# leave it as wide, so the pattern stays on one line and the line is counted.
+describe : List(U8) -> Str
+describe = |bytes|
+    match bytes {
+        [_, _] => "two bytes, the first and the second, which this sentence describes at considerable length"
+        _ => "other"
+    }
+
+# A near miss: the call around the string is what runs past the width, so it stacks.
+joined : Str, Str -> Str
+joined = |first, second| Str.concat("a fairly long string literal that takes room on this line", first.concat(second))
+=== copy=edges dir=edges (exit 0)
+edges: pass 1: 2 trailing commas added or taken out
+edges: pass 2: 0 trailing commas added or taken out
+edges: 2 files rewritten
+still over 100: 1 code lines with nothing to stack, 1 wide only for their strings, 1 of numeric data, 1 comment lines
+edges/counted.roc:9 (142): nothing to stack: total = alpha_value + beta_value + gamma_value + delta_value + epsilon_value + zeta_value + eta_value + theta_value + iota_value + kappa_val
+still over 100: 1 code lines with nothing to stack, 1 wide only for their strings, 1 of numeric data, 1 comment lines
+--- edges/counted.roc
+module [described, points, total]
+
+# A comment line this long is counted, not listed: no trailing comma shortens a comment, however it is laid out.
+points = [{ x: 0.1, y: 0.2 }, { x: 0.3, y: 0.4 }, { x: 0.5, y: 0.6 }, { x: 0.7, y: 0.8 }, { x: 0.9, y: 1.0 }]
+
+described = "a string literal long enough that it alone takes this line past the width of one hundred"
+
+# No group at all, so this line is listed, its text cut at 140 bytes.
+total = alpha_value + beta_value + gamma_value + delta_value + epsilon_value + zeta_value + eta_value + theta_value + iota_value + kappa_value
+--- edges/lambdas.roc
+module [apply_all, rest_of, sorted]
+
+apply_all = |
+	first_argument,
+	second_argument,
+	third_argument,
+| first_argument(second_argument, third_argument)
+
+rest_of = |list|
+	match list {
+		[first, second, .. as rest] => [first, second, rest.len(), 1, 2]
+		_ => []
+	}
+
+sorted : List(k) -> List(k) where [k.is_eq : k, k -> Bool, k.is_lt : k, k -> Bool]
+sorted = |list| list
+--- edges/sub/deeper.roc
+module [record]
+
+# A folder inside the one named is rewritten too.
+record = {
+	name: "deeper",
+	size: 3,
+	items: [alpha, beta, gamma, delta],
+	owner: someone_with_a_long_name,
+}
+--- edges/tabs.roc
+module [indented]
+
+indented = |a|
+	if a {
+		Str.concat("tabs count four columns each, so this line is wide", other_function_name(a, b))
+	} else {
+		""
+	}
+--- edges/unstack.roc
+module [joined, kept, wide]
+
+# Two items, so with tokens=6 the trailing comma goes and the call joins.
+joined = f(
+	a,
+	b,
+)
+
+# A comment inside keeps it stacked.
+kept = g(
+	a, # the first
+	b,
+)
+
+# Joined, this would pass the width, so it stays stacked.
+wide = h(
+	"a string long enough that joining the call would pass the width",
+	"and another",
+)
+=== copy=edges dir=edges tokens=6 (exit 0)
+edges: pass 1: 4 trailing commas added or taken out
+edges: pass 2: 0 trailing commas added or taken out
+edges: 3 files rewritten
+still over 100: 1 code lines with nothing to stack, 1 wide only for their strings, 1 of numeric data, 1 comment lines
+edges/counted.roc:9 (142): nothing to stack: total = alpha_value + beta_value + gamma_value + delta_value + epsilon_value + zeta_value + eta_value + theta_value + iota_value + kappa_val
+still over 100: 1 code lines with nothing to stack, 1 wide only for their strings, 1 of numeric data, 1 comment lines
+--- edges/counted.roc
+module [described, points, total]
+
+# A comment line this long is counted, not listed: no trailing comma shortens a comment, however it is laid out.
+points = [{ x: 0.1, y: 0.2 }, { x: 0.3, y: 0.4 }, { x: 0.5, y: 0.6 }, { x: 0.7, y: 0.8 }, { x: 0.9, y: 1.0 }]
+
+described = "a string literal long enough that it alone takes this line past the width of one hundred"
+
+# No group at all, so this line is listed, its text cut at 140 bytes.
+total = alpha_value + beta_value + gamma_value + delta_value + epsilon_value + zeta_value + eta_value + theta_value + iota_value + kappa_value
+--- edges/lambdas.roc
+module [apply_all, rest_of, sorted]
+
+apply_all = |
+	first_argument,
+	second_argument,
+	third_argument,
+| first_argument(second_argument, third_argument)
+
+rest_of = |list|
+	match list {
+		[first, second, .. as rest] => [first, second, rest.len(), 1, 2]
+		_ => []
+	}
+
+sorted : List(k) -> List(k) where [k.is_eq : k, k -> Bool, k.is_lt : k, k -> Bool]
+sorted = |list| list
+--- edges/sub/deeper.roc
+module [record]
+
+# A folder inside the one named is rewritten too.
+record = {
+	name: "deeper",
+	size: 3,
+	items: [alpha, beta, gamma, delta],
+	owner: someone_with_a_long_name,
+}
+--- edges/tabs.roc
+module [indented]
+
+indented = |a|
+	if a {
+		Str.concat("tabs count four columns each, so this line is wide", other_function_name(a, b))
+	} else {
+		""
+	}
+--- edges/unstack.roc
+module [joined, kept, wide]
+
+# Two items, so with tokens=6 the trailing comma goes and the call joins.
+joined = f(a, b)
+
+# A comment inside keeps it stacked.
+kept = g(
+	a, # the first
+	b,
+)
+
+# Joined, this would pass the width, so it stays stacked.
+wide = h("a string long enough that joining the call would pass the width", "and another")
+=== copy=edges dir=edges width=80 tokens=4 (exit 0)
+edges: pass 1: 6 trailing commas added or taken out
+edges: pass 2: 2 trailing commas added or taken out
+edges: pass 3: 0 trailing commas added or taken out
+edges: 4 files rewritten
+still over 80: 1 code lines with nothing to stack, 1 wide only for their strings, 1 of numeric data, 1 comment lines
+edges/counted.roc:9 (142): nothing to stack: total = alpha_value + beta_value + gamma_value + delta_value + epsilon_value + zeta_value + eta_value + theta_value + iota_value + kappa_val
+still over 80: 1 code lines with nothing to stack, 1 wide only for their strings, 1 of numeric data, 1 comment lines
+--- edges/counted.roc
+module [described, points, total]
+
+# A comment line this long is counted, not listed: no trailing comma shortens a comment, however it is laid out.
+points = [{ x: 0.1, y: 0.2 }, { x: 0.3, y: 0.4 }, { x: 0.5, y: 0.6 }, { x: 0.7, y: 0.8 }, { x: 0.9, y: 1.0 }]
+
+described = "a string literal long enough that it alone takes this line past the width of one hundred"
+
+# No group at all, so this line is listed, its text cut at 140 bytes.
+total = alpha_value + beta_value + gamma_value + delta_value + epsilon_value + zeta_value + eta_value + theta_value + iota_value + kappa_value
+--- edges/lambdas.roc
+module [apply_all, rest_of, sorted]
+
+apply_all = |
+	first_argument,
+	second_argument,
+	third_argument,
+| first_argument(second_argument, third_argument)
+
+rest_of = |list|
+	match list {
+		[first, second, .. as rest] => [
+			first,
+			second,
+			rest.len(),
+			1,
+			2,
+		]
+		_ => []
+	}
+
+sorted : List(k) -> List(k)
+	where [k.is_eq : k, k -> Bool, k.is_lt : k, k -> Bool]
+sorted = |list| list
+--- edges/sub/deeper.roc
+module [record]
+
+# A folder inside the one named is rewritten too.
+record = {
+	name: "deeper",
+	size: 3,
+	items: [
+		alpha,
+		beta,
+		gamma,
+		delta,
+	],
+	owner: someone_with_a_long_name,
+}
+--- edges/tabs.roc
+module [indented]
+
+indented = |a|
+	if a {
+		Str.concat(
+			"tabs count four columns each, so this line is wide",
+			other_function_name(a, b),
+		)
+	} else {
+		""
+	}
+--- edges/unstack.roc
+module [joined, kept, wide]
+
+# Two items, so with tokens=6 the trailing comma goes and the call joins.
+joined = f(a, b)
+
+# A comment inside keeps it stacked.
+kept = g(
+	a, # the first
+	b,
+)
+
+# Joined, this would pass the width, so it stays stacked.
+wide = h(
+	"a string long enough that joining the call would pass the width",
+	"and another",
+)
+=== copy=edges dir=edges tokens=6 write=0 (exit 0)
+edges: pass 1: 4 trailing commas added or taken out
+edges: pass 2: 0 trailing commas added or taken out
+report, nothing written: still over 100: 1 code lines with nothing to stack, 1 wide only for their strings, 1 of numeric data, 1 comment lines
+edges/counted.roc:9 (142): nothing to stack: total = alpha_value + beta_value + gamma_value + delta_value + epsilon_value + zeta_value + eta_value + theta_value + iota_value + kappa_val
+report, nothing written: still over 100: 1 code lines with nothing to stack, 1 wide only for their strings, 1 of numeric data, 1 comment lines
+--- edges/counted.roc
+module [described, points, total]
+
+# A comment line this long is counted, not listed: no trailing comma shortens a comment, however it is laid out.
+points = [{ x: 0.1, y: 0.2 }, { x: 0.3, y: 0.4 }, { x: 0.5, y: 0.6 }, { x: 0.7, y: 0.8 }, { x: 0.9, y: 1.0 }]
+
+described = "a string literal long enough that it alone takes this line past the width of one hundred"
+
+# No group at all, so this line is listed, its text cut at 140 bytes.
+total = alpha_value + beta_value + gamma_value + delta_value + epsilon_value + zeta_value + eta_value + theta_value + iota_value + kappa_value
+--- edges/lambdas.roc
+module [apply_all, rest_of, sorted]
+
+apply_all = |first_argument, second_argument, third_argument| first_argument(second_argument, third_argument)
+
+rest_of = |list|
+	match list {
+		[first, second, .. as rest] => [first, second, rest.len(), 1, 2]
+		_ => []
+	}
+
+sorted : List(k) -> List(k) where [k.is_eq : k, k -> Bool, k.is_lt : k, k -> Bool]
+sorted = |list| list
+--- edges/sub/deeper.roc
+module [record]
+
+# A folder inside the one named is rewritten too.
+record = { name: "deeper", size: 3, items: [alpha, beta, gamma, delta], owner: someone_with_a_long_name }
+--- edges/tabs.roc
+module [indented]
+
+indented = |a|
+	if a {
+		Str.concat("tabs count four columns each, so this line is wide", other_function_name(a, b))
+	} else {
+		""
+	}
+--- edges/unstack.roc
+module [joined, kept, wide]
+
+# Two items, so with tokens=6 the trailing comma goes and the call joins.
+joined = f(
+	a,
+	b,
+)
+
+# A comment inside keeps it stacked.
+kept = g(
+	a, # the first
+	b,
+)
+
+# Joined, this would pass the width, so it stays stacked.
+wide = h(
+	"a string long enough that joining the call would pass the width",
+	"and another",
+)
+=== copy=roc,edges dir=roc,edges tokens=6 (exit 0)
+roc: pass 1: 11 trailing commas added or taken out
+roc: pass 2: 2 trailing commas added or taken out
+roc: pass 3: 1 trailing commas added or taken out
+roc: pass 4: 1 trailing commas added or taken out
+roc: pass 5: 1 trailing commas added or taken out
+roc: pass 6: 1 trailing commas added or taken out
+roc: pass 7: 1 trailing commas added or taken out
+roc: pass 8: 0 trailing commas added or taken out
+roc: 7 files rewritten
+edges: pass 1: 4 trailing commas added or taken out
+edges: pass 2: 0 trailing commas added or taken out
+edges: 3 files rewritten
+still over 100: 2 code lines with nothing to stack, 2 wide only for their strings, 3 of numeric data, 2 comment lines
+roc/function_type.roc:4 (103): nothing to stack: run_all_the_steps : (List(U64), Str, U64 -> List(U64)), (List(U64), Str, U64 -> List(U64)) -> List(U64)
+edges/counted.roc:9 (142): nothing to stack: total = alpha_value + beta_value + gamma_value + delta_value + epsilon_value + zeta_value + eta_value + theta_value + iota_value + kappa_val
+still over 100: 2 code lines with nothing to stack, 2 wide only for their strings, 3 of numeric data, 2 comment lines
+--- edges/counted.roc
+module [described, points, total]
+
+# A comment line this long is counted, not listed: no trailing comma shortens a comment, however it is laid out.
+points = [{ x: 0.1, y: 0.2 }, { x: 0.3, y: 0.4 }, { x: 0.5, y: 0.6 }, { x: 0.7, y: 0.8 }, { x: 0.9, y: 1.0 }]
+
+described = "a string literal long enough that it alone takes this line past the width of one hundred"
+
+# No group at all, so this line is listed, its text cut at 140 bytes.
+total = alpha_value + beta_value + gamma_value + delta_value + epsilon_value + zeta_value + eta_value + theta_value + iota_value + kappa_value
+--- edges/lambdas.roc
+module [apply_all, rest_of, sorted]
+
+apply_all = |
+	first_argument,
+	second_argument,
+	third_argument,
+| first_argument(second_argument, third_argument)
+
+rest_of = |list|
+	match list {
+		[first, second, .. as rest] => [first, second, rest.len(), 1, 2]
+		_ => []
+	}
+
+sorted : List(k) -> List(k) where [k.is_eq : k, k -> Bool, k.is_lt : k, k -> Bool]
+sorted = |list| list
+--- edges/sub/deeper.roc
+module [record]
+
+# A folder inside the one named is rewritten too.
+record = {
+	name: "deeper",
+	size: 3,
+	items: [alpha, beta, gamma, delta],
+	owner: someone_with_a_long_name,
+}
+--- edges/tabs.roc
+module [indented]
+
+indented = |a|
+	if a {
+		Str.concat("tabs count four columns each, so this line is wide", other_function_name(a, b))
+	} else {
+		""
+	}
+--- edges/unstack.roc
+module [joined, kept, wide]
+
+# Two items, so with tokens=6 the trailing comma goes and the call joins.
+joined = f(a, b)
+
+# A comment inside keeps it stacked.
+kept = g(
+	a, # the first
+	b,
+)
+
+# Joined, this would pass the width, so it stays stacked.
+wide = h("a string long enough that joining the call would pass the width", "and another")
+--- roc/annotation.roc
+module [apply, three]
+
+# A function type's arguments can't take a trailing comma, so they stay.
+three : U8, U8, U8 -> U8
+three = |a, b, c| a + b + c
+
+apply : (U8, U8, U8 -> U8) -> U8
+apply = |_| 0
+--- roc/at_the_cap.roc
+module [deep]
+
+# Seven groups, one a pass, so the eighth pass changes nothing.
+deep = f(
+	a,
+	b,
+	f(
+		a,
+		b,
+		f(
+			a,
+			b,
+			f(
+				a,
+				b,
+				f(
+					a,
+					b,
+					f(
+						a,
+						b,
+						f(
+							a,
+							b,
+							c,
+							d,
+							e,
+							g,
+							h,
+							i,
+						),
+					),
+				),
+			),
+		),
+	),
+)
+--- roc/both_ways.roc
+module [sun_pos]
+
+# The record of types stacks, and the arguments that only name its fields sit
+# on one line.
+sun_pos : {
+	heading : Angle.Bearing,
+	clock : Clock,
+	cam_focal : F64,
+} -> Sky.SunPos
+sun_pos = |{ heading, clock, cam_focal }| {
+	heading
+}
+--- roc/five.roc
+module [call, stacked]
+
+# Five tokens stay on one line, and a stacked five joins it.
+call = f(a, b, c, d, e)
+
+stacked = f(a, b, c, d, e)
+--- roc/function_type.roc
+module [run_all_the_steps]
+
+# A function type in parentheses can't take a trailing comma, so this wide line stays, and is listed.
+run_all_the_steps : (List(U64), Str, U64 -> List(U64)), (List(U64), Str, U64 -> List(U64)) -> List(U64)
+run_all_the_steps = |_, _| []
+--- roc/nested.roc
+module [both]
+
+# The outer list is stacked first, then each big call inside it.
+both = [
+	f(a, b, c),
+	g(
+		d,
+		e,
+		h,
+		i,
+		j,
+		k,
+	),
+	l,
+]
+--- roc/numbers.roc
+module [names, near, polygon, samples, shape]
+
+# A list of numbers stays packed, however many items it has.
+near = [(0.0 - 0.5), 1.25, (0.0 - 2.0), 3.75]
+
+samples = [0.5, 1.25, (0.0 - 2.0), 3.75, 4.0, 5.5, 6.25, 7.0, 8.5, 9.75, 10.0, 11.5, 12.25, 13.0, 14.5, 15.75]
+
+# A wide line holding a list of flat number records is data: nothing on it is
+# stacked.
+polygon = { color: 7, gradients: [], points: [{ x: 0.1, y: 0.2 }, { x: (0.0 - 0.3), y: 0.4 }, { x: 0.5, y: 0.6 }] }
+
+# A record that fits is stacked, but the number list inside stays packed.
+shape = {
+	name: tri,
+	size: 3,
+	points: [(0.0 - 1.0), (0.0 - 2.0), 3.0, 4.0],
+}
+
+# A list of names is not data, so it is stacked.
+names = [
+	alpha,
+	beta,
+	gamma,
+	delta,
+	epsilon,
+	zeta,
+]
+--- roc/platform_targets.roc
+platform ""
+	requires {
+		step : U8 -> U8
+	}
+	exposes []
+	packages {}
+	provides { "s": host }
+	targets: {
+		x64musl: {
+			inputs: ["crt1.o", "host.o", app, "libc.a", "libm.a", "libz.a"],
+			output: Archive,
+		},
+		wasm32: {
+			inputs: [app],
+			output: Archive,
+		},
+	}
+
+# `roc fmt` lays out the `targets:` section by itself, whatever its commas say.
+host : U8 -> U8
+host = |a| step(a)
+--- roc/three.roc
+module [call, point]
+
+# Six tokens in three or more items are stacked.
+call = f(
+	a,
+	b,
+	c,
+	d,
+	e,
+	g,
+)
+
+point = {
+	x: 1,
+	y: 2,
+	z: 3,
+}
+--- roc/two.roc
+module [call, full, pair]
+
+# Two items stay on one line, however many tokens they hold.
+call = f(a, b)
+
+pair = { x: 1, y: 2 }
+
+full = { x: g(a, b, c), y: h(a, b, c) }
+--- roc/wide_string_arm.roc
+module [describe, joined]
+
+# The string makes the arm's line wide, and the list pattern beside it would
+# leave it as wide, so the pattern stays on one line and the line is counted.
+describe : List(U8) -> Str
+describe = |bytes|
+	match bytes {
+		[_, _] => "two bytes, the first and the second, which this sentence describes at considerable length"
+		_ => "other"
+	}
+
+# A near miss: the call around the string is what runs past the width, so it stacks.
+joined : Str, Str -> Str
+joined = |first, second| Str.concat(
+	"a fairly long string literal that takes room on this line",
+	first.concat(second),
+)
+=== copy=too_deep dir=too_deep tokens=6 (exit 1)
+too_deep: pass 1: 1 trailing commas added or taken out
+too_deep: pass 2: 1 trailing commas added or taken out
+too_deep: pass 3: 1 trailing commas added or taken out
+too_deep: pass 4: 1 trailing commas added or taken out
+too_deep: pass 5: 1 trailing commas added or taken out
+too_deep: pass 6: 1 trailing commas added or taken out
+too_deep: pass 7: 1 trailing commas added or taken out
+too_deep: pass 8: 1 trailing commas added or taken out
+── stop: fail: wrap_long_lines: still changing after 8 passes, so no file was written: too_deep/too_deep.roc
+--- too_deep/too_deep.roc
+module [deep]
+
+# Eight groups, one a pass, so the eighth pass still changes something.
+deep = f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, c, d, e, g, h, i))))))))
+=== copy=roc,too_deep dir=roc,too_deep tokens=6 (exit 1)
+roc: pass 1: 11 trailing commas added or taken out
+roc: pass 2: 2 trailing commas added or taken out
+roc: pass 3: 1 trailing commas added or taken out
+roc: pass 4: 1 trailing commas added or taken out
+roc: pass 5: 1 trailing commas added or taken out
+roc: pass 6: 1 trailing commas added or taken out
+roc: pass 7: 1 trailing commas added or taken out
+roc: pass 8: 0 trailing commas added or taken out
+roc: 7 files rewritten
+too_deep: pass 1: 1 trailing commas added or taken out
+too_deep: pass 2: 1 trailing commas added or taken out
+too_deep: pass 3: 1 trailing commas added or taken out
+too_deep: pass 4: 1 trailing commas added or taken out
+too_deep: pass 5: 1 trailing commas added or taken out
+too_deep: pass 6: 1 trailing commas added or taken out
+too_deep: pass 7: 1 trailing commas added or taken out
+too_deep: pass 8: 1 trailing commas added or taken out
+── stop: fail: wrap_long_lines: still changing after 8 passes, so no file was written: too_deep/too_deep.roc
+--- roc/annotation.roc
+module [apply, three]
+
+# A function type's arguments can't take a trailing comma, so they stay.
+three : U8, U8, U8 -> U8
+three = |a, b, c| a + b + c
+
+apply : (U8, U8, U8 -> U8) -> U8
+apply = |_| 0
+--- roc/at_the_cap.roc
+module [deep]
+
+# Seven groups, one a pass, so the eighth pass changes nothing.
+deep = f(
+	a,
+	b,
+	f(
+		a,
+		b,
+		f(
+			a,
+			b,
+			f(
+				a,
+				b,
+				f(
+					a,
+					b,
+					f(
+						a,
+						b,
+						f(
+							a,
+							b,
+							c,
+							d,
+							e,
+							g,
+							h,
+							i,
+						),
+					),
+				),
+			),
+		),
+	),
+)
+--- roc/both_ways.roc
+module [sun_pos]
+
+# The record of types stacks, and the arguments that only name its fields sit
+# on one line.
+sun_pos : {
+	heading : Angle.Bearing,
+	clock : Clock,
+	cam_focal : F64,
+} -> Sky.SunPos
+sun_pos = |{ heading, clock, cam_focal }| {
+	heading
+}
+--- roc/five.roc
+module [call, stacked]
+
+# Five tokens stay on one line, and a stacked five joins it.
+call = f(a, b, c, d, e)
+
+stacked = f(a, b, c, d, e)
+--- roc/function_type.roc
+module [run_all_the_steps]
+
+# A function type in parentheses can't take a trailing comma, so this wide line stays, and is listed.
+run_all_the_steps : (List(U64), Str, U64 -> List(U64)), (List(U64), Str, U64 -> List(U64)) -> List(U64)
+run_all_the_steps = |_, _| []
+--- roc/nested.roc
+module [both]
+
+# The outer list is stacked first, then each big call inside it.
+both = [
+	f(a, b, c),
+	g(
+		d,
+		e,
+		h,
+		i,
+		j,
+		k,
+	),
+	l,
+]
+--- roc/numbers.roc
+module [names, near, polygon, samples, shape]
+
+# A list of numbers stays packed, however many items it has.
+near = [(0.0 - 0.5), 1.25, (0.0 - 2.0), 3.75]
+
+samples = [0.5, 1.25, (0.0 - 2.0), 3.75, 4.0, 5.5, 6.25, 7.0, 8.5, 9.75, 10.0, 11.5, 12.25, 13.0, 14.5, 15.75]
+
+# A wide line holding a list of flat number records is data: nothing on it is
+# stacked.
+polygon = { color: 7, gradients: [], points: [{ x: 0.1, y: 0.2 }, { x: (0.0 - 0.3), y: 0.4 }, { x: 0.5, y: 0.6 }] }
+
+# A record that fits is stacked, but the number list inside stays packed.
+shape = {
+	name: tri,
+	size: 3,
+	points: [(0.0 - 1.0), (0.0 - 2.0), 3.0, 4.0],
+}
+
+# A list of names is not data, so it is stacked.
+names = [
+	alpha,
+	beta,
+	gamma,
+	delta,
+	epsilon,
+	zeta,
+]
+--- roc/platform_targets.roc
+platform ""
+	requires {
+		step : U8 -> U8
+	}
+	exposes []
+	packages {}
+	provides { "s": host }
+	targets: {
+		x64musl: {
+			inputs: ["crt1.o", "host.o", app, "libc.a", "libm.a", "libz.a"],
+			output: Archive,
+		},
+		wasm32: {
+			inputs: [app],
+			output: Archive,
+		},
+	}
+
+# `roc fmt` lays out the `targets:` section by itself, whatever its commas say.
+host : U8 -> U8
+host = |a| step(a)
+--- roc/three.roc
+module [call, point]
+
+# Six tokens in three or more items are stacked.
+call = f(
+	a,
+	b,
+	c,
+	d,
+	e,
+	g,
+)
+
+point = {
+	x: 1,
+	y: 2,
+	z: 3,
+}
+--- roc/two.roc
+module [call, full, pair]
+
+# Two items stay on one line, however many tokens they hold.
+call = f(a, b)
+
+pair = { x: 1, y: 2 }
+
+full = { x: g(a, b, c), y: h(a, b, c) }
+--- roc/wide_string_arm.roc
+module [describe, joined]
+
+# The string makes the arm's line wide, and the list pattern beside it would
+# leave it as wide, so the pattern stays on one line and the line is counted.
+describe : List(U8) -> Str
+describe = |bytes|
+	match bytes {
+		[_, _] => "two bytes, the first and the second, which this sentence describes at considerable length"
+		_ => "other"
+	}
+
+# A near miss: the call around the string is what runs past the width, so it stacks.
+joined : Str, Str -> Str
+joined = |first, second| Str.concat(
+	"a fairly long string literal that takes room on this line",
+	first.concat(second),
+)
+--- too_deep/too_deep.roc
+module [deep]
+
+# Eight groups, one a pass, so the eighth pass still changes something.
+deep = f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, c, d, e, g, h, i))))))))
+=== copy=roc write=2 (exit 1)
+── stop: fail: wrap_long_lines: write=2: write must be 1 (the default) or 0
+--- roc/annotation.roc
+module [apply, three]
+
+# A function type's arguments can't take a trailing comma, so they stay.
+three : U8, U8, U8 -> U8
+three = |a, b, c| a + b + c
+
+apply : (U8, U8, U8 -> U8) -> U8
+apply = |_| 0
+--- roc/at_the_cap.roc
+module [deep]
+
+# Seven groups, one a pass, so the eighth pass changes nothing.
+deep = f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, c, d, e, g, h, i)))))))
+--- roc/both_ways.roc
+module [sun_pos]
+
+# The record of types stacks, and the arguments that only name its fields sit
+# on one line.
+sun_pos : { heading : Angle.Bearing, clock : Clock, cam_focal : F64 } -> Sky.SunPos
+sun_pos = |
+	{
+		heading,
+		clock,
+		cam_focal,
+	},
+| {
+	heading
+}
+--- roc/five.roc
+module [call, stacked]
+
+# Five tokens stay on one line, and a stacked five joins it.
+call = f(a, b, c, d, e)
+
+stacked = f(
+	a,
+	b,
+	c,
+	d,
+	e,
+)
+--- roc/function_type.roc
+module [run_all_the_steps]
+
+# A function type in parentheses can't take a trailing comma, so this wide line stays, and is listed.
+run_all_the_steps : (List(U64), Str, U64 -> List(U64)), (List(U64), Str, U64 -> List(U64)) -> List(U64)
+run_all_the_steps = |_, _| []
+--- roc/nested.roc
+module [both]
+
+# The outer list is stacked first, then each big call inside it.
+both = [f(a, b, c), g(d, e, h, i, j, k), l]
+--- roc/numbers.roc
+module [names, near, polygon, samples, shape]
+
+# A list of numbers stays packed, however many items it has.
+near = [(0.0 - 0.5), 1.25, (0.0 - 2.0), 3.75]
+
+samples = [0.5, 1.25, (0.0 - 2.0), 3.75, 4.0, 5.5, 6.25, 7.0, 8.5, 9.75, 10.0, 11.5, 12.25, 13.0, 14.5, 15.75]
+
+# A wide line holding a list of flat number records is data: nothing on it is
+# stacked.
+polygon = { color: 7, gradients: [], points: [{ x: 0.1, y: 0.2 }, { x: (0.0 - 0.3), y: 0.4 }, { x: 0.5, y: 0.6 }] }
+
+# A record that fits is stacked, but the number list inside stays packed.
+shape = { name: tri, size: 3, points: [(0.0 - 1.0), (0.0 - 2.0), 3.0, 4.0] }
+
+# A list of names is not data, so it is stacked.
+names = [alpha, beta, gamma, delta, epsilon, zeta]
+--- roc/platform_targets.roc
+platform ""
+	requires {
+		step : U8 -> U8
+	}
+	exposes []
+	packages {}
+	provides { "s": host }
+	targets: {
+		x64musl: {
+			inputs: ["crt1.o", "host.o", app, "libc.a", "libm.a", "libz.a"],
+			output: Archive,
+		},
+		wasm32: {
+			inputs: [app],
+			output: Archive,
+		},
+	}
+
+# `roc fmt` lays out the `targets:` section by itself, whatever its commas say.
+host : U8 -> U8
+host = |a| step(a)
+--- roc/three.roc
+module [call, point]
+
+# Six tokens in three or more items are stacked.
+call = f(a, b, c, d, e, g)
+
+point = { x: 1, y: 2, z: 3 }
+--- roc/two.roc
+module [call, full, pair]
+
+# Two items stay on one line, however many tokens they hold.
+call = f(a, b)
+
+pair = { x: 1, y: 2 }
+
+full = { x: g(a, b, c), y: h(a, b, c) }
+--- roc/wide_string_arm.roc
+module [describe, joined]
+
+# The string makes the arm's line wide, and the list pattern beside it would
+# leave it as wide, so the pattern stays on one line and the line is counted.
+describe : List(U8) -> Str
+describe = |bytes|
+    match bytes {
+        [_, _] => "two bytes, the first and the second, which this sentence describes at considerable length"
+        _ => "other"
+    }
+
+# A near miss: the call around the string is what runs past the width, so it stacks.
+joined : Str, Str -> Str
+joined = |first, second| Str.concat("a fairly long string literal that takes room on this line", first.concat(second))
+=== copy=roc dir=, (exit 1)
+── stop: fail: wrap_long_lines: dir= names no folder
+--- roc/annotation.roc
+module [apply, three]
+
+# A function type's arguments can't take a trailing comma, so they stay.
+three : U8, U8, U8 -> U8
+three = |a, b, c| a + b + c
+
+apply : (U8, U8, U8 -> U8) -> U8
+apply = |_| 0
+--- roc/at_the_cap.roc
+module [deep]
+
+# Seven groups, one a pass, so the eighth pass changes nothing.
+deep = f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, c, d, e, g, h, i)))))))
+--- roc/both_ways.roc
+module [sun_pos]
+
+# The record of types stacks, and the arguments that only name its fields sit
+# on one line.
+sun_pos : { heading : Angle.Bearing, clock : Clock, cam_focal : F64 } -> Sky.SunPos
+sun_pos = |
+	{
+		heading,
+		clock,
+		cam_focal,
+	},
+| {
+	heading
+}
+--- roc/five.roc
+module [call, stacked]
+
+# Five tokens stay on one line, and a stacked five joins it.
+call = f(a, b, c, d, e)
+
+stacked = f(
+	a,
+	b,
+	c,
+	d,
+	e,
+)
+--- roc/function_type.roc
+module [run_all_the_steps]
+
+# A function type in parentheses can't take a trailing comma, so this wide line stays, and is listed.
+run_all_the_steps : (List(U64), Str, U64 -> List(U64)), (List(U64), Str, U64 -> List(U64)) -> List(U64)
+run_all_the_steps = |_, _| []
+--- roc/nested.roc
+module [both]
+
+# The outer list is stacked first, then each big call inside it.
+both = [f(a, b, c), g(d, e, h, i, j, k), l]
+--- roc/numbers.roc
+module [names, near, polygon, samples, shape]
+
+# A list of numbers stays packed, however many items it has.
+near = [(0.0 - 0.5), 1.25, (0.0 - 2.0), 3.75]
+
+samples = [0.5, 1.25, (0.0 - 2.0), 3.75, 4.0, 5.5, 6.25, 7.0, 8.5, 9.75, 10.0, 11.5, 12.25, 13.0, 14.5, 15.75]
+
+# A wide line holding a list of flat number records is data: nothing on it is
+# stacked.
+polygon = { color: 7, gradients: [], points: [{ x: 0.1, y: 0.2 }, { x: (0.0 - 0.3), y: 0.4 }, { x: 0.5, y: 0.6 }] }
+
+# A record that fits is stacked, but the number list inside stays packed.
+shape = { name: tri, size: 3, points: [(0.0 - 1.0), (0.0 - 2.0), 3.0, 4.0] }
+
+# A list of names is not data, so it is stacked.
+names = [alpha, beta, gamma, delta, epsilon, zeta]
+--- roc/platform_targets.roc
+platform ""
+	requires {
+		step : U8 -> U8
+	}
+	exposes []
+	packages {}
+	provides { "s": host }
+	targets: {
+		x64musl: {
+			inputs: ["crt1.o", "host.o", app, "libc.a", "libm.a", "libz.a"],
+			output: Archive,
+		},
+		wasm32: {
+			inputs: [app],
+			output: Archive,
+		},
+	}
+
+# `roc fmt` lays out the `targets:` section by itself, whatever its commas say.
+host : U8 -> U8
+host = |a| step(a)
+--- roc/three.roc
+module [call, point]
+
+# Six tokens in three or more items are stacked.
+call = f(a, b, c, d, e, g)
+
+point = { x: 1, y: 2, z: 3 }
+--- roc/two.roc
+module [call, full, pair]
+
+# Two items stay on one line, however many tokens they hold.
+call = f(a, b)
+
+pair = { x: 1, y: 2 }
+
+full = { x: g(a, b, c), y: h(a, b, c) }
+--- roc/wide_string_arm.roc
+module [describe, joined]
+
+# The string makes the arm's line wide, and the list pattern beside it would
+# leave it as wide, so the pattern stays on one line and the line is counted.
+describe : List(U8) -> Str
+describe = |bytes|
+    match bytes {
+        [_, _] => "two bytes, the first and the second, which this sentence describes at considerable length"
+        _ => "other"
+    }
+
+# A near miss: the call around the string is what runs past the width, so it stacks.
+joined : Str, Str -> Str
+joined = |first, second| Str.concat("a fairly long string literal that takes room on this line", first.concat(second))
+=== copy=roc dir=-roc (exit 1)
+── stop: fail: `wrap_long_lines`'s `dir` is "-roc": a value that starts with `-` would be one of the program's options
+--- roc/annotation.roc
+module [apply, three]
+
+# A function type's arguments can't take a trailing comma, so they stay.
+three : U8, U8, U8 -> U8
+three = |a, b, c| a + b + c
+
+apply : (U8, U8, U8 -> U8) -> U8
+apply = |_| 0
+--- roc/at_the_cap.roc
+module [deep]
+
+# Seven groups, one a pass, so the eighth pass changes nothing.
+deep = f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, c, d, e, g, h, i)))))))
+--- roc/both_ways.roc
+module [sun_pos]
+
+# The record of types stacks, and the arguments that only name its fields sit
+# on one line.
+sun_pos : { heading : Angle.Bearing, clock : Clock, cam_focal : F64 } -> Sky.SunPos
+sun_pos = |
+	{
+		heading,
+		clock,
+		cam_focal,
+	},
+| {
+	heading
+}
+--- roc/five.roc
+module [call, stacked]
+
+# Five tokens stay on one line, and a stacked five joins it.
+call = f(a, b, c, d, e)
+
+stacked = f(
+	a,
+	b,
+	c,
+	d,
+	e,
+)
+--- roc/function_type.roc
+module [run_all_the_steps]
+
+# A function type in parentheses can't take a trailing comma, so this wide line stays, and is listed.
+run_all_the_steps : (List(U64), Str, U64 -> List(U64)), (List(U64), Str, U64 -> List(U64)) -> List(U64)
+run_all_the_steps = |_, _| []
+--- roc/nested.roc
+module [both]
+
+# The outer list is stacked first, then each big call inside it.
+both = [f(a, b, c), g(d, e, h, i, j, k), l]
+--- roc/numbers.roc
+module [names, near, polygon, samples, shape]
+
+# A list of numbers stays packed, however many items it has.
+near = [(0.0 - 0.5), 1.25, (0.0 - 2.0), 3.75]
+
+samples = [0.5, 1.25, (0.0 - 2.0), 3.75, 4.0, 5.5, 6.25, 7.0, 8.5, 9.75, 10.0, 11.5, 12.25, 13.0, 14.5, 15.75]
+
+# A wide line holding a list of flat number records is data: nothing on it is
+# stacked.
+polygon = { color: 7, gradients: [], points: [{ x: 0.1, y: 0.2 }, { x: (0.0 - 0.3), y: 0.4 }, { x: 0.5, y: 0.6 }] }
+
+# A record that fits is stacked, but the number list inside stays packed.
+shape = { name: tri, size: 3, points: [(0.0 - 1.0), (0.0 - 2.0), 3.0, 4.0] }
+
+# A list of names is not data, so it is stacked.
+names = [alpha, beta, gamma, delta, epsilon, zeta]
+--- roc/platform_targets.roc
+platform ""
+	requires {
+		step : U8 -> U8
+	}
+	exposes []
+	packages {}
+	provides { "s": host }
+	targets: {
+		x64musl: {
+			inputs: ["crt1.o", "host.o", app, "libc.a", "libm.a", "libz.a"],
+			output: Archive,
+		},
+		wasm32: {
+			inputs: [app],
+			output: Archive,
+		},
+	}
+
+# `roc fmt` lays out the `targets:` section by itself, whatever its commas say.
+host : U8 -> U8
+host = |a| step(a)
+--- roc/three.roc
+module [call, point]
+
+# Six tokens in three or more items are stacked.
+call = f(a, b, c, d, e, g)
+
+point = { x: 1, y: 2, z: 3 }
+--- roc/two.roc
+module [call, full, pair]
+
+# Two items stay on one line, however many tokens they hold.
+call = f(a, b)
+
+pair = { x: 1, y: 2 }
+
+full = { x: g(a, b, c), y: h(a, b, c) }
+--- roc/wide_string_arm.roc
+module [describe, joined]
+
+# The string makes the arm's line wide, and the list pattern beside it would
+# leave it as wide, so the pattern stays on one line and the line is counted.
+describe : List(U8) -> Str
+describe = |bytes|
+    match bytes {
+        [_, _] => "two bytes, the first and the second, which this sentence describes at considerable length"
+        _ => "other"
+    }
+
+# A near miss: the call around the string is what runs past the width, so it stacks.
+joined : Str, Str -> Str
+joined = |first, second| Str.concat("a fairly long string literal that takes room on this line", first.concat(second))
+=== copy=roc tokens=6 (no roc-version) (exit 1)
+── stop: fail: wrap_long_lines: no roc-version where the run starts: run it from the repository's root, whose roc-version pins its Roc
+--- roc/annotation.roc
+module [apply, three]
+
+# A function type's arguments can't take a trailing comma, so they stay.
+three : U8, U8, U8 -> U8
+three = |a, b, c| a + b + c
+
+apply : (U8, U8, U8 -> U8) -> U8
+apply = |_| 0
+--- roc/at_the_cap.roc
+module [deep]
+
+# Seven groups, one a pass, so the eighth pass changes nothing.
+deep = f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, c, d, e, g, h, i)))))))
+--- roc/both_ways.roc
+module [sun_pos]
+
+# The record of types stacks, and the arguments that only name its fields sit
+# on one line.
+sun_pos : { heading : Angle.Bearing, clock : Clock, cam_focal : F64 } -> Sky.SunPos
+sun_pos = |
+	{
+		heading,
+		clock,
+		cam_focal,
+	},
+| {
+	heading
+}
+--- roc/five.roc
+module [call, stacked]
+
+# Five tokens stay on one line, and a stacked five joins it.
+call = f(a, b, c, d, e)
+
+stacked = f(
+	a,
+	b,
+	c,
+	d,
+	e,
+)
+--- roc/function_type.roc
+module [run_all_the_steps]
+
+# A function type in parentheses can't take a trailing comma, so this wide line stays, and is listed.
+run_all_the_steps : (List(U64), Str, U64 -> List(U64)), (List(U64), Str, U64 -> List(U64)) -> List(U64)
+run_all_the_steps = |_, _| []
+--- roc/nested.roc
+module [both]
+
+# The outer list is stacked first, then each big call inside it.
+both = [f(a, b, c), g(d, e, h, i, j, k), l]
+--- roc/numbers.roc
+module [names, near, polygon, samples, shape]
+
+# A list of numbers stays packed, however many items it has.
+near = [(0.0 - 0.5), 1.25, (0.0 - 2.0), 3.75]
+
+samples = [0.5, 1.25, (0.0 - 2.0), 3.75, 4.0, 5.5, 6.25, 7.0, 8.5, 9.75, 10.0, 11.5, 12.25, 13.0, 14.5, 15.75]
+
+# A wide line holding a list of flat number records is data: nothing on it is
+# stacked.
+polygon = { color: 7, gradients: [], points: [{ x: 0.1, y: 0.2 }, { x: (0.0 - 0.3), y: 0.4 }, { x: 0.5, y: 0.6 }] }
+
+# A record that fits is stacked, but the number list inside stays packed.
+shape = { name: tri, size: 3, points: [(0.0 - 1.0), (0.0 - 2.0), 3.0, 4.0] }
+
+# A list of names is not data, so it is stacked.
+names = [alpha, beta, gamma, delta, epsilon, zeta]
+--- roc/platform_targets.roc
+platform ""
+	requires {
+		step : U8 -> U8
+	}
+	exposes []
+	packages {}
+	provides { "s": host }
+	targets: {
+		x64musl: {
+			inputs: ["crt1.o", "host.o", app, "libc.a", "libm.a", "libz.a"],
+			output: Archive,
+		},
+		wasm32: {
+			inputs: [app],
+			output: Archive,
+		},
+	}
+
+# `roc fmt` lays out the `targets:` section by itself, whatever its commas say.
+host : U8 -> U8
+host = |a| step(a)
+--- roc/three.roc
+module [call, point]
+
+# Six tokens in three or more items are stacked.
+call = f(a, b, c, d, e, g)
+
+point = { x: 1, y: 2, z: 3 }
+--- roc/two.roc
+module [call, full, pair]
+
+# Two items stay on one line, however many tokens they hold.
+call = f(a, b)
+
+pair = { x: 1, y: 2 }
+
+full = { x: g(a, b, c), y: h(a, b, c) }
+--- roc/wide_string_arm.roc
+module [describe, joined]
+
+# The string makes the arm's line wide, and the list pattern beside it would
+# leave it as wide, so the pattern stays on one line and the line is counted.
+describe : List(U8) -> Str
+describe = |bytes|
+    match bytes {
+        [_, _] => "two bytes, the first and the second, which this sentence describes at considerable length"
+        _ => "other"
+    }
+
+# A near miss: the call around the string is what runs past the width, so it stacks.
+joined : Str, Str -> Str
+joined = |first, second| Str.concat("a fairly long string literal that takes room on this line", first.concat(second))
+=== self_test=1 (exit 0)
+scratch:wrap_long_lines: pass 1: 11 trailing commas added or taken out
+scratch:wrap_long_lines: pass 2: 2 trailing commas added or taken out
+scratch:wrap_long_lines: pass 3: 1 trailing commas added or taken out
+scratch:wrap_long_lines: pass 4: 1 trailing commas added or taken out
+scratch:wrap_long_lines: pass 5: 1 trailing commas added or taken out
+scratch:wrap_long_lines: pass 6: 1 trailing commas added or taken out
+scratch:wrap_long_lines: pass 7: 1 trailing commas added or taken out
+scratch:wrap_long_lines: pass 8: 0 trailing commas added or taken out
+scratch:wrap_long_lines: 7 files rewritten
+ok   annotation.roc: comes out as its .want
+ok   at_the_cap.roc: comes out as its .want
+ok   both_ways.roc: comes out as its .want
+ok   five.roc: comes out as its .want
+ok   function_type.roc: comes out as its .want
+ok   nested.roc: comes out as its .want
+ok   numbers.roc: comes out as its .want
+ok   platform_targets.roc: comes out as its .want
+ok   three.roc: comes out as its .want
+ok   two.roc: comes out as its .want
+ok   wide_string_arm.roc: comes out as its .want
+ok   the list of lines left wide is function_type.roc:4 (scratch:wrap_long_lines/function_type.roc:4 (103): nothing to stack: run_all_the_steps : (List(U64), Str, U64 -> List(U64)), (List(U64), Str, U64 -> List(U64)) -> List(U64))
+ok   1 lines wide only for their strings and 2 of numeric data, counted and not listed, want 1 and 2 (0 refused)
+scratch:wrap_long_lines: pass 1: 1 trailing commas added or taken out
+scratch:wrap_long_lines: pass 2: 1 trailing commas added or taken out
+scratch:wrap_long_lines: pass 3: 1 trailing commas added or taken out
+scratch:wrap_long_lines: pass 4: 1 trailing commas added or taken out
+scratch:wrap_long_lines: pass 5: 1 trailing commas added or taken out
+scratch:wrap_long_lines: pass 6: 1 trailing commas added or taken out
+scratch:wrap_long_lines: pass 7: 1 trailing commas added or taken out
+scratch:wrap_long_lines: pass 8: 1 trailing commas added or taken out
+ok   too_deep.roc: stops naming its file, and is left as it was
+PASS: the rewrite ends, every plant comes out as its .want, no group is left to stack or to unstack, the lines left wide are listed or counted, and a rewrite past its passes stops naming its file and changes none
