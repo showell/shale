@@ -97,10 +97,10 @@
 -- breaks.
 --
 -- Strings, character literals and comments are not code, so a word in one
--- never counts: each line is judged through cookbook/c/items.shale's masker,
+-- never counts: each line is judged through c/build/c_items.shale's masker,
 -- `c_mask`, which blanks them and keeps every column. That library reads the
--- shape this check holds, so the `cookbook` mount must be this tree's own:
--- c/build.shale hands it so, and the check stops on another. A file is judged by its own name (arena.h, slice.h), so the
+-- shape this check holds, so it is loaded from beside this file, this
+-- tree's own wherever the check runs. A file is judged by its own name (arena.h, slice.h), so the
 -- plants below are judged as any file is.
 --
 -- The return size is the one rule a line can't show, since a type's size is
@@ -128,7 +128,7 @@
 -- Run from the repository's root: shale c/check_discipline.shale
 -- budget: steps=100000000 kept_bytes=4194304
 
-use("cookbook:c/items.shale")
+use("./build/c_items.shale")
 
 const ALLOC = [=[\b(malloc|free|calloc|realloc|aligned_alloc|strdup|strndup)\s*\(]=]
 -- An index: a `[` after a name, a `)` or a `]`, read after each array
@@ -761,7 +761,7 @@ const RETURN_WHY = "TCC 0.9.27 miscompiles a struct of 9 to 15 bytes returned st
 
 -- A column-0 `static` line's function, as {type, name}, or nil when the line
 -- declares no function (a variable, `void`, a function pointer): the head as
--- cookbook/c/items.shale's splitter reads it.
+-- c/build/c_items.shale's splitter reads it.
 function returned_by(raw)
   local f = c_function_head(c_mask(raw))
   if f == nil or f.type == "void" then return nil end
@@ -1296,13 +1296,6 @@ static void loop_end(Str s) { for (;;) { if (s.ptr == NULL) break; } }
   caught = caught + comment_plants_hold(dir .. "/comments.c")
   remove_tree(dir)
   print("PASS self-test: " .. caught .. " plants caught, every other line passed")
-end
-
--- The `cookbook` mount, the masker's library, is this tree's own, or the
--- check stops: another tree's (the box's, from a lane) would judge this C by
--- its rules.
-if real("cookbook:.") ~= real("cookbook") then
-  fail("c/check_discipline.shale reads its masker from cookbook:c/items.shale, and the `cookbook` mount is " .. real("cookbook:.") .. ", not this tree's " .. real("cookbook") .. ": run it through c/build.shale, which hands it this tree's, or with SHALE_MOUNTS naming one")
 end
 
 if arg("self_test", 0) == 1 then

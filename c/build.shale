@@ -169,15 +169,13 @@ end
 local said_builds = "none"
 if #builds > 0 then said_builds = join(builds, ",") end
 
--- The `build` mount, c/build: a block reads its library there. `cookbook`,
--- this tree's own, is the discipline check's: its masker is
--- cookbook/c/items.shale, and the discipline block splits every C file with
--- it. The outer
+-- The `build` mount, c/build: a block reads its libraries there (lib.shale,
+-- and c_items.shale, the discipline block's splitter). The outer
 -- run's `tools` mount goes with it, when there is one: the Zig tools' block
 -- speaks to its zig-ast, and the host text block to its roc-ast and go-ast.
 mkdir(OUT)
 local mounts = OUT .. "/build.mounts"
-local mount_line = "build = " .. real("c/build") .. " ro\ncookbook = " .. real("cookbook") .. " ro\n"
+local mount_line = "build = " .. real("c/build") .. " ro\n"
 local tools = attempt(real, "tools:.")
 if tools.ok then mount_line = mount_line .. "tools = " .. tools.value .. " ro tools\n" end
 if exists(mounts) then replace(mounts, mount_line) else create(mounts, mount_line) end
@@ -211,7 +209,7 @@ end
 -- `binary=release` or `binary=tcc` builds the C `shale` alone, installed at
 -- `to`, and runs no tier: bench/baseline.shale's release and debug builds
 -- (c/build/binary.shale). `to` is a Shale path, through this run's mounts
--- (the block's own are only `build`, `cookbook` and `tools`), or an absolute
+-- (the block's own are only `build` and `tools`), or an absolute
 -- OS path, as bench/baseline.shale's `{prefix}` is; the block is handed the
 -- OS path. Without `to`, the binary stays where it is built,
 -- c/out/<binary>/shale.

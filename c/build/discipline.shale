@@ -4,7 +4,7 @@
 -- budget: steps=40000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
 
 use("build:lib.shale")
-use("cookbook:c/items.shale")
+use("build:c_items.shale")
 
 -- ── The discipline block ────────────────────────────────────────────────
 
@@ -64,12 +64,13 @@ function accounted(p, items)
 end
 
 -- Every .c and .h under c/ (c/out left out) split by
--- cookbook/c/items.shale and accounted for, in one line. It was
+-- c/build/c_items.shale and accounted for, in one line. It was
 -- `cookbook:c/map_file.shale tree=c`, until map_file was ported to Roc,
 -- whose build (the platform's host after every change to C Shale, 25 to
 -- 50 s) is no fast tier's: this is the Shale splitter that
 -- c/check_discipline.shale reads with, proven here, and the Roc splitter
--- (cookbook/c/items/) is held to its goldens in the full tier.
+-- (cookbook/c/items/), a second copy of its logic, is held to its goldens
+-- in the full tier.
 function split_tree()
   local files = {}
   for e in walk_all("c", {kind = "file", skip = "out"}) do
@@ -88,7 +89,7 @@ function split_tree()
 end
 
 -- c/check_discipline.shale over the C, then its own self-test, in both
--- tiers; then every C file split into its items by cookbook/c/items.shale,
+-- tiers; then every C file split into its items by c/build/c_items.shale,
 -- each line accounted for, so a file the splitter can't read fails the
 -- build; then the canary, under tcc in both and GCC in the full.
 function discipline_block(t)
