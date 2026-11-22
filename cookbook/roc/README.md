@@ -145,15 +145,20 @@ are passed in):
   its goldens.
 
 The Roc recipes share one package, [lib/](lib/main.roc): `Tree` (Roc's
-tree of a file read), `Declarations` (what a file declares), `Text` (text
-cut and ordered as Shale's builtins do it) and `Finding` (a check's finding,
-ordered and printed). A recipe's app names it in its header, `lib:
-"../lib/main.roc"`, and imports `lib.Tree`.
+tree of a file read), `Declarations` (what a file declares), `Headers` (the
+names a header dictates, and the methods Roc calls by name), `Text` (text
+cut and ordered as Shale's builtins do it), `Finding` (a check's finding,
+ordered and printed) and `RocTypes` (roc-types' output read, and a node's
+type found), among others its main.roc lists. A recipe's app names it in
+its header, `lib: "../lib/main.roc"`, and imports `lib.Tree`.
 
 `hunt_names`, `check_errors` and `check_boundaries` can also ask Roc's type
 checker for types: add `types=1 root=<app>`, where the app imports the
 files read, or several apps separated by commas. A file that no app
 imports is checked without types, listed at the end, and fails the run.
+Each runs roc-types from a small `Types.roc` of its own, the same file in
+all three, since a package reaches no effect; what reads the output is
+`lib/RocTypes.roc`.
 
     cd <repo> && shale <shale>/cookbook/roc/check_errors.shale glob='app/**/*.roc' types=1 root=app/main.roc,app/Specs.roc
 
@@ -229,28 +234,26 @@ imports is checked without types, listed at the end, and fails the run.
 
 ## Libraries
 
-Recipes load these with `use("cookbook:roc/<file>.shale")` (or `./<file>`
-beside them). Each header lists its functions.
+The Shale recipes that remain load these with
+`use("cookbook:roc/<file>.shale")` (or `./<file>` beside them). Each header
+lists its functions. The recipes ported to Roc share `lib/` instead.
 
 - [parsed.shale](parsed.shale): parse a tree's files, check the ones that
   parse, and fail at the end with the ones roc-ast refused.
-- [headers.shale](headers.shale): the names a file's header dictates, what
-  a package or platform exposes, and the methods Roc calls by name.
-- [house.shale](house.shale): the checks that are our house style alone.
+- [house.shale](house.shale): the checks that are our house style alone,
+  by recipe (check_foreign_code loads it, and hunt_names reads it).
 - [findings.shale](../findings.shale), in the cookbook's top folder: the
   summary, the findings and the summary again, so the counts survive when
   the output limit cuts a long list.
-- [pinned.shale](pinned.shale): the path of the Roc compiler a repo's
-  `roc-version` names.
-- [types.shale](types.shale): runs
-  [roc-types](https://github.com/showell/roc-types) for one app or several.
-- [declared.shale](declared.shale): what the naming recipes read out of a
-  parse tree.
+- [pinned.shale](pinned.shale): the Roc every recipe's self-test runs.
+- [types.shale](types.shale): the
+  [roc-types](https://github.com/showell/roc-types) to run for a Roc, and
+  its output cut to some modules' records (roc-apps' tools/quality.shale).
+- [declared.shale](declared.shale): a parse tree's kids and attributes, a
+  name's words and a type's names, for the two below.
 - [member_uses.shale](member_uses.shale) and
   [module_family.shale](module_family.shale): `print_module_types`'s name
   resolution, use counts and family printing.
-- [gate_recipe.shale](gate_recipe.shale): what the gating recipes share,
-  their verdict and their plants' self-test.
 
 ## Tools the recipes need
 

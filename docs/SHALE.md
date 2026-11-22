@@ -1005,9 +1005,10 @@ message 7, a line of it
 that need one helper share it rather than copying it:
 
 ```lua
-use("cookbook:roc/pinned.shale")
-local roc = roc_bin("stack", SELF)   -- the library's function
-print(SELF_TEST_PIN)                 -- and its const
+use("cookbook:times.shale")
+local r = timed_run("safari", "build.sh safari", {"./build.sh", "safari"},
+  {timeout_ms = 300000, tail = 20})  -- the library's function
+print(TIMES_KEPT)                    -- and its const
 ```
 
 - **A statement at the top level**, with one string literal: never inside
@@ -1050,8 +1051,8 @@ print(SELF_TEST_PIN)                 -- and its const
   are bound on the `use` line as if the script declared them there, so the
   script's top level below and its functions declared after see them too.
 - **A stop inside one names the library**, its file and line
-  (`stopped at cookbook:roc/pinned.shale:<line>:<column>`), in the
-  function shown as `cookbook:roc/pinned.shale's roc_bin`, then the
+  (`stopped at cookbook:times.shale:<line>:<column>`), in the
+  function shown as `cookbook:times.shale's timed_run`, then the
   script's line that called it.
 - **A library or a prelude?** A repo's prelude (its root's
   `prelude.shale` under `.shale`) is every script's that runs at that root,

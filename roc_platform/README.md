@@ -96,8 +96,11 @@ launcher takes with it:
   a copy in several recipes. The recipes over Shale's C name their splitter,
   `cookbook/c/items/main.roc`, as `items`. A package reaches no effect, so
   what runs a program or reads a file (a self-test, a word list, the C
-  itself) stays in each recipe, which hands the package the text. A
-  script's package imports no package of its own.
+  itself) stays in each recipe, which hands the package the text: so
+  check_errors, hunt_names and check_boundaries each keep a small
+  `Types.roc`, the same file in all three, that runs roc-types and hands
+  its output to the package's `RocTypes`. A script's package imports no
+  package of its own.
 
 Every file is read through Shale's store (a path out of the root stops the
 launch), copied into the cache (the root as `main.roc`, packages under

@@ -461,9 +461,10 @@ has none of it):
   links most of the compiler, so it is built on GitHub and installed by
   that repo's install.shale (`shale install.shale` in its checkout) as
   `roc-types/bin/roc-types` under the `tools` mount. Its format's home is
-  that repo's FORMAT.md; the library `cookbook:roc/types.shale` reads it,
-  `roc_types(root, roc)`, `roc` the tree's Roc, whose pin roc-types' must
-  be.
+  that repo's FORMAT.md; the cookbook's Roc recipes read it with
+  `cookbook/roc/lib/RocTypes.roc`, and a Shale script finds the roc-types
+  for its Roc with `cookbook:roc/types.shale`'s `roc_types_exe(roc)`. The
+  pin roc-types was built for must be the tree's Roc's.
 
 **Git, in the git prelude** (`c/preludes/git.shale`). Every call
 runs git under `run`. A `repo` is a Shale path, `""`

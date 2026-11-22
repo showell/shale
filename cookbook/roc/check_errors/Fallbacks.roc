@@ -61,7 +61,7 @@ judge_pair! = |forest, typing, pair| {
 	line = Forest.line_number(forest, pair.fallback)
 	at_fallback = |check, what| { path: pair.path, line, check, what }
 	var $findings = []
-	target = set_target(forest, pair.lookup)
+	target = list_stored_into(forest, pair.lookup)
 	if target > 0 and is_same(forest, target, pair.fallback) {
 		why = "the fallback names `l`, so every store copies; write `?? crash \"...\"` instead"
 		cited = "(roc-apps CLAUDE.md, \"Six shapes copy\")"
@@ -127,8 +127,8 @@ is_same = |forest, first, second| {
 
 ## The list that the `List.set(l, i, v)` or `l.set(i, v)` call at a place
 ## stores into, 0 for any other expression.
-set_target : Forest, U64 -> U64
-set_target = |forest, at| {
+list_stored_into : Forest, U64 -> U64
+list_stored_into = |forest, at| {
 	kind = Forest.kind(forest, at)
 	kids = Forest.kids(forest, at)
 	callee = Forest.kid(forest, at, 1)

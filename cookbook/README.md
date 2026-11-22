@@ -151,8 +151,9 @@ checkouts, and `<lanes>` the one that holds your lanes.
   test lines and `expect`s, for each folder given; the launcher of a
   one-file Roc script (`roc/count_roc/count_roc.roc`, on `roc_platform/`,
   held to its goldens by that folder's `check_goldens.shale`). `cd <repos> && shale cookbook:roc/count_roc.shale in=roc-apps/basic`
-- `roc/declared.shale` (library): what a file declares, and a name's words,
-  read from its parse tree. `use("cookbook:roc/declared.shale")`
+- `roc/declared.shale` (library): a parse tree's kids and attributes, a
+  name's words and a type's names, for the type printer and
+  `rank_boundary_hints`. `use("cookbook:roc/declared.shale")`
 - `roc/find_bare_floats.shale`: finds bare `F64`s in declarations, against a
   table of exceptions; the launcher of a Roc script (`roc/find_bare_floats/`,
   on `roc_platform/`, held to its goldens by that folder's
@@ -172,12 +173,8 @@ checkouts, and `<lanes>` the one that holds your lanes.
   the launcher of a Roc script (`roc/find_unused_imports/`, on
   `roc_platform/`, held to its goldens by that folder's
   `check_goldens.shale`). `shale cookbook:roc/find_unused_imports.shale`
-- `roc/gate_recipe.shale` (library): what the recipes that gate a build
-  share, their verdict and their plants' self-test. `use("cookbook:roc/gate_recipe.shale")`
-- `roc/headers.shale` (library): which names a file's header dictates.
-  `use("cookbook:roc/headers.shale")`
-- `roc/house.shale` (library): the checks that are our house style alone.
-  `use("cookbook:roc/house.shale")`
+- `roc/house.shale` (library): the checks that are our house style alone,
+  by recipe. `use("cookbook:roc/house.shale")`
 - `roc/hunt_names.shale`: hunts for awkward names; the launcher of a Roc
   script of several modules (its root `roc/hunt_names/hunt_names.roc`, on
   `roc_platform/`, held to its goldens by that folder's
@@ -188,8 +185,8 @@ checkouts, and `<lanes>` the one that holds your lanes.
   modules as one family. `use("cookbook:roc/module_family.shale")`
 - `roc/parsed.shale` (library): parses a tree's .roc files and fails on any
   that roc-ast refuses. `use("cookbook:roc/parsed.shale")`
-- `roc/pinned.shale` (library): the Roc compiler a repo's `roc-version`
-  names. `use("cookbook:roc/pinned.shale")`
+- `roc/pinned.shale` (library): the Roc every recipe's self-test runs.
+  `use("cookbook:roc/pinned.shale")`
 - `roc/print_module_types.shale`: prints a module's types and every type they
   depend on, signatures only. `shale cookbook:roc/print_module_types.shale module=Pigs`
 - `roc/rank_boundary_hints.shale`: ranks hints that one module does
@@ -201,8 +198,8 @@ checkouts, and `<lanes>` the one that holds your lanes.
   modules (its root `roc/rewrite_method_calls/rewrite_method_calls.roc`, on
   `roc_platform/`, held to its goldens by that folder's
   `check_goldens.shale`). `shale cookbook:roc/rewrite_method_calls.shale apply=1`
-- `roc/types.shale` (library): every expression's type, from Roc's own type
-  checker. `use("cookbook:roc/types.shale")`
+- `roc/types.shale` (library): the roc-types to run for a Roc, and its
+  output cut to some modules' records. `use("cookbook:roc/types.shale")`
 - `roc/wrap_long_lines.shale`: shortens long Roc lines by letting `roc fmt`
   lay out their groups; the launcher of a Roc script (`roc/wrap_long_lines/`,
   on `roc_platform/`, held to its goldens by that folder's
