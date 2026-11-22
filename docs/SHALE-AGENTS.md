@@ -541,7 +541,7 @@ the script's from that line on. **Reach for one when recipes copy a
 helper**: a recipe runs from other repositories' roots, so a repo's prelude
 cannot serve it, and a library is found through a mount wherever it runs.
 A repo's prelude stays the tool for what every script at that root wants.
-The path is a mount's, or beside the script's own file (`./items.shale`,
+The path is a mount's, or beside the script's own file (`./peer_calls.shale`,
 `./<folder>/x.shale`), never the root's or an absolute one: a recipe and its
 library load together wherever they live, lanes included, so a lane's
 `shale build:lanes/x/c/check_discipline.shale` loads the lane's

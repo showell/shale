@@ -1013,7 +1013,7 @@ print(SELF_TEST_PIN)                 -- and its const
 - **A statement at the top level**, with one string literal: never inside
   a block or a function, never a value.
 - **The path is a mount's** (`cookbook:...`, `repos:...`), **or beside the
-  script's own file** (`./items.shale`, `./<folder>/x.shale`); never the root's
+  script's own file** (`./peer_calls.shale`, `./<folder>/x.shale`); never the root's
   or an absolute one: a recipe runs from other repositories' roots, where
   the root's paths are theirs. A `./` path is relative to the folder of
   the script file that holds the `use`, so a recipe and its library load
