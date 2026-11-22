@@ -10,7 +10,7 @@ SelfTest := [].{
 	## blind.
 	run! : {} => {}
 	run! = |{}| {
-		var $wrong = 0
+		var $wrong = 0.U64
 		for row in rows {
 			pattern = "${plants}${row.plant}"
 			command = ["shale", launcher, "glob=${pattern}"]

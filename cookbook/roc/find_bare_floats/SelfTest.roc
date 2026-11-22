@@ -13,7 +13,7 @@ SelfTest := [].{
 	run! : List(Str) => {}
 	run! = |checks| {
 		$wrong : U64
-		var $wrong = 0
+		var $wrong = 0.U64
 		var $fired = Set.empty()
 		for row in rows {
 			command = ["shale", launcher, "glob=${row.plant}"].concat(row.arguments)

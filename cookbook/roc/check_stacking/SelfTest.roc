@@ -51,7 +51,7 @@ SelfTest := [].{
 			Shale.fail!("check_stacking: a rewritten plant no longer parses")
 		}
 		$came_out_wrong : U64
-		var $came_out_wrong = 0
+		var $came_out_wrong = 0.U64
 		for want in Shale.glob!("${plants}/*.want") {
 			name = Text.basename(want).drop_suffix(".want")
 			ok = Report.read_text!("${scratch}/${name}.roc") == Report.read_text!(want)

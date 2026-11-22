@@ -9,7 +9,7 @@ SelfTest := [].{
 	## `checks` no row fires fails too, since it could be blind.
 	run! : List(Str) => {}
 	run! = |checks| {
-		var $wrong = 0
+		var $wrong = 0.U64
 		var $fired = Set.empty()
 		for row in rows {
 			command = ["shale", launcher, "glob=${row.plant}"].concat(row.arguments)
