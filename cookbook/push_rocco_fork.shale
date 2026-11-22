@@ -1,0 +1,35 @@
+-- This recipe pushes one branch of a Rocco checkout to Steve's fork of
+-- Rocco, github.com/showell/rocco-engine, and nowhere else. Steve allows
+-- this one command without asking (2026-11-22), so its limits are the
+-- permission: it pushes only to the checkout's `fork` remote, and only when
+-- that remote is the fork's address; it never pushes `main` or `master`,
+-- never forces, and never deletes. A push the fork can't fast-forward is
+-- refused by git, and the recipe stops with git's words.
+--
+--   cd ~/showell_repos && shale cookbook:push_rocco_fork.shale dir=build:lanes/rocco-firefox branch=firefox-fixes
+--
+-- `dir` is the checkout, through a mount; `branch` is a local branch, pushed
+-- to the branch of the same name on the fork.
+--
+-- budget: programs=10
+
+const FORK = "git@github.com:showell/rocco-engine.git"
+const DIR = arg("dir", "")
+const BRANCH = arg("branch", "")
+
+if DIR == "" or BRANCH == "" then fail("push_rocco_fork: name the checkout and the branch: dir=<mount path> branch=<name>") end
+if BRANCH == "main" or BRANCH == "master" then fail("push_rocco_fork: " .. BRANCH .. " is the fork's copy of Braeden's; this recipe pushes work branches only") end
+if not re_match(BRANCH, "^[A-Za-z0-9][A-Za-z0-9._/-]*$") then fail("push_rocco_fork: `" .. BRANCH .. "` is not a plain branch name") end
+
+local checkout = real(DIR)
+local remote = run({"git", "-C", checkout, "remote", "get-url", "fork"}, {timeout_ms = 10000, whole = 4096, want = "nonzero: said below"})
+if remote.code ~= 0 then fail("push_rocco_fork: " .. DIR .. " has no `fork` remote") end
+if trim(remote.out) ~= FORK then fail("push_rocco_fork: " .. DIR .. "'s `fork` remote is " .. trim(remote.out) .. ", not " .. FORK) end
+local ref = "refs/heads/" .. BRANCH
+if run({"git", "-C", checkout, "rev-parse", "-q", "--verify", ref}, {timeout_ms = 10000, whole = 4096, want = "nonzero: said below"}).code ~= 0 then fail("push_rocco_fork: " .. DIR .. " has no local branch " .. BRANCH) end
+
+local pushed = run({"git", "-C", checkout, "push", "fork", ref .. ":" .. ref}, {timeout_ms = 120000, whole = 65536, want = "nonzero: git's refusal, said below"})
+print(trim(pushed.out))
+if pushed.code ~= 0 then fail("push_rocco_fork: git refused the push (exit " .. pushed.code .. ")") end
+local head = trim(run({"git", "-C", checkout, "rev-parse", "--short=8", ref}, {timeout_ms = 10000, whole = 4096}).out)
+print("push_rocco_fork: " .. BRANCH .. " at " .. head .. " is on https://github.com/showell/rocco-engine/tree/" .. BRANCH)

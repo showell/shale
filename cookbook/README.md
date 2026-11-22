@@ -34,6 +34,12 @@ checkouts, and `<lanes>` the one that holds your lanes.
   the lane's branch, here and on origin, once it is merged. Use it in place
   of a bare `git worktree remove`.
   `cd <lanes> && shale cookbook:remove_lane.shale dir=<lane>`
+- `push_rocco_fork.shale`: for "push that branch to our Rocco fork". It
+  pushes one work branch of a Rocco checkout to its `fork` remote, only when
+  that remote is github.com/showell/rocco-engine; it never pushes `main` or
+  `master`, never forces and never deletes. Steve allows this one command
+  without asking.
+  `cd <repos> && shale cookbook:push_rocco_fork.shale dir=<mount path> branch=<name>`
 
 ## For any project
 
