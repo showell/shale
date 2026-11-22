@@ -1046,6 +1046,13 @@ const EXPECT = {
   KeptImport = {left = 0},
   MadeLong = {left = 0, made_long = 1, made_says = "MadeLong.roc:11: made_long_line"},
   PeerMethodsCount = {file = "PeerMethods", count = true, proven = 0, unsettled = 0, left = 6, peers = 6, why = "PeerMethods.roc:24: peer_receiver: `.max` is symmetric and its receiver and first argument are both U64s, so neither is the subject: U64.max(...)", root = "TypedApp", types = true},
+  -- A rewrite `roc check` passes and `roc test` refuses puts the file back;
+  -- a root that fails `roc check` before any rewrite stops the run; a file
+  -- `roc fmt` would change is not formatted after its rewrite.
+  TestChanged = {left = 2, why = "roc test changed: "},
+  BadBase = {stop = "fails before any rewrite: fix it first"},
+  Unformatted = {left = 0},
+  Loud = {left = 0},
 }
 
 -- The plants that hold no call and serve only as roots for other plants:
