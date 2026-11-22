@@ -197,7 +197,7 @@ TEST(grep_tree_refuses_to_walk_a_secrets_mount_by_its_name_before_any_read) {
     grep_tree_test_run(&x, "show(gt(\"x\", {place = \"k:\", prefix = \"k:\"}))\n");
     EXPECT_EQ(x.ran, STOP);
     EXPECT_EQ(x.r.ctx.stop.cls, CLASS_REFUSED);
-    EXPECT_STR(x.r.ctx.stop.message, S("\"k:\": the mount `k` holds secrets: only `run`'s `secrets` (or `http_get`'s `bearer`) may name its files"));
+    EXPECT_STR(x.r.ctx.stop.message, S("\"k:\": the mount `k` holds secrets: only `run`'s `secrets` and `secret_args` (or `http_get`'s `bearer`) may name its files"));
     EXPECT(!grep_tree_test_holds(x.r.ctx.stop.message, x.dir));
     EXPECT_EQ(x.r.reads, 0);
     EXPECT_EQ(x.r.read_bytes, 0);

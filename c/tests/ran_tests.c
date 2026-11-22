@@ -19,7 +19,8 @@
 #include "host_builtins/test_host_run.c"
 #include "host_builtins/test_host_procs.c"
 #include "host_builtins/test_run_guards.c"
+#include "host_builtins/test_run_secret_args.c"
 #include "text/test_host_text.c"
 #include "text/test_host_grep_tree.c"
 
-TEST_PARTS_MAIN(TEST_PART_OF(vm), TEST_PART_OF(builtins), TEST_PART_OF(host_run), TEST_PART_OF(host_procs), TEST_PART_OF(run_guards), TEST_PART_OF(host_text), TEST_PART_OF(host_grep_tree))
+TEST_PARTS_MAIN(TEST_PART_OF(vm), TEST_PART_OF(builtins), TEST_PART_OF(host_run), TEST_PART_OF(host_procs), TEST_PART_OF(run_guards), TEST_PART_OF(run_secret_args), TEST_PART_OF(host_text), TEST_PART_OF(host_grep_tree))

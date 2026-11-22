@@ -464,7 +464,7 @@ static STATUS_MUST_USE Status paths_resolve(void *ctx, PathRun *r, Pos pos, Str 
     // call; only paths_secret_path and paths_secret_target take one.
     // test_paths plants each builtin's path through it.
     if (m->secrets) {
-        return path_fail(r, pos, CLASS_REFUSED, S("\"{s}\": the mount `{s}` holds secrets: only `run`'s `secrets` (or `http_get`'s `bearer`) may name its files"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(path), MESSAGE_FROM_HOST(m->name)));
+        return path_fail(r, pos, CLASS_REFUSED, S("\"{s}\": the mount `{s}` holds secrets: only `run`'s `secrets` and `secret_args` (or `http_get`'s `bearer`) may name its files"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(path), MESSAGE_FROM_HOST(m->name)));
     }
     Str os = S("");
     TRY(paths_mount_path(h, r, pos, path, colon, m, &os));

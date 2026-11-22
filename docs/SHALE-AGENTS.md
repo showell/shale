@@ -199,7 +199,7 @@ has none of it):
 - **Programs:** `run(argv, opts)` runs one and gives `{argv, code, ended,
   ms, cpu_ms, out, ...}`. `timeout_ms` and a keep, `head` or `tail` (lines)
   or `whole` (bytes), are required (unless `stdout_secret`); the rest are
-  `cwd`, `stdin`, `env`, `secrets`, `stdout_secret`, `secret_replace`,
+  `cwd`, `stdin`, `env`, `secrets`, `secret_args`, `stdout_secret`, `secret_replace`,
   `log`, `want`, `cpu_budget_ms`, `stage`, `nice`, and the filters `re`, `not_re`, `nocase`,
   `before`, `after` and `width` (`RunOpts` in `c/host/host_run.c`).
   **The filters cost the script's steps:** each output line's search for
@@ -288,7 +288,7 @@ has none of it):
 - **Jobs**, programs that outlive the call:
   - `job_start(argv, {log, cwd, env, want, keep_on_stop})` starts one under a detached
     reaper (`want` as `run`'s, for a program `run` would refuse).
-    `log` is required, and there are no `secrets`. A log whose job still
+    `log` is required, and there are no `secrets` or `secret_args`. A log whose job still
     runs, or whose reaper has yet to write its end, is refused: stop or
     wait for it, or use another. Once `job_wait` says `exited`, the log
     takes a new job at once. When the job's program exits, what it left
@@ -920,7 +920,23 @@ the first two can give a quiet wrong answer, an empty list:
   `want`). Only `run`'s `secrets = {NAME = "keys:file"}` takes one, the
   value in the program's environment and scrubbed from its output as
   `<secret NAME>`; `http_get`'s `bearer` and `cookbook:fetch_page.shale`'s
-  `bearer=keys:file` use it. **The one write path is `run`'s
+  `bearer=keys:file` use it. **`run`'s `secret_args = {NAME = "keys:file"}`
+  puts one in an argument**, for a program that takes it there (ssh's
+  destination, rsync's `HOST:/path`): each `<secret NAME>` in the argv,
+  a whole argument or inside one, is the value in the argv the program
+  is handed, and the script's own argv, with its markers, is what the
+  answer's `argv`, the record, a stop and the `── time:` line show, as
+  the scrubber shows the value in the output. It is held before any file
+  is read: a name that is not a word (letters, digits, `_`), one also in
+  `secrets`, a name no argument uses, a `<secret ` no name of it gives and
+  a marker in argv[0] (the guards read the program's name as the script
+  wrote it) each stop the run; the file is read as `secrets` reads one,
+  and `job_start` refuses it as it refuses `secrets`. Only the value
+  whole is scrubbed, so a program that prints a part of it (ssh's
+  `connect to host <address>` for a `user@address`) shows that part:
+  quiet the program (`-o LogLevel=QUIET`). An argument is not an
+  environment: any process on the machine can read a program's argv in
+  `/proc`, so an argument suits an address, not a token. **The one write path is `run`'s
   `stdout_secret = "keys:NAME"`:** the program's stdout goes straight to
   that file, never to the script, so a secret received is stored without
   passing through a variable. The file is directly in a `secrets` mount
@@ -1016,6 +1032,17 @@ run({"curl", "-s", "--variable", "%EXAMPLE_KEY",
   "--expand-header", "Authorization: Bearer {{EXAMPLE_KEY:trim}}",
   "https://example.org/api/me"},
   {timeout_ms = 30000, tail = 20, secrets = {EXAMPLE_KEY = "keys:example_key"}})
+```
+
+**In an argument** is `run`'s `secret_args`, where the program reads it
+from its argv, as ssh, rsync and scp read a destination:
+
+```lua
+local dest = {PROD = "keys:prod-ssh"}
+run({"ssh", "-o", "BatchMode=yes", "-o", "LogLevel=QUIET", "<secret PROD>", "uptime"},
+  {timeout_ms = 30000, tail = 5, secret_args = dest})
+run({"rsync", "-rlt", "site/", "<secret PROD>:/srv/site/"},
+  {timeout_ms = 300000, tail = 20, secret_args = dest})
 ```
 
 **Never print a secret, and never write one anywhere else**: not to

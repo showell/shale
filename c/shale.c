@@ -376,7 +376,7 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
         if (r->mounts.len == 0) return reader_why(why, got, 7, a, S("\""), path, S("\": `"), name, S(":` is not a mount: there are none ("), r->mounts_from, S(")"));
         return reader_why(why, got, 9, a, S("\""), path, S("\": `"), name, S(":` is not a mount: the mounts are "), buf_view(&names), S(" ("), r->mounts_from, S(")"));
     }
-    if (m->secrets) return reader_why(why, got, 5, a, S("\""), path, S("\": the mount `"), m->name, S("` holds secrets: only `run`'s `secrets` (or `http_get`'s `bearer`) may name its files"));
+    if (m->secrets) return reader_why(why, got, 5, a, S("\""), path, S("\": the mount `"), m->name, S("` holds secrets: only `run`'s `secrets` and `secret_args` (or `http_get`'s `bearer`) may name its files"));
     Str rest = under_root ? path : str_sub(path, colon + 1, path.len);
     Str prefix = under_root ? S("") : str_sub(path, 0, colon + 1);
     if (str_eq(rest, S("."))) rest = S("");

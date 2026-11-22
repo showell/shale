@@ -805,7 +805,7 @@ run(argv: List(Str), opts: Opts) -> RunResult
   impl: prelude linux
   kind: effect
   stops: refused (a program `run` refuses, without a `want`), argument (an option it does not take, no keep or timeout), budget programs, budget cpu
-  opts: timeout_ms: Int, head: Int, tail: Int, whole: Int, cwd: Path, stdin: Str, env: Map(Str), secrets: Map(Path), stdout_secret: Bool, secret_replace: Map(Str), log: Path, want: Str, cpu_budget_ms: Int, stage: Str, nice: Int, re: Str, not_re: Str, nocase: Bool, before: Int, after: Int, width: Int
+  opts: timeout_ms: Int, head: Int, tail: Int, whole: Int, cwd: Path, stdin: Str, env: Map(Str), secrets: Map(Path), secret_args: Map(Path), stdout_secret: Path, secret_replace: Bool, log: Path, want: Str, cpu_budget_ms: Int, stage: Str, nice: Int, re: Str, not_re: Str, nocase: Bool, before: Int, after: Int, width: Int
   doc: a program run to its end or its timeout: `{argv, code, ended, ms, cpu_ms, out, ...}`
   anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
   roc: run! : { argv : List(Str), keep : [Head(U64), Tail(U64), Whole(U64)], timeout_ms : U64, want : Str } => { code : I64, out : Str }

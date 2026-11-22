@@ -53,6 +53,8 @@ typedef struct {
     Value stdin_v;
     HostEnvOpt env;
     HostEnvOpt secrets;
+    // Each a secret's path, its value put in the argv at `<secret NAME>`.
+    HostEnvOpt secret_args;
     Value want;
     Value stdout_secret;
     bool secret_replace;
@@ -166,6 +168,8 @@ static STATUS_MUST_USE Status host_read_opts(Run *r, Pos pos, const Value *v, Ru
             TRY(host_env_opt(r, pos, who, k, &x, false, &o->env));
         } else if (str_eq(k, S("secrets"))) {
             TRY(host_env_opt(r, pos, who, k, &x, true, &o->secrets));
+        } else if (str_eq(k, S("secret_args"))) {
+            TRY(host_env_opt(r, pos, who, k, &x, true, &o->secret_args));
         } else if (str_eq(k, S("want"))) {
             TRY(host_str_value_opt(r, pos, who, k, &x, &o->want));
         } else if (str_eq(k, S("cpu_budget_ms"))) {
@@ -176,7 +180,7 @@ static STATUS_MUST_USE Status host_read_opts(Run *r, Pos pos, const Value *v, Ru
             TRY(host_int_opt(r, pos, who, k, &x, &o->nice));
             if (o->nice > 19) return host_fail(r, pos, CLASS_ARGUMENT, S("`run`'s `nice` is 0 to 19 (19 the lowest priority), not {d}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(run_num(r, x.as.integer))));
         } else {
-            return host_fail(r, pos, CLASS_ARGUMENT, S("`run` takes timeout_ms, re, not_re, nocase, before, after, head, tail, width, whole, log, cwd, stdin, env, secrets, want, stdout_secret, secret_replace, cpu_budget_ms, stage and nice, not `{s}`"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(k)));
+            return host_fail(r, pos, CLASS_ARGUMENT, S("`run` takes timeout_ms, re, not_re, nocase, before, after, head, tail, width, whole, log, cwd, stdin, env, secrets, secret_args, want, stdout_secret, secret_replace, cpu_budget_ms, stage and nice, not `{s}`"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(k)));
         }
     }
     if (o->timeout_ms == HOST_UNSET) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run` needs `timeout_ms`: how long the program may take is the script's to say"));
@@ -547,15 +551,27 @@ static STATUS_MUST_USE Status host_run_out(Run *r, Pos pos, const RunOpts *o, Ho
 // options.
 static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnStrs argv, const RunOpts *o, HostRunHeld *held, Value *out) {
     Arena *a = r->ctx.values;
-    // The guards' order is the DRAGON at host_guard_program.
+    // The guards' order is the DRAGON at host_guard_program; `secret_args`'
+    // markers are held first, the DRAGON at host_secret_args_check.
+    TRY(host_secret_args_check(r, pos, argv, &o->secret_args, &o->secrets));
     HostProgram prog = {S("run"), argv, &o->cwd, &o->env, &o->secrets, host_given(&o->want)};
     Str cwd = S("");
     TRY(host_guard_program(h, r, pos, &prog, &cwd));
 
     Buf shown_env = buf_make(a);
     SpawnStrs env = {NULL, 0};
-    HostSecrets secrets = {NULL, 0};
-    TRY(host_run_env(h, r, pos, &o->env, &o->secrets, &shown_env, &env, &secrets));
+    HostSecrets env_secrets = {NULL, 0};
+    TRY(host_run_env(h, r, pos, &o->env, &o->secrets, &shown_env, &env, &env_secrets));
+    // The scrubber's secrets: the environment's, then the argv's.
+    size_t nargs = o->secret_args.names.len;
+    HostSecret *all = ARENA_ARRAY(a, HostSecret, env_secrets.len + nargs);
+    if (all == NULL && env_secrets.len + nargs > 0) return run_values_oom(r, pos);
+    SLICE_TYPE(AllRoom, HostSecret);
+    AllRoom room = {all, env_secrets.len + nargs};
+    for (size_t i = 0; i < env_secrets.len; i++) at(room, i) = at(env_secrets, i);
+    SpawnStrs filled = argv;
+    TRY(host_secret_args_fill(h, r, pos, argv, &o->secret_args, &shown_env, &filled, nargs == 0 ? NULL : &at(room, env_secrets.len)));
+    HostSecrets secrets = {all, env_secrets.len + nargs};
     bool has_stdin = false;
     Str stdin_bytes = S("");
     TRY(host_run_stdin(r, pos, o, &has_stdin, &stdin_bytes));
@@ -575,7 +591,9 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
 
     SpawnSpec spec;
     spawn_spec_default(&spec);
-    spec.argv = argv;
+    // The values in the argv go to the program alone: the DRAGON at
+    // host_secret_args_fill.
+    spec.argv = filled;
     // The folder is a CheckedPath's, made absolute (host_guard_program).
     spec.cwd = os_str_own(cwd);
     spec.env = env;

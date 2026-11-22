@@ -175,8 +175,8 @@ outside it.**
 Mount lines also take ` tools`, for a toolchain whose programs a script may
 run by path (a newer compiler, a project's `.venv`), a decision you make once,
 by hand; and ` secrets`, for a folder of tokens, whose files reach a program
-only through `run`'s `secrets` (and `http_get`'s `bearer`), never a
-script.
+only through `run`'s `secrets` and `secret_args` (and `http_get`'s
+`bearer`), never a script.
 
 ### Hook it into Claude Code
 

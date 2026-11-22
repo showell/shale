@@ -325,6 +325,146 @@ static STATUS_MUST_USE Status host_run_env(Host *h, Run *r, Pos pos, const HostE
     return OK;
 }
 
+// ── `secret_args`: a secret in an argument ──
+
+// A secret's place in an argument, `<secret NAME>`: the text the scrubber
+// makes of its value, so the argv as every record shows it is the argv as
+// the program's scrubbed output would.
+#define HOST_SECRET_MARK "<secret "
+
+// Whether a `secret_args` name is a word, letters, digits and `_`, not first
+// a digit: its marker then ends at its first `>`, read one way.
+static bool host_secret_arg_name_ok(Str name) {
+    if (name.len == 0) return false;
+    for (size_t i = 0; i < name.len; i++) {
+        uint8_t c = str_byte(name, i);
+        bool word = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_' || (i > 0 && c >= '0' && c <= '9');
+        if (!word) return false;
+    }
+    return true;
+}
+
+// A marker found in an argument: where it starts and ends (past its `>`),
+// and which of `secret_args`' names it holds (`names.len` for none).
+typedef struct {
+    size_t start;
+    size_t end;
+    size_t which;
+} HostSecretMark;
+
+// The first marker in `s` at or after `from`: false for none. A `<secret `
+// with no `>` after it is a marker of no name.
+static bool host_secret_mark_next(Str s, size_t from, PathsStrs names, HostSecretMark *m) {
+    Str mark = S(HOST_SECRET_MARK);
+    Str rest = str_sub(s, from, s.len);
+    size_t found = mem_find(rest.ptr, rest.len, mark.ptr, mark.len);
+    if (found == SIZE_MAX) return false;
+    m->start = from + found;
+    size_t name_at = m->start + mark.len;
+    const char *close = str_find_byte(str_sub(s, name_at, s.len), '>');
+    m->end = close == NULL ? s.len : (size_t)(close - s.ptr) + 1;
+    Str name = close == NULL ? S("") : str_sub(s, name_at, m->end - 1);
+    m->which = names.len;
+    for (size_t j = 0; j < names.len; j++) {
+        if (str_eq(at(names, j), name)) m->which = j;
+    }
+    return true;
+}
+
+// Holds `secret_args` to its rules before any secret is read: each name a
+// word (host_secret_arg_name_ok) and none also a `secrets` name; each name's
+// marker in an argument after the program's; and every marker in the argv
+// one of its names. With no `secret_args`, the argv is the script's to say,
+// markers and all.
+// DRAGON: the secrets rule. A secret that names the program would pass the
+// guards (host_refuse, which reads argv[0], and paths_refuse_secret_args) by
+// its marker and run as its value, a program no guard read; and a marker the
+// script misspelled would reach the program as its text, quietly.
+// REMEDY: a marker in argv[0] and a marker of no name are refused here,
+// before any file is read or program started, as is a name no marker uses;
+// test_run_secret_args plants each.
+static STATUS_MUST_USE Status host_secret_args_check(Run *r, Pos pos, SpawnStrs argv, const HostEnvOpt *args, const HostEnvOpt *secrets) {
+    PathsStrs names = args->names;
+    if (names.len == 0) return OK;
+    for (size_t j = 0; j < names.len; j++) {
+        Str k = at(names, j);
+        if (!host_secret_arg_name_ok(k)) return host_fail(r, pos, CLASS_ARGUMENT, S("`run`'s `secret_args` name `{s}` is not a word (letters, digits and `_`, not first a digit): its place in an argument is `<secret NAME>`"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(k)));
+        for (size_t e = 0; e < secrets->names.len; e++) {
+            if (str_eq(at(secrets->names, e), k)) return host_fail(r, pos, CLASS_ARGUMENT, S("`run`: `{s}` is a name in both `secrets` and `secret_args`: the output would name two secrets as one, `<secret {s}>`"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(k), MESSAGE_FROM_SCRIPT(k)));
+        }
+    }
+    bool *used = ARENA_ARRAY(r->ctx.values, bool, names.len);
+    if (used == NULL) return run_values_oom(r, pos);
+    SLICE_TYPE(Used, bool);
+    Used u = {used, names.len};
+    for (size_t j = 0; j < names.len; j++) at(u, j) = false;
+    for (size_t i = 0; i < argv.len; i++) {
+        Str s = at(argv, i).s;
+        HostSecretMark m;
+        size_t from = 0;
+        while (from < s.len && host_secret_mark_next(s, from, names, &m)) {
+            if (m.which == names.len) return host_fail(r, pos, CLASS_ARGUMENT, S("`run`'s argument {d} holds `<secret ` with no name `secret_args` gives: each `<secret NAME>` in the argv is one of its names"), MESSAGE_ARGS(MESSAGE_FROM_HOST(run_unum(r, i + 1))));
+            if (i == 0) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s program is the secret `{s}`: a secret fills an argument after the program's, which the guards read as the script wrote it"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(at(names, m.which))));
+            at(u, m.which) = true;
+            from = m.end;
+        }
+    }
+    for (size_t j = 0; j < names.len; j++) {
+        if (!at(u, j)) return host_fail(r, pos, CLASS_ARGUMENT, S("`run`'s `secret_args` gives `{s}`, and no argument holds `<secret {s}>`"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(at(names, j)), MESSAGE_FROM_SCRIPT(at(names, j))));
+    }
+    return OK;
+}
+
+// The argv the program is handed: each `<secret NAME>` in the script's argv
+// (held by host_secret_args_check) replaced by that secret's value, read
+// from its file as `secrets` reads one (host_secret_read), so a value is
+// trimmed and NUL-free and its file held to the same checks. `into` gets
+// each secret, for the scrubber, and `shown` ` argv NAME=<secret PATH>` for
+// the record. With no `secret_args`, `*filled` is `argv`.
+// DRAGON: the secrets rule. The filled argv holds the values: a record, a
+// stop, the answer's `argv` or the time line built from it would show one.
+// REMEDY: the filled argv goes to the spawn alone (host_run_spawned's
+// `spec.argv`); everything else is built from the script's `argv`, whose
+// markers are what the scrubber makes of the values. test_run_secret_args
+// holds the record, the answer, the time line and the output to it.
+static STATUS_MUST_USE Status host_secret_args_fill(Host *h, Run *r, Pos pos, SpawnStrs argv, const HostEnvOpt *args, Buf *shown, SpawnStrs *filled, HostSecret *into) {
+    PathsStrs names = args->names;
+    *filled = argv;
+    if (names.len == 0) return OK;
+    SLICE_TYPE(SecretRoom, HostSecret);
+    SecretRoom room = {into, names.len};
+    for (size_t j = 0; j < names.len; j++) {
+        Str k = at(names, j);
+        Str given = at(args->values, j);
+        Str v = S("");
+        TRY(host_secret_read(h, r, pos, k, given, &v));
+        at(room, j).name = k;
+        at(room, j).value = v;
+        if (buf_lit(shown, " argv ") != OK || buf_str(shown, k) != OK || buf_lit(shown, "=<secret ") != OK || buf_str(shown, given) != OK || buf_byte(shown, '>') != OK) return run_values_oom(r, pos);
+    }
+    OsStr *out = ARENA_ARRAY(r->ctx.values, OsStr, argv.len);
+    if (out == NULL) return run_values_oom(r, pos);
+    SLICE_TYPE(ArgvRoom, OsStr);
+    ArgvRoom aroom = {out, argv.len};
+    for (size_t i = 0; i < argv.len; i++) {
+        Str s = at(argv, i).s;
+        Buf b = buf_make(r->ctx.values);
+        HostSecretMark m;
+        size_t from = 0;
+        while (from < s.len && host_secret_mark_next(s, from, names, &m)) {
+            if (buf_str(&b, str_sub(s, from, m.start)) != OK || buf_str(&b, at(room, m.which).value) != OK) return run_values_oom(r, pos);
+            from = m.end;
+        }
+        if (buf_str(&b, str_sub(s, from, s.len)) != OK) return run_values_oom(r, pos);
+        // The script's bytes and a secret's, each checked NUL-free
+        // (host_argv_arg, host_secret_read).
+        at(aroom, i) = os_str_own(buf_view(&b));
+    }
+    filled->ptr = out;
+    filled->len = argv.len;
+    return OK;
+}
+
 // ── `stdout_secret`'s file ──
 
 // The file a program's stdout goes to while it runs: a temporary file beside

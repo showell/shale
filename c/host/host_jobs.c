@@ -133,6 +133,8 @@ static STATUS_MUST_USE Status host_job_opts(Run *r, Pos pos, const Value *ov, Ho
             o->keep_on_stop = x.as.boolean;
         } else if (str_eq(k, S("secrets"))) {
             return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`job_start`: no `secrets` on a job: a detached job's log has nobody to scrub it"));
+        } else if (str_eq(k, S("secret_args"))) {
+            return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`job_start`: no `secret_args` on a job: a detached job's log has nobody to scrub it"));
         } else {
             return host_fail(r, pos, CLASS_ARGUMENT, S("`job_start` takes log, cwd, env, want and keep_on_stop, not `{s}`"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(k)));
         }

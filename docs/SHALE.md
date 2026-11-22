@@ -1363,7 +1363,7 @@ three:
   `~/.config/shale/mounts`: `name = /abs/path` or `name = ~/path` a line,
   then any of ` ro` (read-only), ` tools` (a toolchain whose programs `run`
   takes by path though git does not track them) and ` secrets` (a folder
-  of tokens only `run`'s `secrets` may name, read-only too, but for one
+  of tokens only `run`'s `secrets` and `secret_args` may name, read-only too, but for one
   write path, `run`'s `stdout_secret = "keys:NAME"`: a program's stdout
   goes straight to a file directly in the folder, mode 0600, renamed into
   place on exit 0, never seen by the script; it stops

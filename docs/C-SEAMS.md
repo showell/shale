@@ -170,7 +170,8 @@ its error's Zig name for the message:
   hook holds the mounts file's parse, the walk of each part with `lstat`
   (no symbolic link followed) and the secrets rule: no read, listing,
   `stat` or `real` of a secrets mount's files, no program handed its folder,
-  and `run`'s `secrets` and `stdout_secret` the only ways in and out.
+  and `run`'s `secrets`, `secret_args` and `stdout_secret` the only ways
+  in and out.
 - **`Host`**, `interp.Host`: `call(name, args)`, behind the core's
   `host(...)`. Linux's has the names c/host/host_call.c dispatches: `run` (fork by
   hand, `prctl`'s death signal, its own process group, the parent polling

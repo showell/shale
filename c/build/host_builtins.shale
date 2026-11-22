@@ -8,8 +8,8 @@
 use("build:lib.shale")
 
 -- ── The host builtins: their own block ──────────────────────────────────
--- c/tests/host_builtins/test_host_run.c and test_run_guards.c (the guards
--- before and while a program runs), held here to HOST_BUILTINS_TESTS: parts
+-- c/tests/host_builtins/test_host_run.c, test_run_guards.c (the guards
+-- before and while a program runs) and test_run_secret_args.c, held here to HOST_BUILTINS_TESTS: parts
 -- of c/tests/ran_tests.c, which the ran block runs under every build and
 -- holds to their `TEST(` counts. They run sources as the C `shale` does
 -- (c/tests/ran.c), and their job tests run c/out/tcc/shale as the reaper,
@@ -17,7 +17,7 @@ use("build:lib.shale")
 -- faults below planted in a copy of c/ (`run_plants`), each caught by its
 -- `aim` tests.
 
-const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 14, ["c/tests/host_builtins/test_run_guards.c"] = 12}
+const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 14, ["c/tests/host_builtins/test_run_guards.c"] = 12, ["c/tests/host_builtins/test_run_secret_args.c"] = 2}
 const HOST_BUILTINS_PLANTS = {
   {name = "a script's NUL is made an OS string", file = "host.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "a_nul_in_an_argument_an_env_a_secrets_name_or_a_secret_is_refused_before_any_guard",
@@ -49,6 +49,18 @@ const HOST_BUILTINS_PLANTS = {
   {name = "the time line's share is of the programs alone", file = "host.c", dir = "host", caught_by = "host_builtins/test_host_run",
    aim = "the_time_line_keeps_the_slowest_three_and_both_ends_of_a_long_argv",
    old = "    uint64_t whole = t->run_ms + t->wait_ms + t->sleep_ms;", new = "    uint64_t whole = t->run_ms;"},
+  {name = "an argv secret is left out of the scrubber", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_run_secret_args",
+   aim = "a_secret_fills_an_argument_and_only_its_marker_is_ever_shown",
+   old = "    HostSecrets secrets = {all, env_secrets.len + nargs};", new = "    HostSecrets secrets = {all, env_secrets.len};"},
+  {name = "the record and the time line name the filled argv", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_run_secret_args",
+   aim = "a_secret_fills_an_argument_and_only_its_marker_is_ever_shown",
+   old = "    TRY(host_argv_joined(r, pos, argv, &joined));", new = "    TRY(host_argv_joined(r, pos, filled, &joined));"},
+  {name = "the answer's argv is the filled one", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_run_secret_args",
+   aim = "a_secret_fills_an_argument_and_only_its_marker_is_ever_shown",
+   old = "    TRY(host_run_answer(r, pos, argv, &outcome, &t));", new = "    TRY(host_run_answer(r, pos, filled, &outcome, &t));"},
+  {name = "a secret may name the program", file = "host_run_secrets.c", dir = "host", caught_by = "host_builtins/test_run_secret_args",
+   aim = "each_secret_args_mistake_is_refused_before_a_secret_is_read",
+   old = "            if (i == 0) return host_fail(r, pos, CLASS_REFUSED,", new = "            if (0) return host_fail(r, pos, CLASS_REFUSED,"},
   {name = "a stopped run passes by the jobs it started", file = "host_jobs.c", dir = "host", caught_by = "host_builtins/test_host_run",
    aim = "a_job_runs_past_its_start_is_waited_for_and_a_stopped_run_ends_the_rest",
    old = "        if (!host_started_running(a, j)) continue;", new = "        if (1 || !host_started_running(a, j)) continue;"},

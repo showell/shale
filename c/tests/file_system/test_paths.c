@@ -540,7 +540,7 @@ TEST(secrets_mounts_no_read_listing_change_path_or_argument_reaches_a_token_by_t
         EXPECT(fixture_stopped(&f, fixture_look(&f, at(ls, i).who, file_system_fixture_cs(at(ls, i).path)), CLASS_REFUSED, file_system_fixture_cs(at(ls, i).says)));
         EXPECT(!fixture_names_keys(&f));
     }
-    EXPECT(fixture_said(&f, fixture_look(&f, "read", S("k:tok")), CLASS_REFUSED, S("\"k:tok\": the mount `k` holds secrets: only `run`'s `secrets` (or `http_get`'s `bearer`) may name its files")));
+    EXPECT(fixture_said(&f, fixture_look(&f, "read", S("k:tok")), CLASS_REFUSED, S("\"k:tok\": the mount `k` holds secrets: only `run`'s `secrets` and `secret_args` (or `http_get`'s `bearer`) may name its files")));
     EXPECT(fixture_said(&f, fixture_look(&f, "read", S("keys/tok")), CLASS_REFUSED, S("\"keys/tok\" is in the mount `k`, which holds secrets")));
     Str os = S("");
     fixture_again(&f);
