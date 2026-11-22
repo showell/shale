@@ -915,7 +915,7 @@ expect Typed.text([97]) == "a"
 ── stop: fail: `roc_types`: roc-types Proven.roc exited 1, what it said:
 roc-types: <copy>/Proven.roc is not an app (NotAnAppHeader): read a type module through an app that imports it
 === glob=Pin.roc root=TypedApp.roc (roc-version nightly-2026-11-07-ad3a5d2) (exit 1)
-── stop: fail: `roc_types`: roc-types reads Roc 0.1.0_RC1, and TypedApp.roc's tree is built with <tools>/roc-nightly-2026-11-07-ad3a5d2/roc: its types would be another compiler's. Install the roc-types of the tree's pin (https://github.com/showell/roc-types), or move the tree to nightly-2026-11-03-34bd006
+── stop: fail: `roc_types`: roc-types reads Roc 0.1.0_RC1, and TypedApp.roc's tree is built with <tools>/roc-nightly-2026-11-07-ad3a5d2/roc: its types would be another compiler's. Install the roc-types of the tree's pin (https://github.com/showell/roc-types), or move the tree to 0.1.0_RC1
 === glob=Rewrite.roc types=0 (no roc-version) (exit 1)
 ── stop: fail: rewrite_method_calls: no roc-version where the run starts: run it from the repository's root, whose roc-version pins its Roc
 === glob=BadBase.roc types=0 apply=1 (exit 1)
