@@ -58,7 +58,12 @@ Rewriting := [].{
 		if !(Shale.exists!(roc)) {
 			Shale.fail!("find_extra_parens: no ${roc}: install Roc ${pin} into ~/tools/roc-${pin}/ (roc-apps's toolchain release carries it)")
 		}
-		Shale.real!(roc)
+		real = Shale.real!(roc)
+		said = Shale.run!({ argv: [real, "version"], keep: Whole(4000), timeout_ms: 30000, want: "" })
+		if Text.trim(said.out) != "Roc compiler version ${pin}" {
+			Shale.fail!("find_extra_parens: ${roc} says ${Text.trim(said.out)}, not Roc compiler version ${pin}")
+		}
+		real
 	}
 }
 

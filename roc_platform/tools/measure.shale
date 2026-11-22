@@ -8,7 +8,10 @@
 -- budget: programs=100
 
 const OUT = "roc_platform/out/measure"
-const ROC = real("tools:roc-" .. trim(read("roc_platform/roc-version")) .. "/roc")
+const PIN = trim(read("roc_platform/roc-version"))
+const ROC = real("tools:roc-" .. PIN .. "/roc")
+local said = trim(must(run({ROC, "version"}, {timeout_ms = 30000, tail = 2})).out)
+if said ~= "Roc compiler version " .. PIN then fail("measure: " .. ROC .. " says " .. said .. ", not Roc compiler version " .. PIN) end
 if exists(OUT) then remove_tree(OUT) end
 mkdir(OUT)
 if exists("roc_platform/out/cache") then remove_tree("roc_platform/out/cache") end

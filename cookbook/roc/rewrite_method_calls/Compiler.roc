@@ -24,10 +24,16 @@ Compiler := [].{
 			Compiler.stop!("rewrite_method_calls: no roc-version where the run starts: run it from the repository's root, whose roc-version pins its Roc")
 		}
 		roc = "tools:roc-${pin}/roc"
-		if Shale.exists!(roc) {
-			Shale.real!(roc)
-		} else {
+		if !(Shale.exists!(roc)) {
 			Compiler.stop!("rewrite_method_calls: no ${roc}: install Roc ${pin} into ~/tools/roc-${pin}/ (roc-apps's toolchain release carries it)")
+		} else {
+			real = Shale.real!(roc)
+			said = Shale.run!({ argv: [real, "version"], keep: Whole(4000), timeout_ms: 30000, want: "" })
+			if Text.trim(said.out) == "Roc compiler version ${pin}" {
+				real
+			} else {
+				Compiler.stop!("rewrite_method_calls: ${roc} says ${Text.trim(said.out)}, not Roc compiler version ${pin}")
+			}
 		}
 	}
 

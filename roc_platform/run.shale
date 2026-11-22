@@ -367,6 +367,9 @@ end
 -- The script's files copied, its archive, its program and, last, its sites
 -- table.
 function build_script()
+  -- The pinned Roc, refused unless `roc version` says exactly the pin.
+  local version = trim(must(run({roc, "version"}, {timeout_ms = 30000, tail = 2})).out)
+  if version ~= "Roc compiler version " .. pin then fail("run: " .. roc .. " says " .. version .. ", not Roc compiler version " .. pin) end
   mkdir(cache)
   replace(cache .. "/built_for", built_for)
   for f in files do
