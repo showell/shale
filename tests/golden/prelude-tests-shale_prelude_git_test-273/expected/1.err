@@ -1,5 +1,5 @@
-── stopped at the git prelude:72:29 (in `the git prelude's git_call`): fail: `git diff --name-only --diff-filter=U -z` exited 129: warning: Not a git repository. Use --no-index to compare two paths outside a working tree (8817 steps)
-   called from the git prelude:351:18 (in `the git prelude's git_merge`)
+── stopped at the git prelude:74:29 (in `the git prelude's git_call`): fail: `git diff --name-only --diff-filter=U -z` exited 129: warning: Not a git repository. Use --no-index to compare two paths outside a working tree (8822 steps)
+   called from the git prelude:390:18 (in `the git prelude's git_merge`)
    called from {base}/case/script.shale:1:1
-── used: 8817 of 5000000 steps, 0 of 10000 reads, 7426 of 67108864 read bytes, 0 of 65536 output bytes
+── used: 8822 of 5000000 steps, 0 of 10000 reads, 7426 of 67108864 read bytes, 0 of 65536 output bytes
 ── steps: 8.8K in all; the most 8.8K (99%): git_merge, 1 call; 16 (0%): script

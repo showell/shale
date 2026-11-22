@@ -1,5 +1,5 @@
-── stopped at the git prelude:72:29 (in `the git prelude's git_call`): fail: `git worktree add -q --detach {base}/work/root/old HEAD~1` exited 128: fatal: not a git repository (or any of the parent directories): .git (1757 steps)
-   called from the git prelude:380:7 (in `the git prelude's git_worktree_add`)
+── stopped at the git prelude:74:29 (in `the git prelude's git_call`): fail: `git worktree add -q --detach {base}/work/root/old HEAD~1` exited 128: fatal: not a git repository (or any of the parent directories): .git (1762 steps)
+   called from the git prelude:419:7 (in `the git prelude's git_worktree_add`)
    called from {base}/case/script.shale:1:1
-── used: 1757 of 5000000 steps, 0 of 10000 reads, 69 of 67108864 read bytes, 69 of 65536 output bytes
+── used: 1762 of 5000000 steps, 0 of 10000 reads, 69 of 67108864 read bytes, 69 of 65536 output bytes
 ── steps: 1.7K in all; the most 1.7K (99%): git_worktree_add, 1 call; 9 (0%): script

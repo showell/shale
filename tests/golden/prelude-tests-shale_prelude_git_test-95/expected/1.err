@@ -1,5 +1,5 @@
 ── stopped at the git prelude:29:7 (in `the git prelude's git_opts`): fail: `git_log` takes n, range, ref, fields, paths and timeout_ms, not `count` (354 steps)
-   called from the git prelude:108:3 (in `the git prelude's git_log`)
+   called from the git prelude:110:3 (in `the git prelude's git_log`)
    called from {base}/case/script.shale:1:1
 ── used: 354 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
 ── steps: 354 in all; the most 344 (97%): git_log, 1 call; 10 (2%): script

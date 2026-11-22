@@ -1,5 +1,5 @@
-── stopped at the git prelude:72:29 (in `the git prelude's git_call`): fail: `git push -q -u origin main` exited 128: fatal: not a git repository (or any of the parent directories): .git (1100 steps)
-   called from the git prelude:273:3 (in `the git prelude's git_push`)
+── stopped at the git prelude:74:29 (in `the git prelude's git_call`): fail: `git push -q -u origin main` exited 128: fatal: not a git repository (or any of the parent directories): .git (2015 steps)
+   called from the git prelude:312:3 (in `the git prelude's git_push`)
    called from {base}/case/script.shale:1:1
-── used: 1100 of 5000000 steps, 0 of 10000 reads, 69 of 67108864 read bytes, 69 of 65536 output bytes
-── steps: 1.1K in all; the most 1.0K (98%): git_push, 1 call; 18 (1%): script
+── used: 2015 of 5000000 steps, 0 of 10000 reads, 138 of 67108864 read bytes, 69 of 65536 output bytes
+── steps: 2.0K in all; the most 1.9K (99%): git_push, 1 call; 18 (0%): script

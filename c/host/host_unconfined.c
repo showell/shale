@@ -18,11 +18,18 @@
 enum { HOST_UNCONFINED_HOSTS_MAX = 64 * 1024 };
 
 // git's own settings an unconfined push runs under, ahead of the script's
-// argv: no hook, no fsmonitor and no credential helper of the repository's
-// (each a program git would start, outside the confinement), and ssh itself
-// as ssh. They come before every `-c` of the script's, which
-// host_unconfined_git refuses, so none is undone.
-static const char *const HOST_UNCONFINED_GIT[] = {"-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "credential.helper=", "-c", "core.sshCommand=ssh"};
+// argv: no hook, no fsmonitor, no credential helper, no submodule pushed and
+// no signing (each a program git would start, outside the confinement), and
+// then ssh itself as ssh, its HostName the remotes file's host
+// (host_run_unconfined adds `-c core.sshCommand=ssh -o HostName=<host>`).
+// They come before every `-c` of the script's, which host_unconfined_git
+// refuses, so none is undone; and the push runs with GIT_ALLOW_PROTOCOL=ssh,
+// which no configuration overrides.
+static const char *const HOST_UNCONFINED_GIT[] = {"-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "credential.helper=", "-c", "push.recurseSubmodules=no", "-c", "push.gpgSign=false"};
+
+// The inherited variables an unconfined push runs without: each could name
+// the program git runs for ssh, or settings past HOST_UNCONFINED_GIT's.
+static const char *const HOST_UNCONFINED_GIT_ENV_DROPPED[] = {"GIT_SSH", "GIT_SSH_COMMAND", "GIT_SSH_VARIANT", "GIT_ALLOW_PROTOCOL", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT"};
 
 // The options an unconfined `scp` takes: quiet, recursive, times kept, and
 // HOST_UNCONFINED_SSH_SETTINGS' `-o`s. Any other (`-F`, `-S`, `-J`, `-i`)
@@ -102,29 +109,32 @@ static bool host_unconfined_host_line(Str line) {
     return at_signs == 1 && at_at > 0 && at_at + 1 < line.len;
 }
 
-// The hosts file's text into `*out`, each line checked: "" for none (no
-// SHALE_HOSTS and no ~/.config/shale/hosts). A SHALE_HOSTS that names no
-// file, a file that cannot be read and a line that is not a host's stop
-// the run, naming the file and the line.
-static STATUS_MUST_USE Status host_unconfined_hosts(Run *r, Pos pos, Str *out) {
+// A list file of the unconfined shapes', `kind` (the hosts file, the
+// remotes file): its text into `*out`, each line held to `line_ok` (`shape`
+// says a line's in a stop), the file the one `pinned` names (an environment
+// variable, a test's) or else `~/.config/shale/<kind>`; "" for none (no
+// `pinned` and no such file). A `pinned` that names no file, a file that
+// cannot be read and a line that is not `line_ok` stop the run, naming the
+// file and the line.
+static STATUS_MUST_USE Status host_unconfined_list(Run *r, Pos pos, const char *pinned_name, Str kind, bool (*line_ok)(Str), Str shape, Str *out) { // cstr: a literal
     Arena *a = r->ctx.values;
     PathRun *pr = &builtin_files_of(r)->path;
     *out = S("");
-    const char *pinned = getenv("SHALE_HOSTS"); // cstr: the environment's
+    const char *pinned = getenv(pinned_name); // cstr: the environment's
     const char *home = getenv("HOME"); // cstr: the environment's
     Str path = S("");
     if (pinned != NULL) {
         path = (Str){pinned, strlen(pinned)};
     } else if (home != NULL && str_starts_with((Str){home, strlen(home)}, S("/"))) {
-        TRY(paths_cat(pr, pos, (Str){home, strlen(home)}, S("/.config/shale/hosts"), S(""), &path));
+        TRY(paths_cat(pr, pos, (Str){home, strlen(home)}, S("/.config/shale/"), kind, &path));
     } else {
         return OK;
     }
     Str text = S("");
     FileSystemErr e = file_system_read_file(a, os_str_own(path), HOST_UNCONFINED_HOSTS_MAX, &text);
     if (e == FILE_SYSTEM_OUT_OF_MEMORY) return run_values_oom(r, pos);
-    if (e == FILE_SYSTEM_FILE_NOT_FOUND && pinned == NULL) return OK; // skip: no hosts file is no host allowed
-    if (e != FILE_SYSTEM_OK) return host_fail(r, pos, CLASS_HOST, S("`run`'s `unconfined`: the hosts file {s} cannot be read: {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(path), MESSAGE_FROM_HOST(file_system_err_name(e))));
+    if (e == FILE_SYSTEM_FILE_NOT_FOUND && pinned == NULL) return OK; // skip: no file is nothing allowed
+    if (e != FILE_SYSTEM_OK) return host_fail(r, pos, CLASS_HOST, S("`run`'s `unconfined`: the {s} file {s} cannot be read: {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(kind), MESSAGE_FROM_HOST(path), MESSAGE_FROM_HOST(file_system_err_name(e))));
     size_t from = 0;
     size_t n = 0;
     while (from <= text.len) {
@@ -133,10 +143,16 @@ static STATUS_MUST_USE Status host_unconfined_hosts(Run *r, Pos pos, Str *out) {
         from = to + 1;
         n++;
         if (line.len == 0 || str_byte(line, 0) == '#') continue;
-        if (!host_unconfined_host_line(line)) return host_fail(r, pos, CLASS_HOST, S("`run`'s `unconfined`: the hosts file {s}, line {s}, is not a host's: one `user@host` a line"), MESSAGE_ARGS(MESSAGE_FROM_HOST(path), MESSAGE_FROM_HOST(run_unum(r, n))));
+        if (!line_ok(line)) return host_fail(r, pos, CLASS_HOST, S("`run`'s `unconfined`: the {s} file {s}, line {s}, is not {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(kind), MESSAGE_FROM_HOST(path), MESSAGE_FROM_HOST(run_unum(r, n)), MESSAGE_FROM_HOST(shape)));
     }
     *out = text;
     return OK;
+}
+
+// The hosts file's text into `*out` (host_unconfined_list): SHALE_HOSTS's,
+// else ~/.config/shale/hosts.
+static STATUS_MUST_USE Status host_unconfined_hosts(Run *r, Pos pos, Str *out) {
+    return host_unconfined_list(r, pos, "SHALE_HOSTS", S("hosts"), host_unconfined_host_line, S("a host's: one `user@host` a line"), out);
 }
 
 // Whether `host` is a line of the hosts file's text `hosts`.
@@ -367,38 +383,285 @@ static STATUS_MUST_USE Status host_unconfined_rsync(Host *h, Run *r, Pos pos, St
     return host_unconfined_operands(h, r, pos, S("rsync"), cwd, a, i, hosts);
 }
 
-// `git ... push ...`: no `-c` but `color.ui=never` (the git prelude's), no
-// `--receive-pack` or `--exec`.
-static STATUS_MUST_USE Status host_unconfined_git(Run *r, Pos pos, const HostUnconfinedArgv *a, Str why) {
-    bool push_word = false;
-    for (size_t i = 1; i < a->filled.len; i++) {
-        Str w = host_unconfined_word(a, i);
-        push_word = push_word || str_eq(w, S("push"));
-        if (str_starts_with(w, S("--receive-pack")) || str_starts_with(w, S("--exec"))) return host_fail_plain(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` push takes no `--receive-pack` or `--exec`: each names a program it would start outside the confinement"));
-        if (str_eq(w, S("-c")) && (i + 1 >= a->filled.len || !str_eq(host_unconfined_word(a, i + 1), S("color.ui=never")))) return host_fail_plain(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` push takes no `-c` but `color.ui=never`: a setting could name a program git starts outside the confinement"));
+// The options an unconfined push takes, each whole (`--force-with-lease=`
+// by its prefix too): quiet or verbose, the upstream set, a dry run, no
+// hooks (there are none: HOST_UNCONFINED_GIT), a deletion, and the one
+// rewrite, `--force-with-lease`, held to a branch that is not main or
+// master (host_unconfined_push_refspec).
+static const char *const HOST_UNCONFINED_PUSH_FLAGS[] = {"-q", "--quiet", "-v", "--verbose", "-u", "--set-upstream", "-n", "--dry-run", "--porcelain", "--no-verify", "-d", "--delete", "--force-with-lease", "--force-with-lease="};
+
+// The options that force a push or delete what it does not name, each
+// refused by name: any of these, and a bundle of short options with an `f`.
+static const char *const HOST_UNCONFINED_PUSH_FORCES[] = {"-f", "--force", "--force-if-includes", "--mirror", "--prune", "--all"};
+
+// Whether `line`, trimmed, is a remotes file's line: `user@host:owner/`, the
+// user, the owner and the host of letters, digits, `.`, `_` and `-` (the host
+// without `_`), since the host goes into ssh's command (HOST_UNCONFINED_GIT).
+static bool host_unconfined_remote_line(Str line) {
+    size_t i = 0;
+    size_t start = 0;
+    int part = 0;
+    for (; i < line.len; i++) {
+        uint8_t c = str_byte(line, i);
+        bool word = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '-' || (c == '_' && part != 1);
+        if (word) continue;
+        char want = part == 0 ? '@' : part == 1 ? ':' : '/';
+        if (c != want || i == start) return false;
+        part++;
+        start = i + 1;
+        if (part == 3) break;
     }
-    if (!push_word) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` ({s}) is for a `git push`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(why)));
+    return part == 3 && i + 1 == line.len;
+}
+
+// The host of a remotes file's line, between its `@` and its `:`.
+static Str host_unconfined_remote_host(Str line) {
+    const char *at_sign = str_find_byte(line, '@');
+    const char *colon = str_find_byte(line, ':');
+    return str_sub(line, (size_t)(at_sign - line.ptr) + 1, (size_t)(colon - line.ptr));
+}
+
+// The remotes file's text into `*out` (host_unconfined_list): SHALE_REMOTES's,
+// else ~/.config/shale/remotes.
+static STATUS_MUST_USE Status host_unconfined_remotes(Run *r, Pos pos, Str *out) {
+    return host_unconfined_list(r, pos, "SHALE_REMOTES", S("remotes"), host_unconfined_remote_line, S("a remote owner's: one `user@host:owner/` a line"), out);
+}
+
+// Whether `url` is `<line><repo>.git` for a line of the remotes file's text
+// `remotes`, the repo a name of letters, digits, `.`, `_` and `-` that does
+// not start with `.` or `-`; that line's host into `*host`.
+static bool host_unconfined_remote_ok(Str remotes, Str url, Str *host) {
+    size_t from = 0;
+    while (from <= remotes.len) {
+        size_t to = path_part_end_at(remotes, from, '\n');
+        Str line = mounts_trim(str_sub(remotes, from, to), true);
+        from = to + 1;
+        if (line.len == 0 || str_byte(line, 0) == '#' || !str_starts_with(url, line)) continue;
+        Str rest = str_sub(url, line.len, url.len);
+        if (rest.len < 5 || !str_eq(str_sub(rest, rest.len - 4, rest.len), S(".git"))) continue;
+        Str repo = str_sub(rest, 0, rest.len - 4);
+        bool ok = str_byte(repo, 0) != '.' && str_byte(repo, 0) != '-';
+        for (size_t i = 0; i < repo.len && ok; i++) {
+            uint8_t c = str_byte(repo, i);
+            ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-';
+        }
+        if (!ok) continue;
+        *host = host_unconfined_remote_host(line);
+        return true;
+    }
+    return false;
+}
+
+// What a confined `git remote get-url` printed, at most 4 KiB of it.
+typedef struct {
+    Buf got;
+    bool over;
+} HostUnconfinedKept;
+
+static STATUS_MUST_USE Status host_unconfined_keep(void *ctx, Str bytes) {
+    HostUnconfinedKept *k = ctx;
+    if (k->got.len + bytes.len > 4096) {
+        k->over = true;
+        return OK;
+    }
+    return buf_str(&k->got, bytes);
+}
+
+// The push URLs of `remote`, every one, as git reads them (a `pushurl`
+// before the `url`, each `insteadOf` and `pushInsteadOf` applied): `git
+// [-C dir] remote get-url --push --all <remote>`, run confined, into
+// `*out`; a git that fails stops the run, naming its first line.
+static STATUS_MUST_USE Status host_unconfined_push_urls(Host *h, Run *r, Pos pos, Str cwd, Str dir, Str remote, Str *out) {
+    Str in = dir.len > 0 ? dir : S(".");
+    OsStr argv_all[8] = {os_str_own(S("git")), os_str_own(S("-C")), os_str_own(in), os_str_own(S("remote")), os_str_own(S("get-url")), os_str_own(S("--push")), os_str_own(S("--all")), os_str_own(remote)};
+    SpawnSpec spec;
+    spawn_spec_default(&spec);
+    spec.argv.ptr = argv_all;
+    spec.argv.len = 8;
+    spec.cwd = os_str_own(cwd);
+    spec.env = h->env;
+    spec.timeout_ms = 10000;
+    TRY(host_confine_open(h, r, pos, S("run"), &spec.confine_fd));
+    HostUnconfinedKept kept = {buf_make(r->ctx.values), false};
+    SpawnSink sink = {&kept, host_unconfined_keep};
+    SpawnOutcome o;
+    SpawnResult got = spawn_run(r->ctx.values, &spec, sink, &o);
+    host_confine_close(&spec.confine_fd);
+    if (got == SPAWN_OUT_OF_MEMORY || got == SPAWN_SINK_STOPPED) return run_values_oom(r, pos);
+    Str said = buf_view(&kept.got);
+    Str first = str_sub(said, 0, path_part_end_at(said, 0, '\n'));
+    if (got != SPAWN_OK || o.ended != SPAWN_EXIT || o.code != 0 || kept.over) {
+        return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` push: `git remote get-url --push --all {s}` failed, so its URL is not known, and it is not pushed: {s}"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(remote), MESSAGE_FROM_HOST(first)));
+    }
+    *out = said;
+    return OK;
+}
+
+// The host every push URL of `remote` goes to, into `*host`: each URL must be
+// a remote of the remotes file, and all of one host.
+static STATUS_MUST_USE Status host_unconfined_push_host(Host *h, Run *r, Pos pos, Str cwd, Str dir, Str remote, Str *host) {
+    Str remotes = S("");
+    TRY(host_unconfined_remotes(r, pos, &remotes));
+    Str urls = S("");
+    TRY(host_unconfined_push_urls(h, r, pos, cwd, dir, remote, &urls));
+    *host = S("");
+    size_t from = 0;
+    while (from <= urls.len) {
+        size_t to = path_part_end_at(urls, from, '\n');
+        Str url = mounts_trim(str_sub(urls, from, to), true);
+        from = to + 1;
+        if (url.len == 0) continue;
+        Str this_host = S("");
+        if (!host_unconfined_remote_ok(remotes, url, &this_host) || (host->len > 0 && !str_eq(*host, this_host))) {
+            return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` push goes only to a remote of the remotes file (~/.config/shale/remotes, or SHALE_REMOTES's), `<user@host:owner/><repo>.git`: `{s}` pushes to {s}"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(remote), MESSAGE_FROM_HOST(url)));
+        }
+        *host = this_host;
+    }
+    if (host->len == 0) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` push: `{s}` has no push URL"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(remote)));
+    return OK;
+}
+
+// Whether a ref a push forces or deletes, `dst` as written, is one it never
+// may: main or master (`main`, `refs/heads/main`, any ref ending `/main`),
+// HEAD (the remote's, which names its default branch), or `@`.
+static bool host_unconfined_kept_ref(Str dst) {
+    if (str_eq(dst, S("HEAD")) || str_eq(dst, S("@")) || dst.len == 0) return true;
+    size_t start = dst.len;
+    while (start > 0 && str_byte(dst, start - 1) != '/') start--;
+    Str last = str_sub(dst, start, dst.len);
+    return str_eq(last, S("main")) || str_eq(last, S("master"));
+}
+
+static STATUS_MUST_USE Status host_unconfined_forced(Run *r, Pos pos, Str shown) {
+    return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` push does not force, not {s}: `--force-with-lease` to a branch other than main and master is the one rewrite it takes"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(shown)));
+}
+
+// A push's refspec, word `i`: no `+` (a force), no pattern or negation, and,
+// when it deletes (`:dst`, or any under `--delete`) or the push leases
+// (`--force-with-lease`), not to main or master (host_unconfined_kept_ref).
+static STATUS_MUST_USE Status host_unconfined_push_refspec(Run *r, Pos pos, const HostUnconfinedArgv *a, size_t i, bool deleting, bool lease) {
+    Str w = host_unconfined_word(a, i);
+    Str shown = host_unconfined_shown(a, i);
+    if (str_starts_with(w, S("+"))) return host_unconfined_forced(r, pos, shown);
+    if (str_find_byte(w, '*') != NULL || str_starts_with(w, S("^"))) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` push names each ref whole, not {s}"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(shown)));
+    const char *colon = str_find_byte(w, ':');
+    Str dst = w;
+    if (colon != NULL) {
+        size_t c = (size_t)(colon - w.ptr);
+        deleting = deleting || c == 0;
+        dst = str_sub(w, c + 1, w.len);
+    }
+    if (deleting && host_unconfined_kept_ref(dst)) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` push does not delete main or master, not {s}"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(shown)));
+    if (lease && host_unconfined_kept_ref(dst)) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` push forces (`--force-with-lease`) only a branch other than main and master, named whole, not {s}"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(shown)));
+    return OK;
+}
+
+// `git [-C dir] [-c color.ui=never]... push [options] <remote> <refspec>...`
+// into `*dir` and `*remote`: before `push`, `-C` (a folder under the root or
+// a writable mount) and the git prelude's `-c color.ui=never` alone; after
+// it, HOST_UNCONFINED_PUSH_FLAGS' options alone, a remote by its name and at
+// least one refspec, each held to host_unconfined_push_refspec.
+static STATUS_MUST_USE Status host_unconfined_git(Host *h, Run *r, Pos pos, Str cwd, const HostUnconfinedArgv *a, Str why, Str *dir, Str *remote) {
+    HostConfineArgs flags = {HOST_UNCONFINED_PUSH_FLAGS, sizeof HOST_UNCONFINED_PUSH_FLAGS / sizeof *HOST_UNCONFINED_PUSH_FLAGS};
+    HostConfineArgs forces = {HOST_UNCONFINED_PUSH_FORCES, sizeof HOST_UNCONFINED_PUSH_FORCES / sizeof *HOST_UNCONFINED_PUSH_FORCES};
+    size_t n = a->filled.len;
+    size_t i = 1;
+    *dir = S("");
+    while (i < n && !str_eq(host_unconfined_word(a, i), S("push"))) {
+        Str w = host_unconfined_word(a, i);
+        if (str_eq(w, S("-C")) && i + 1 < n) {
+            TRY(host_unconfined_local(h, r, pos, S("git"), cwd, host_unconfined_word(a, i + 1), host_unconfined_shown(a, i + 1), true));
+            *dir = host_unconfined_word(a, i + 1);
+            i += 2;
+        } else if (str_eq(w, S("-c")) && i + 1 < n && str_eq(host_unconfined_word(a, i + 1), S("color.ui=never"))) {
+            i += 2;
+        } else if (str_starts_with(w, S("-c"))) {
+            return host_fail_plain(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` push takes no `-c` but `color.ui=never`: a setting could name a program git starts outside the confinement"));
+        } else {
+            return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` ({s}) is for a `git push`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(why)));
+        }
+    }
+    if (i >= n) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` ({s}) is for a `git push`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(why)));
+    bool deleting = false;
+    bool lease = false;
+    size_t first = 0;
+    size_t positional = 0;
+    for (size_t k = i + 1; k < n; k++) {
+        Str w = host_unconfined_word(a, k);
+        Str shown = host_unconfined_shown(a, k);
+        if (!str_starts_with(w, S("-"))) {
+            if (positional == 0) first = k;
+            positional++;
+            continue;
+        }
+        if (str_starts_with(w, S("--receive-pack")) || str_starts_with(w, S("--exec"))) return host_fail_plain(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` push takes no `--receive-pack` or `--exec`: each names a program it would start outside the confinement"));
+        bool bundle_forces = !str_starts_with(w, S("--")) && str_find_byte(w, 'f') != NULL;
+        if (host_unconfined_named(forces, w) || bundle_forces) return host_unconfined_forced(r, pos, shown);
+        if (!host_unconfined_named(flags, w)) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` push does not take {s}: its options are HOST_UNCONFINED_PUSH_FLAGS' (c/host/host_unconfined.c)"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(shown)));
+        deleting = deleting || str_eq(w, S("-d")) || str_eq(w, S("--delete"));
+        lease = lease || str_starts_with(w, S("--force-with-lease"));
+    }
+    if (positional < 2) return host_fail_plain(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` push names its remote and what it pushes (`git push origin HEAD:main`): a push by the remote's own settings could force, or go to another branch"));
+    *remote = host_unconfined_word(a, first);
+    if (str_find_byte(*remote, ':') != NULL || str_find_byte(*remote, '/') != NULL) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` push names a remote, not {s}: its push URL is held to the remotes file"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(host_unconfined_shown(a, first))));
+    for (size_t k = first + 1; k < n; k++) {
+        if (str_starts_with(host_unconfined_word(a, k), S("-"))) continue; // skip: an option, held above
+        TRY(host_unconfined_push_refspec(r, pos, a, k, deleting, lease));
+    }
+    return OK;
+}
+
+// git's environment for an unconfined push into `*env`: the program's
+// `*env` less HOST_UNCONFINED_GIT_ENV_DROPPED, with GIT_ALLOW_PROTOCOL=ssh.
+static STATUS_MUST_USE Status host_unconfined_git_env(Run *r, Pos pos, SpawnStrs *env) {
+    HostConfineArgs dropped = {HOST_UNCONFINED_GIT_ENV_DROPPED, sizeof HOST_UNCONFINED_GIT_ENV_DROPPED / sizeof *HOST_UNCONFINED_GIT_ENV_DROPPED};
+    OsStr *all = ARENA_ARRAY(r->ctx.values, OsStr, env->len + 1);
+    if (all == NULL) return run_values_oom(r, pos);
+    SLICE_TYPE(EnvRoom, OsStr);
+    EnvRoom room = {all, env->len + 1};
+    size_t n = 0;
+    for (size_t i = 0; i < env->len; i++) {
+        Str e = at(*env, i).s;
+        bool drop = false;
+        for (size_t k = 0; k < dropped.len; k++) {
+            Str name = {at(dropped, k), strlen(at(dropped, k))};
+            drop = drop || (e.len > name.len && str_starts_with(e, name) && str_byte(e, name.len) == '=');
+        }
+        if (!drop) at(room, n++) = at(*env, i);
+    }
+    at(room, n++) = os_str_own(S("GIT_ALLOW_PROTOCOL=ssh"));
+    env->ptr = all;
+    env->len = n;
     return OK;
 }
 
 // `unconfined = "tag: why"`, held to its shapes, into `*out`: the argv to
 // run, `filled` (the program's, `secret_args`' values in place; `argv` when
-// there are none), git's with HOST_UNCONFINED_GIT after `git`. The shapes
-// are checked on `filled`, and a refusal names `argv`'s word
-// (HostUnconfinedArgv).
+// there are none), git's with HOST_UNCONFINED_GIT and its ssh after `git`,
+// and git's `*env` (host_unconfined_git_env). The shapes are checked on
+// `filled`, and a refusal names `argv`'s word (HostUnconfinedArgv).
 // DRAGON: the file system's boundaries. An unconfined program runs every
 // program its settings name with all the user's file powers: a git hook,
 // an ssh ProxyCommand, an rsync remote shell, a credential helper; and its
-// environment could name one too.
+// environment could name one too. And a push with the user's ssh keys is
+// the user's: a forced one rewrites a branch, and one to another remote
+// sends the code and the key's use elsewhere.
 // REMEDY: the program is `git`, `ssh`, `scp` or `rsync` by its name and the
 // file it reaches; each is held to its shape above; no `env` but git's
-// GIT_TERMINAL_PROMPT; no secrets folder inside the root or a mount. What
-// is left: a git repository's `url.*.insteadOf` and a remote's
-// `receivepack`, read from its config, and the user's own ~/.ssh/config,
-// which no mount should make writable. test_run_guards'
-// an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone plants
-// each refusal.
-static STATUS_MUST_USE Status host_run_unconfined(Host *h, Run *r, Pos pos, SpawnStrs argv, SpawnStrs filled, const HostEnvOpt *env, Str why, Str cwd, SpawnStrs *out) {
+// GIT_TERMINAL_PROMPT; no secrets folder inside the root or a mount. A push
+// forces only by `--force-with-lease`, and never main or master, and
+// deletes neither; every push URL of its remote, as git reads them (a
+// confined `git remote get-url --push --all`), is one of the remotes file's;
+// it runs over ssh alone (GIT_ALLOW_PROTOCOL), and ssh connects to that
+// file's host whatever the URL says then (`-o HostName`). What is left: a
+// repository's config changed between that check and the push could send
+// it to another repository on that host, one the key may write; a remote's
+// `receivepack`, which names the command run on that host; and the user's
+// own ~/.ssh/config, which no mount should make writable. test_run_guards'
+// an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone and
+// an_unconfined_push_reaches_the_remotes_file_s_remotes_alone plant each
+// refusal.
+static STATUS_MUST_USE Status host_run_unconfined(Host *h, Run *r, Pos pos, SpawnStrs argv, SpawnStrs filled, const HostEnvOpt *env, Str why, Str cwd, SpawnStrs *out, SpawnStrs *spawn_env) {
     Str reached = S("");
     bool found = host_resolved_name(h, r->ctx.values, at(argv, 0), cwd, &reached);
     Str base = host_base_name(at(argv, 0).s);
@@ -420,17 +683,25 @@ static STATUS_MUST_USE Status host_run_unconfined(Host *h, Run *r, Pos pos, Spaw
     if (str_eq(base, S("ssh"))) return host_unconfined_ssh(r, pos, &a, hosts);
     if (str_eq(base, S("scp"))) return host_unconfined_scp(h, r, pos, cwd, &a, hosts);
     if (str_eq(base, S("rsync"))) return host_unconfined_rsync(h, r, pos, cwd, &a, hosts);
-    TRY(host_unconfined_git(r, pos, &a, why));
+    Str dir = S("");
+    Str remote = S("");
+    TRY(host_unconfined_git(h, r, pos, cwd, &a, why, &dir, &remote));
+    Str host = S("");
+    TRY(host_unconfined_push_host(h, r, pos, cwd, dir, remote, &host));
+    Str ssh = S("");
+    TRY(paths_cat(&builtin_files_of(r)->path, pos, S("core.sshCommand=ssh -o HostName="), host, S(""), &ssh));
     HostConfineArgs fixed = {HOST_UNCONFINED_GIT, sizeof HOST_UNCONFINED_GIT / sizeof *HOST_UNCONFINED_GIT};
-    size_t n = filled.len + fixed.len;
+    size_t n = filled.len + fixed.len + 2;
     OsStr *all = ARENA_ARRAY(r->ctx.values, OsStr, n);
     if (all == NULL) return run_values_oom(r, pos);
     SLICE_TYPE(ArgvRoom, OsStr);
     ArgvRoom room = {all, n};
     at(room, 0) = at(filled, 0);
     for (size_t i = 0; i < fixed.len; i++) at(room, 1 + i) = os_str_own((Str){at(fixed, i), strlen(at(fixed, i))});
-    for (size_t i = 1; i < filled.len; i++) at(room, fixed.len + i) = at(filled, i);
+    at(room, 1 + fixed.len) = os_str_own(S("-c"));
+    at(room, 2 + fixed.len) = os_str_own(ssh);
+    for (size_t i = 1; i < filled.len; i++) at(room, fixed.len + 2 + i) = at(filled, i);
     out->ptr = all;
     out->len = n;
-    return OK;
+    return host_unconfined_git_env(r, pos, spawn_env);
 }

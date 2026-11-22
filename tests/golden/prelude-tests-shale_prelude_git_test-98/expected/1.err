@@ -1,6 +1,6 @@
-── stopped at the git prelude:45:42 (in `the git prelude's git_real`): fail: `git status --porcelain=v1 -z`: its repo is a path (a string), such as "" or "repos:roc-chat" (287 steps)
-   called from the git prelude:56:30 (in `the git prelude's git_call`)
-   called from the git prelude:82:23 (in `the git prelude's git_status`)
+── stopped at the git prelude:45:42 (in `the git prelude's git_real`): fail: `git status --porcelain=v1 -z`: its repo is a path (a string), such as "" or "repos:roc-chat" (288 steps)
+   called from the git prelude:57:30 (in `the git prelude's git_call`)
+   called from the git prelude:84:23 (in `the git prelude's git_status`)
    called from {base}/case/script.shale:1:1
-── used: 287 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
-── steps: 287 in all; the most 283 (98%): git_status, 1 call; 4 (1%): script
+── used: 288 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 288 in all; the most 284 (98%): git_status, 1 call; 4 (1%): script

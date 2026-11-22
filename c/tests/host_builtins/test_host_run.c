@@ -122,7 +122,7 @@ TEST(the_scrubber_holds_back_a_secret_split_across_reads_and_widens_an_overlap) 
     out.log_fd = -1;
     out.whole = &whole;
     out.whole_max = 1000;
-    HostScrub s = {secrets, buf_make(&a), buf_make(&a), &out};
+    HostScrub s = {secrets, buf_make(&a), buf_make(&a), &out, buf_make(&a), {NULL, 0}, false};
     EXPECT_EQ(host_scrub_write(&s, S("xa")), OK);
     // `a` may begin `abc`: held back.
     EXPECT_STR(buf_view(&whole), S("x"));
@@ -132,6 +132,34 @@ TEST(the_scrubber_holds_back_a_secret_split_across_reads_and_widens_an_overlap) 
     EXPECT_EQ(host_scrub_finish(&s), OK);
     EXPECT_STR(buf_view(&whole), S("x<secret K>y ab"));
     EXPECT_EQ(out.bytes, 15);
+    arena_deinit(&a);
+}
+
+// A part of a secret, any 12 bytes of it or more, is taken out as the whole
+// is: a token's first 33 characters (what `gh auth status` prints), and a
+// part split across reads, held back until it is decided. 11 bytes of it
+// pass, and so does a rest that is still held at the last read.
+TEST(the_scrubber_takes_out_a_part_of_a_secret_twelve_bytes_or_more) {
+    bool refused = false;
+    Arena a;
+    arena_init(&a, (size_t)1 << 20, &refused);
+    HostSecret all[1] = {{S("T"), S("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ab")}};
+    HostSecrets secrets = {all, 1};
+    Buf whole = buf_make(&a);
+    HostOut out;
+    memset(&out, 0, sizeof out);
+    out.log_fd = -1;
+    out.whole = &whole;
+    out.whole_max = 1000;
+    HostScrub s = {secrets, buf_make(&a), buf_make(&a), &out, buf_make(&a), {NULL, 0}, false};
+    EXPECT_EQ(host_scrub_write(&s, S("Token: ghp_ABCDEFGHIJKLMNOPQRS")), OK);
+    EXPECT_STR(buf_view(&whole), S("Token: "));
+    EXPECT_EQ(host_scrub_write(&s, S("TUVWXYZ012 then IJKLMNOPQRS raw, MNOPQR")), OK);
+    EXPECT_STR(buf_view(&whole), S("Token: <secret T> then IJKLMNOPQRS raw, "));
+    EXPECT_EQ(host_scrub_write(&s, S("STUVWX caught\nab")), OK);
+    EXPECT_STR(buf_view(&whole), S("Token: <secret T> then IJKLMNOPQRS raw, <secret T> caught\n"));
+    EXPECT_EQ(host_scrub_finish(&s), OK);
+    EXPECT_STR(buf_view(&whole), S("Token: <secret T> then IJKLMNOPQRS raw, <secret T> caught\nab"));
     arena_deinit(&a);
 }
 
@@ -314,6 +342,7 @@ TEST_PART(host_run, TEST_CASE(run_s_nice_sets_the_programs_niceness_and_refuses_
           TEST_CASE(a_stream_past_the_arena_budget_stops_on_it_and_the_program_is_ended),
           TEST_CASE(a_cpu_budget_stops_naming_the_stage_and_how_the_program_ended),
           TEST_CASE(the_scrubber_holds_back_a_secret_split_across_reads_and_widens_an_overlap),
+          TEST_CASE(the_scrubber_takes_out_a_part_of_a_secret_twelve_bytes_or_more),
           TEST_CASE(the_time_line_keeps_the_slowest_three_and_both_ends_of_a_long_argv), TEST_CASE(sleep_takes_0_to_600000_ms_and_counts_its_time),
           TEST_CASE(a_job_runs_past_its_start_is_waited_for_and_a_stopped_run_ends_the_rest), TEST_CASE(a_poll_of_job_alive_holds_the_arena_flat),
           TEST_CASE(job_calls_refuse_each_bad_call_with_its_message));

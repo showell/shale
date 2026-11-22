@@ -1,5 +1,5 @@
-── stopped at the git prelude:72:29 (in `the git prelude's git_call`): fail: `git mv -- Word.roc word.roc` exited 128: fatal: not a git repository (or any of the parent directories): .git (839 steps)
-   called from the git prelude:322:3 (in `the git prelude's git_mv`)
+── stopped at the git prelude:74:29 (in `the git prelude's git_call`): fail: `git mv -- Word.roc word.roc` exited 128: fatal: not a git repository (or any of the parent directories): .git (844 steps)
+   called from the git prelude:361:3 (in `the git prelude's git_mv`)
    called from {base}/case/script.shale:1:1
-── used: 839 of 5000000 steps, 0 of 10000 reads, 69 of 67108864 read bytes, 69 of 65536 output bytes
-── steps: 839 in all; the most 833 (99%): git_mv, 1 call; 6 (0%): script
+── used: 844 of 5000000 steps, 0 of 10000 reads, 69 of 67108864 read bytes, 69 of 65536 output bytes
+── steps: 844 in all; the most 838 (99%): git_mv, 1 call; 6 (0%): script

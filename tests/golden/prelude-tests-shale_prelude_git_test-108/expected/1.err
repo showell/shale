@@ -1,5 +1,5 @@
-── stopped at the git prelude:72:29 (in `the git prelude's git_call`): fail: `git add -A` exited 128: fatal: not a git repository (or any of the parent directories): .git (912 steps)
-   called from the git prelude:229:7 (in `the git prelude's git_commit`)
+── stopped at the git prelude:74:29 (in `the git prelude's git_call`): fail: `git add -A` exited 128: fatal: not a git repository (or any of the parent directories): .git (917 steps)
+   called from the git prelude:231:7 (in `the git prelude's git_commit`)
    called from {base}/case/script.shale:1:1
-── used: 912 of 5000000 steps, 0 of 10000 reads, 69 of 67108864 read bytes, 69 of 65536 output bytes
-── steps: 912 in all; the most 903 (99%): git_commit, 1 call; 9 (0%): script
+── used: 917 of 5000000 steps, 0 of 10000 reads, 69 of 67108864 read bytes, 69 of 65536 output bytes
+── steps: 917 in all; the most 908 (99%): git_commit, 1 call; 9 (0%): script

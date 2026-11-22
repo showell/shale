@@ -1,5 +1,5 @@
-── stopped at the git prelude:72:29 (in `the git prelude's git_call`): fail: `git status --porcelain=v2 --branch --untracked-files=no` exited 128: fatal: not a git repository (or any of the parent directories): .git (785 steps)
-   called from the git prelude:184:18 (in `the git prelude's git_upstream`)
+── stopped at the git prelude:74:29 (in `the git prelude's git_call`): fail: `git status --porcelain=v2 --branch --untracked-files=no` exited 128: fatal: not a git repository (or any of the parent directories): .git (790 steps)
+   called from the git prelude:186:18 (in `the git prelude's git_upstream`)
    called from {base}/case/script.shale:1:7
-── used: 785 of 5000000 steps, 0 of 10000 reads, 69 of 67108864 read bytes, 0 of 65536 output bytes
-── steps: 785 in all; the most 780 (99%): git_upstream, 1 call; 5 (0%): script
+── used: 790 of 5000000 steps, 0 of 10000 reads, 69 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 790 in all; the most 785 (99%): git_upstream, 1 call; 5 (0%): script

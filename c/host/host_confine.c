@@ -228,15 +228,30 @@ static void host_confine_tmp_remove(Host *h, Arena *a) {
 // toolchain would put below the home, which no rule allows: XDG_CACHE_HOME
 // (roc's, Go's, any XDG program's) and ZIG_GLOBAL_CACHE_DIR (Zig's), both
 // `<the build mount>/cache`, or `<the run's temporary folder>/cache` when no
-// writable mount is named `build`, a cache that goes with the run.
+// writable mount is named `build`, a cache that goes with the run; and
+// PLAYWRIGHT_BROWSERS_PATH, `<that cache>/ms-playwright`, where Playwright's
+// browsers are installed once (`npx playwright install chromium` with it
+// set) and the box's screenshot tools look. And GH_CONFIG_DIR, which no
+// script's `env` sets (host_refuse_gh_env): an empty folder of the run's
+// own, `<the run's temporary folder>/gh-config`, so gh reads no
+// configuration and its token comes from `secrets` alone.
 typedef struct {
     Str name;
     Str value;
 } HostConfineSet;
 
-enum { HOST_CONFINE_SETS = 3 };
+enum { HOST_CONFINE_SETS = 5 };
 
 SLICE_TYPE(HostConfineSets, HostConfineSet);
+
+// The folder at the OS path `path` made if it is not there; `what` names it
+// in the stop when it cannot be.
+static STATUS_MUST_USE Status host_confine_mkdir(Run *r, Pos pos, Str who, Str path, Str what) {
+    char *c = arena_cstr(r->ctx.values, os_str_own(path));
+    if (c == NULL) return run_values_oom(r, pos);
+    if (mkdir(c, 0777) != 0 && errno != EEXIST) return host_fail(r, pos, CLASS_HOST, S("`{s}`: {s} could not be made: {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_HOST(what), MESSAGE_FROM_HOST(file_system_err_name(file_system_err_of(errno)))));
+    return OK;
+}
 
 // The cache folder, made if it is not there, into `*out`.
 static STATUS_MUST_USE Status host_confine_cache(Host *h, Run *r, Pos pos, Str who, Str *out) {
@@ -247,21 +262,26 @@ static STATUS_MUST_USE Status host_confine_cache(Host *h, Run *r, Pos pos, Str w
         if (str_eq(m->name, S("build")) && m->access == MOUNT_READ_WRITE) base = paths_run_dir_of(&h->paths, pr, m);
     }
     TRY(paths_cat(pr, pos, base, S("/cache"), S(""), out));
-    char *c = arena_cstr(r->ctx.values, os_str_own(*out));
-    if (c == NULL) return run_values_oom(r, pos);
-    if (mkdir(c, 0777) != 0 && errno != EEXIST) return host_fail(r, pos, CLASS_HOST, S("`{s}`: the programs' cache folder (the `build` mount's cache, or the run's temporary folder's) could not be made: {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_HOST(file_system_err_name(file_system_err_of(errno)))));
-    return OK;
+    return host_confine_mkdir(r, pos, who, *out, S("the programs' cache folder (the `build` mount's cache, or the run's temporary folder's)"));
 }
 
 // The names and values the host sets, into `sets` (HOST_CONFINE_SETS of
-// them), the run's temporary folder made first.
+// them), the run's temporary folder made first, and gh's folder in it.
 static STATUS_MUST_USE Status host_confine_sets(Host *h, Run *r, Pos pos, Str who, HostConfineSets sets) {
     TRY(host_confine_tmp(h, r, pos, who));
+    PathRun *pr = &builtin_files_of(r)->path;
     Str cache = S("");
     TRY(host_confine_cache(h, r, pos, who, &cache));
+    Str browsers = S("");
+    TRY(paths_cat(pr, pos, cache, S("/ms-playwright"), S(""), &browsers));
+    Str gh = S("");
+    TRY(paths_cat(pr, pos, h->tmp, S("/gh-config"), S(""), &gh));
+    TRY(host_confine_mkdir(r, pos, who, gh, S("gh's configuration folder (the run's temporary folder's)")));
     at(sets, 0) = (HostConfineSet){S("TMPDIR"), h->tmp};
     at(sets, 1) = (HostConfineSet){S("XDG_CACHE_HOME"), cache};
     at(sets, 2) = (HostConfineSet){S("ZIG_GLOBAL_CACHE_DIR"), cache};
+    at(sets, 3) = (HostConfineSet){S("PLAYWRIGHT_BROWSERS_PATH"), browsers};
+    at(sets, 4) = (HostConfineSet){S("GH_CONFIG_DIR"), gh};
     return OK;
 }
 

@@ -1,5 +1,5 @@
-── stopped at the git prelude:72:29 (in `the git prelude's git_call`): fail: `git add -- e.txt` exited 128: fatal: not a git repository (or any of the parent directories): .git (928 steps)
-   called from the git prelude:225:7 (in `the git prelude's git_commit`)
+── stopped at the git prelude:74:29 (in `the git prelude's git_call`): fail: `git add -- e.txt` exited 128: fatal: not a git repository (or any of the parent directories): .git (933 steps)
+   called from the git prelude:227:7 (in `the git prelude's git_commit`)
    called from {base}/case/script.shale:1:1
-── used: 928 of 5000000 steps, 0 of 10000 reads, 69 of 67108864 read bytes, 69 of 65536 output bytes
-── steps: 928 in all; the most 918 (98%): git_commit, 1 call; 10 (1%): script
+── used: 933 of 5000000 steps, 0 of 10000 reads, 69 of 67108864 read bytes, 69 of 65536 output bytes
+── steps: 933 in all; the most 923 (98%): git_commit, 1 call; 10 (1%): script

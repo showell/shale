@@ -1,5 +1,5 @@
-── stopped at the git prelude:72:29 (in `the git prelude's git_call`): fail: `git worktree remove --force {base}/work/root/wt` exited 128: fatal: not a git repository (or any of the parent directories): .git (1625 steps)
-   called from the git prelude:403:3 (in `the git prelude's git_worktree_remove`)
+── stopped at the git prelude:74:29 (in `the git prelude's git_call`): fail: `git worktree remove --force {base}/work/root/wt` exited 128: fatal: not a git repository (or any of the parent directories): .git (1630 steps)
+   called from the git prelude:442:3 (in `the git prelude's git_worktree_remove`)
    called from {base}/case/script.shale:1:1
-── used: 1625 of 5000000 steps, 0 of 10000 reads, 69 of 67108864 read bytes, 69 of 65536 output bytes
+── used: 1630 of 5000000 steps, 0 of 10000 reads, 69 of 67108864 read bytes, 69 of 65536 output bytes
 ── steps: 1.6K in all; the most 1.6K (99%): git_worktree_remove, 1 call; 11 (0%): script

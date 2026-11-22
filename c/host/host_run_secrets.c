@@ -52,7 +52,9 @@ static STATUS_MUST_USE Status host_guard_program(Host *h, Run *r, Pos pos, const
     PathsStrs argv = {words.ptr, words.len};
     TRY(paths_refuse_secret_args(&h->paths, &rs->path, pos, p->who, argv, *cwd, p->env->names, p->env->values));
     if (!p->has_want) TRY(host_refuse_env(r, pos, p->who, p->env->names));
-    return host_refuse(h, r, pos, p->who, at(p->argv, 0), *cwd, p->has_want);
+    TRY(host_refuse_gh_env(r, pos, p->who, p->env->names));
+    TRY(host_refuse(h, r, pos, p->who, at(p->argv, 0), *cwd, p->has_want));
+    return host_refuse_gh(h, r, pos, p->argv, *cwd);
 }
 
 // ── a secret's bytes, and the scrubber ──
@@ -63,10 +65,13 @@ static STATUS_MUST_USE Status host_guard_program(Host *h, Run *r, Pos pos, const
 // report.
 // REMEDY: host_secret_read's stops name the script's path, never the bytes,
 // which go to the environment and the scrubber alone (host_run_env records
-// `<secret PATH>`). The scrubber (HostScrub) holds back a rest that could
-// still begin a secret until the next read; the longest whole match wins,
-// and a secret starting inside it widens it, so no part of one is passed
-// raw; the last read scans all that is held.
+// `<secret PATH>`). The scrubber (HostScrub) takes out each secret whole,
+// and each run of HOST_SCRUB_PART bytes or more of one, so a program that
+// prints a token's first characters or a fragment of it shows none of them;
+// it holds back a rest that could still grow into a match until the next
+// read, and matches that overlap are one run, so no part of one is passed
+// raw; the last read scans all that is held. test_host_run's
+// the_scrubber_takes_out_a_part_of_a_secret_twelve_bytes_or_more plants it.
 typedef struct {
     Str name;
     Str value;
@@ -74,14 +79,40 @@ typedef struct {
 
 SLICE_TYPE(HostSecrets, const HostSecret);
 
-// Replaces each secret's bytes with `<secret K>` before the log, the keep
-// and `whole`. A possible secret split across reads is held back in `carry`
-// until it can be decided: the DRAGON at HostSecret.
+// The fewest bytes of a secret the scrubber takes out as a part of it: any
+// run of this many, anywhere in a secret's value, is that secret's, so a
+// prefix (`gh auth status`'s first characters of a token) or a fragment is
+// caught as the whole is. A secret shorter than a part is caught whole.
+enum { HOST_SCRUB_PART = 12 };
+
+// A part of a secret in the parts' table (`HostScrub.parts`): its bytes'
+// hash, the secret's index and where in its value the part starts.
+typedef struct {
+    uint64_t hash;
+    size_t secret;
+    size_t from;
+    bool used;
+} HostScrubPart;
+
+SLICE_TYPE(HostScrubParts, HostScrubPart);
+
+// Replaces each secret's bytes, and each part of a secret
+// (HOST_SCRUB_PART bytes or more of it), with `<secret K>` before the log,
+// the keep and `whole`. What could still begin one across reads is held
+// back in `carry` until it can be decided: the DRAGON at HostSecret.
 typedef struct {
     HostSecrets secrets;
     Buf carry;
     Buf scanned;
     HostOut *next;
+    // A scan's mark of each byte of `carry`: 1 where a match covers it.
+    Buf marks;
+    // Every part of every secret of HOST_SCRUB_PART bytes or more, by its
+    // hash, open addressed (a power of two of slots, at most half full):
+    // made at the first scan (`parts_made`), empty when no secret is that
+    // long.
+    HostScrubParts parts;
+    bool parts_made;
 } HostScrub;
 
 static bool host_starts_with(Str s, Str prefix) {
@@ -94,66 +125,150 @@ static bool host_is_proper_prefix(Str part, Str whole) {
     return part.len < whole.len && host_starts_with(whole, part);
 }
 
-// Whether `rest`, all that is held from here on, could still become a
-// secret.
-static bool host_scrub_may_begin(const HostScrub *s, Str rest) {
+// FNV-1a of the HOST_SCRUB_PART bytes of `s` from `from`.
+static uint64_t host_scrub_hash(Str s, size_t from) {
+    uint64_t h = 14695981039346656037u;
+    for (size_t i = 0; i < HOST_SCRUB_PART; i++) h = (h ^ str_byte(s, from + i)) * 1099511628211u;
+    return h;
+}
+
+// Makes the parts' table once, in `carry`'s arena: STOP when the arena
+// refuses it.
+static STATUS_MUST_USE Status host_scrub_parts(HostScrub *s) {
+    if (s->parts_made) return OK;
+    s->parts_made = true;
+    size_t n = 0;
     for (size_t k = 0; k < s->secrets.len; k++) {
-        if (host_is_proper_prefix(rest, at(s->secrets, k).value)) return true;
+        Str v = at(s->secrets, k).value;
+        if (v.len >= HOST_SCRUB_PART) n += v.len - HOST_SCRUB_PART + 1;
+    }
+    if (n == 0) return OK;
+    size_t slots = 16;
+    while (slots < 2 * n) slots *= 2;
+    HostScrubPart *room = ARENA_ARRAY(s->carry.arena, HostScrubPart, slots);
+    if (room == NULL) return STOP;
+    memset(room, 0, slots * sizeof *room);
+    s->parts = (HostScrubParts){room, slots};
+    for (size_t k = 0; k < s->secrets.len; k++) {
+        Str v = at(s->secrets, k).value;
+        for (size_t from = 0; from + HOST_SCRUB_PART <= v.len; from++) {
+            uint64_t h = host_scrub_hash(v, from);
+            size_t i = (size_t)h & (slots - 1);
+            while (at(s->parts, i).used) i = (i + 1) & (slots - 1);
+            at(s->parts, i) = (HostScrubPart){h, k, from, true};
+        }
+    }
+    return OK;
+}
+
+// Whether the HOST_SCRUB_PART bytes of `buf` from `j` are a part of a
+// secret, that secret's index into `*k`.
+static bool host_scrub_part_at(const HostScrub *s, Str buf, size_t j, size_t *k) {
+    if (s->parts.len == 0) return false;
+    uint64_t h = host_scrub_hash(buf, j);
+    size_t mask = s->parts.len - 1;
+    Str here = str_sub(buf, j, j + HOST_SCRUB_PART);
+    for (size_t i = (size_t)h & mask; at(s->parts, i).used; i = (i + 1) & mask) {
+        const HostScrubPart *p = &at(s->parts, i);
+        if (p->hash != h) continue; // skip: another part's slot
+        Str v = at(s->secrets, p->secret).value;
+        if (str_eq(str_sub(v, p->from, p->from + HOST_SCRUB_PART), here)) {
+            *k = p->secret;
+            return true;
+        }
     }
     return false;
 }
 
-// The longest secret `rest` begins with, or NULL for none.
-static const HostSecret *host_scrub_longest(const HostScrub *s, Str rest) {
-    const HostSecret *best = NULL;
+// Whether `rest`, all that is held from some place on, could still grow into
+// a match: a proper prefix of a secret shorter than a part, or, shorter than
+// a part itself, inside a longer secret.
+static bool host_scrub_may_begin(const HostScrub *s, Str rest) {
     for (size_t k = 0; k < s->secrets.len; k++) {
-        const HostSecret *kv = &at(s->secrets, k);
-        if (host_starts_with(rest, kv->value) && (best == NULL || kv->value.len > best->value.len)) best = kv;
-    }
-    return best;
-}
-
-// Widens a match in `buf`, from `from` to `*end`, over each secret that
-// starts inside it and runs past its end, until none does. False, unless
-// this is the `last` read, when a secret could start inside it and run past
-// what is held: the next read decides where the match ends.
-static bool host_scrub_widen(const HostScrub *s, Str buf, size_t from, bool last, size_t *end) {
-    for (size_t j = from + 1; j < *end; j++) {
-        Str there = str_sub(buf, j, buf.len);
-        for (size_t k = 0; k < s->secrets.len; k++) {
-            Str o = at(s->secrets, k).value;
-            if (host_starts_with(there, o)) {
-                if (j + o.len > *end) *end = j + o.len;
-            } else if (!last && host_is_proper_prefix(there, o)) {
-                return false;
-            }
+        Str v = at(s->secrets, k).value;
+        if (v.len < HOST_SCRUB_PART) {
+            if (host_is_proper_prefix(rest, v)) return true;
+        } else if (rest.len < HOST_SCRUB_PART && mem_find(v.ptr, v.len, rest.ptr, rest.len) != SIZE_MAX) {
+            return true;
         }
     }
-    return true;
+    return false;
 }
 
-// Scrubs what `carry` holds from its start: where a secret starts, its
-// match (the longest, widened) goes on as `<secret K>`, and any other byte
-// goes on as it is. It stops where what is held could still begin a secret
-// or a match's end is not known yet, keeping the rest in `carry` for the
-// next read; the `last` read decides all that is held.
+// The end of the longest whole secret shorter than a part that `buf` holds
+// from `j`, else `j`; its index into `*k` when there is one.
+static size_t host_scrub_short_at(const HostScrub *s, Str buf, size_t j, size_t *k) {
+    size_t end = j;
+    Str rest = str_sub(buf, j, buf.len);
+    for (size_t q = 0; q < s->secrets.len; q++) {
+        Str v = at(s->secrets, q).value;
+        if (v.len < HOST_SCRUB_PART && host_starts_with(rest, v) && j + v.len > end) {
+            end = j + v.len;
+            *k = q;
+        }
+    }
+    return end;
+}
+
+// Marks each byte of `buf` that a match covers, in `marks`: a whole secret
+// shorter than a part, or a part of a longer one. Matches that overlap or
+// touch make one run of marks.
+static STATUS_MUST_USE Status host_scrub_mark(HostScrub *s, Str buf) {
+    buf_clear(&s->marks);
+    TRY(buf_reserve(&s->marks, buf.len));
+    for (size_t i = 0; i < buf.len; i++) TRY(buf_byte(&s->marks, 0));
+    Bytes m = {s->marks.ptr, s->marks.len};
+    size_t upto = 0;
+    for (size_t j = 0; j < buf.len; j++) {
+        size_t k = 0;
+        size_t end = host_scrub_short_at(s, buf, j, &k);
+        if (j + HOST_SCRUB_PART <= buf.len && host_scrub_part_at(s, buf, j, &k) && j + HOST_SCRUB_PART > end) end = j + HOST_SCRUB_PART;
+        if (end <= upto) continue; // skip: no match here past what is marked
+        for (size_t i = j > upto ? j : upto; i < end; i++) at(m, i) = 1;
+        upto = end;
+    }
+    return OK;
+}
+
+// The secret whose match starts at `j`, where a run of marks starts: the
+// longest whole one, else the one a part is of.
+static const HostSecret *host_scrub_name_at(const HostScrub *s, Str buf, size_t j) {
+    size_t k = 0;
+    if (host_scrub_short_at(s, buf, j, &k) > j) return &at(s->secrets, k);
+    if (j + HOST_SCRUB_PART <= buf.len && host_scrub_part_at(s, buf, j, &k)) return &at(s->secrets, k);
+    return &at(s->secrets, 0);
+}
+
+// Scrubs what `carry` holds from its start: each run of marked bytes goes on
+// as `<secret K>`, and any other byte as it is. Unless this is the `last`
+// read, it stops where what is held could still grow into a match (`held`),
+// or where a run reaches that place, since the next read may lengthen it,
+// keeping the rest in `carry`.
 static STATUS_MUST_USE Status host_scrub_scan(HostScrub *s, bool last) {
+    TRY(host_scrub_parts(s));
     Str buf = buf_view(&s->carry);
+    size_t held = buf.len;
+    if (!last) {
+        size_t from = buf.len >= HOST_SCRUB_PART ? buf.len - HOST_SCRUB_PART + 1 : 0;
+        for (size_t j = from; j < buf.len && held == buf.len; j++) {
+            if (host_scrub_may_begin(s, str_sub(buf, j, buf.len))) held = j;
+        }
+    }
+    TRY(host_scrub_mark(s, buf));
+    Str marks = buf_view(&s->marks);
     buf_clear(&s->scanned);
     size_t i = 0;
-    while (i < buf.len) {
-        Str rest = str_sub(buf, i, buf.len);
-        if (!last && host_scrub_may_begin(s, rest)) break;
-        const HostSecret *best = host_scrub_longest(s, rest);
-        if (best == NULL) {
+    while (i < held) {
+        if (str_byte(marks, i) == 0) {
             TRY(buf_byte(&s->scanned, (char)str_byte(buf, i)));
             i++;
             continue;
         }
-        size_t end = i + best->value.len;
-        if (!host_scrub_widen(s, buf, i, last, &end)) break;
+        size_t end = i;
+        while (end < buf.len && str_byte(marks, end) != 0) end++;
+        if (!last && end >= held) break;
         TRY(buf_lit(&s->scanned, "<secret "));
-        TRY(buf_str(&s->scanned, best->name));
+        TRY(buf_str(&s->scanned, host_scrub_name_at(s, buf, i)->name));
         TRY(buf_byte(&s->scanned, '>'));
         i = end;
     }

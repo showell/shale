@@ -129,6 +129,60 @@ static STATUS_MUST_USE Status host_refuse_env(Run *r, Pos pos, Str who, PathsStr
     return OK;
 }
 
+// The `env` names gh reads a token or its configuration from, which a
+// script's `env` never sets, want or not: GH_CONFIG_DIR is the host's (an
+// empty folder of the run's own, host_confine_sets), and a token goes in by
+// `secrets` alone.
+static const char *const HOST_GH_ENV[] = {"GH_CONFIG_DIR", "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"};
+
+// Refuses an `env` that sets one of HOST_GH_ENV.
+// DRAGON: the secrets rule. A token in `env` is the script's own string,
+// printed and logged as any other (the record shows `env`), and a
+// GH_CONFIG_DIR of the script's could point gh at a copy of the home's
+// configuration, token and all, inside a mount.
+// REMEDY: those names are refused whatever the want; gh's token comes from
+// `secrets = {GH_TOKEN = "keys:github-token"}`, scrubbed, and its
+// configuration folder is the host's. test_run_guards'
+// gh_reads_no_configuration_and_never_says_its_token plants it.
+static STATUS_MUST_USE Status host_refuse_gh_env(Run *r, Pos pos, Str who, PathsStrs names) {
+    HostConfineNames gh = {HOST_GH_ENV, sizeof HOST_GH_ENV / sizeof *HOST_GH_ENV};
+    for (size_t i = 0; i < names.len; i++) {
+        Str k = at(names, i);
+        for (size_t j = 0; j < gh.len; j++) {
+            if (!str_eq(k, (Str){at(gh, j), strlen(at(gh, j))})) continue; // skip: another name
+            if (j == 0) return host_fail(r, pos, CLASS_REFUSED, S("`{s}`'s `env` GH_CONFIG_DIR is the host's, even with a want: gh reads its configuration from an empty folder of the run's own, and its token from `secrets = {{GH_TOKEN = \"keys:github-token\"}}`"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who)));
+            return host_fail(r, pos, CLASS_REFUSED, S("`{s}`'s `env` {s} would put a token in the script's hands, even with a want: `secrets = {{{s} = \"keys:github-token\"}}` hands it to gh, scrubbed"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(k), MESSAGE_FROM_SCRIPT(k)));
+        }
+    }
+    return OK;
+}
+
+// Refuses `gh auth ...` (gh's first word that is no option `auth`) and `gh
+// alias ...`, want or not, when the program is gh by its name or the file it
+// reaches.
+// DRAGON: the secrets rule. `gh auth status` prints the token's first
+// characters, `gh auth token` all of it and `gh auth git-credential` it as a
+// password; the scrubber knows a token by its value, and a part of it only
+// from 12 bytes on (host_scrub_scan). An alias (`gh alias set t "auth
+// token"`, kept in the run's GH_CONFIG_DIR) runs one by another name.
+// REMEDY: both are refused before the program starts; gh's token reaches gh
+// alone, by `secrets`. test_run_guards'
+// gh_reads_no_configuration_and_never_says_its_token plants it.
+static STATUS_MUST_USE Status host_refuse_gh(Host *h, Run *r, Pos pos, SpawnStrs argv, Str cwd) {
+    Str base = host_base_name(at(argv, 0).s);
+    Str reached = base;
+    if (!host_resolved_name(h, r->ctx.values, at(argv, 0), cwd, &reached)) reached = base;
+    if (!str_eq(base, S("gh")) && !str_eq(reached, S("gh"))) return OK;
+    for (size_t i = 1; i < argv.len; i++) {
+        Str w = at(argv, i).s;
+        if (str_starts_with(w, S("-"))) continue; // skip: an option before gh's command
+        if (str_eq(w, S("auth"))) return host_fail_plain(r, pos, CLASS_REFUSED, S("`gh auth` is refused, even with a want: `gh auth status` prints the token's first characters, `gh auth token` and `gh auth git-credential` all of it, and gh needs no login here: its token comes from `secrets = {{GH_TOKEN = \"keys:github-token\"}}`"));
+        if (str_eq(w, S("alias"))) return host_fail_plain(r, pos, CLASS_REFUSED, S("`gh alias` is refused, even with a want: an alias could run `gh auth token` by another name"));
+        return OK;
+    }
+    return OK;
+}
+
 // Whether `argv0`, an absolute path, is inside a mount marked ` tools`.
 static bool host_under_tools_mount(const Host *h, Str argv0) {
     for (size_t k = 0; k < h->paths.mounts.len; k++) {

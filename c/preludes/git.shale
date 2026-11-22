@@ -50,8 +50,9 @@ end
 
 -- One git command in `repo`: its result when it exited 0, else a stop.
 -- A reading call keeps git's whole output; a changing one its ends, and
--- prints them when it fails.
-function git_call(repo, args, opts, reading, stdin)
+-- prints them when it fails. `unconfined`, a push's reason, runs it outside
+-- the confinement (`run`'s `unconfined`, held to its shape there).
+function git_call(repo, args, opts, reading, stdin, unconfined?)
   local shown = "`git " .. join(args, " ") .. "`"
   local argv = {"git", "-C", git_real(repo, shown), "-c", "color.ui=never"}
   if reading then push(argv, "--no-optional-locks") end
@@ -63,6 +64,7 @@ function git_call(repo, args, opts, reading, stdin)
     o.tail = 10
   end
   if stdin ~= nil then o.stdin = stdin end
+  if unconfined ~= nil then o.unconfined = unconfined end
   local r = run(argv, o)
   if r.ended == "exit" and r.code == 0 then return r end
   local said = lines(r.out)
@@ -235,32 +237,67 @@ function git_commit(repo, msg, opts?)
   return git_head(repo)
 end
 
--- Push: `{remote, branch}` (the remote `origin` unless named), which
--- becomes its upstream (`push -u`); or `{tag}`, that tag alone (to `origin`
--- unless named). Bare, it pushes the branch HEAD is on to the remote
--- branch of the same name: that of its upstream's remote, or of `remote`.
--- **A bare push refuses a branch whose upstream has another name** (one
--- made from origin/master tracks master) **or that has none**, naming the
--- call that pushes it, so it never lands on master unasked.
+-- Whether a push URL of `remote` goes over ssh (`user@host:path`, or
+-- `ssh://`), where git's ssh reads the user's key, which no confined
+-- program may. A remote git cannot name (no repository, no such remote) is
+-- not: the push itself then stops, saying why.
+function git_push_over_ssh(repo, remote)
+  local got = attempt(git_call, repo, {"remote", "get-url", "--push", "--all", remote}, nil, true, nil)
+  if not got.ok then return false end
+  for u in lines(got.value.out) do
+    if starts_with(u, "ssh://") or re_find(u, "^[^/:]+@[^/:]+:") ~= nil then return true end
+  end
+  return false
+end
+
+-- Push, to `remote` (`origin` unless named): `{branch}`, which becomes its
+-- upstream (`push -u`); `{to = "main"}`, HEAD to that branch, its upstream
+-- unchanged (`push origin HEAD:main`); `{tag}`, that tag alone; `{delete =
+-- "lane"}`, that branch deleted (`push origin --delete lane`). Bare, it
+-- pushes the branch HEAD is on to the remote branch of the same name: that
+-- of its upstream's remote, or of `remote`. **A bare push refuses a branch
+-- whose upstream has another name** (one made from origin/master tracks
+-- master) **or that has none**, naming the call that pushes it, so it
+-- never lands on master unasked. `{lease = true}`, beside a bare push,
+-- `branch` or `to`, forces it with `--force-with-lease`, as a lane pushes
+-- its own branch after a rebase. A push over ssh reads the user's key, so
+-- it runs unconfined, and `run` holds it there to the remotes file's
+-- remotes, refusing a force but `--force-with-lease` to a branch other than
+-- main and master, and deleting either.
 function git_push(repo, opts?)
-  git_opts("git_push", opts, {"remote", "branch", "tag", "timeout_ms"})
+  git_opts("git_push", opts, {"remote", "branch", "tag", "to", "delete", "lease", "timeout_ms"})
   local args = {"push", "-q"}
+  local named = {}
+  if opts ~= nil then
+    for k in {"branch", "tag", "to", "delete"} do
+      if has_key(opts, k) then push(named, "`" .. k .. "`") end
+    end
+  end
+  if #named > 1 then fail("`git_push` takes one of `branch`, `tag`, `to` and `delete`, not " .. join(named, " and ")) end
+  local lease = opts ~= nil and get(opts, "lease", false)
+  if lease and (has_key(opts, "tag") or has_key(opts, "delete")) then fail("`git_push`'s `lease` forces a branch: a bare push, `branch` or `to`, not a `tag` or a `delete`") end
+  if lease then push(args, "--force-with-lease") end
+  local remote = "origin"
+  if opts ~= nil and has_key(opts, "remote") then remote = git_value("git_push", "remote", opts.remote) end
   if opts ~= nil and has_key(opts, "tag") then
-    if has_key(opts, "branch") then fail("`git_push` takes a `branch` or a `tag`, not both") end
-    push(args, git_value("git_push", "remote", get(opts, "remote", "origin")))
+    push(args, remote)
     push(args, "refs/tags/" .. opts.tag)
   elseif opts ~= nil and has_key(opts, "branch") then
     push(args, "-u")
-    push(args, git_value("git_push", "remote", get(opts, "remote", "origin")))
+    push(args, remote)
     push(args, git_value("git_push", "branch", opts.branch))
+  elseif opts ~= nil and has_key(opts, "to") then
+    push(args, remote)
+    push(args, "HEAD:refs/heads/" .. git_value("git_push", "to", opts.to))
+  elseif opts ~= nil and has_key(opts, "delete") then
+    push(args, remote)
+    push(args, "--delete")
+    push(args, "refs/heads/" .. git_value("git_push", "delete", opts.delete))
   else
     local name = trim(git_call(repo, {"rev-parse", "--abbrev-ref", "HEAD"}, opts, true, nil).out)
     if name == "HEAD" then fail("`git_push`: HEAD is detached, on no branch; `git_push(repo, {branch = \"<name>\"})` names one") end
     local ref = "refs/heads/" .. name
-    local remote = nil
-    if opts ~= nil and has_key(opts, "remote") then
-      remote = git_value("git_push", "remote", opts.remote)
-    else
+    if not (opts ~= nil and has_key(opts, "remote")) then
       local up = split(trim(git_call(repo, {"for-each-ref", "--format=%(upstream:remotename)%09%(upstream:remoteref)", ref}, opts, true, nil).out), "\t")
       local again = "`git_push(repo, {branch = \"" .. name .. "\"})` pushes it to origin's " .. name .. " and makes that its upstream"
       if #up < 2 or up[1] == "" then fail("`git_push`: the branch " .. name .. " has no upstream; " .. again) end
@@ -270,7 +307,9 @@ function git_push(repo, opts?)
     push(args, remote)
     push(args, ref .. ":" .. ref)
   end
-  git_call(repo, args, opts, false, nil)
+  local unconfined = nil
+  if git_push_over_ssh(repo, remote) then unconfined = "git_push: ssh reads the user's key, outside the mounts" end
+  git_call(repo, args, opts, false, nil, unconfined)
   return nil
 end
 

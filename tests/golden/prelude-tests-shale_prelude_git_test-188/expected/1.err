@@ -1,5 +1,5 @@
-── stopped at the git prelude:72:29 (in `the git prelude's git_call`): fail: `git rev-parse --short HEAD` exited 128: fatal: not a git repository (or any of the parent directories): .git (663 steps)
-   called from the git prelude:176:15 (in `the git prelude's git_head`)
+── stopped at the git prelude:74:29 (in `the git prelude's git_call`): fail: `git rev-parse --short HEAD` exited 128: fatal: not a git repository (or any of the parent directories): .git (668 steps)
+   called from the git prelude:178:15 (in `the git prelude's git_head`)
    called from {base}/case/script.shale:1:7
-── used: 663 of 5000000 steps, 0 of 10000 reads, 69 of 67108864 read bytes, 0 of 65536 output bytes
-── steps: 663 in all; the most 658 (99%): git_head, 1 call; 5 (0%): script
+── used: 668 of 5000000 steps, 0 of 10000 reads, 69 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 668 in all; the most 663 (99%): git_head, 1 call; 5 (0%): script

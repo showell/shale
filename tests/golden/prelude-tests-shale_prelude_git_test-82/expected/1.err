@@ -1,5 +1,5 @@
-── stopped at the git prelude:72:29 (in `the git prelude's git_call`): fail: `git show HEAD:a.txt` exited 128: fatal: not a git repository (or any of the parent directories): .git (657 steps)
-   called from the git prelude:157:10 (in `the git prelude's git_show`)
+── stopped at the git prelude:74:29 (in `the git prelude's git_call`): fail: `git show HEAD:a.txt` exited 128: fatal: not a git repository (or any of the parent directories): .git (662 steps)
+   called from the git prelude:159:10 (in `the git prelude's git_show`)
    called from {base}/case/script.shale:1:7
-── used: 657 of 5000000 steps, 0 of 10000 reads, 69 of 67108864 read bytes, 0 of 65536 output bytes
-── steps: 657 in all; the most 652 (99%): git_show, 1 call; 5 (0%): script
+── used: 662 of 5000000 steps, 0 of 10000 reads, 69 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 662 in all; the most 657 (99%): git_show, 1 call; 5 (0%): script

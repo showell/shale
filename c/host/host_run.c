@@ -489,6 +489,7 @@ static STATUS_MUST_USE Status host_run_sinks(Host *h, Run *r, Pos pos, const Run
     s->scrub.secrets = secrets;
     s->scrub.carry = buf_make(sa);
     s->scrub.scanned = buf_make(sa);
+    s->scrub.marks = buf_make(sa);
     s->scrub.next = &s->out;
     return OK;
 }
@@ -620,7 +621,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     // runs a program outside it, its shape checked on the filled argv
     // (`secret_args`' values in place) and named by the script's.
     if (host_given(&o->unconfined)) {
-        TRY(host_run_unconfined(h, r, pos, argv, filled, &o->env, o->unconfined.as.string, cwd, &spec.argv));
+        TRY(host_run_unconfined(h, r, pos, argv, filled, &o->env, o->unconfined.as.string, cwd, &spec.argv, &spec.env));
     } else {
         TRY(host_confine_open(h, r, pos, S("run"), &held->confine_fd));
     }

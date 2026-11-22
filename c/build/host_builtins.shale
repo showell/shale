@@ -3,10 +3,11 @@
 -- host_write_gate.c, host_run_secrets.c, host_run.c, jobs.c, host_jobs.c).
 -- c/build.shale runs it, with the `build` mount that `use` below reads; see
 -- that file for the tiers and the blocks.
--- (steps, reads and read bytes: its plants, 37 with the Landlock lane's,
--- the unconfined gate's and secret_args', each copy c/, about 2M steps, 290
--- reads and 1.7 MB read a copy: 34 of them stopped at 10,000 reads.)
--- budget: steps=150000000 reads=20000 read_bytes=200000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
+-- (steps, reads and read bytes: its plants, 52 with the Landlock lane's,
+-- the unconfined gate's, secret_args', the push's, gh's and the scrubber's
+-- parts', each copy c/, about 2M steps, 290 reads and 1.7 MB read a copy:
+-- 34 of them stopped at 10,000 reads.)
+-- budget: steps=250000000 reads=30000 read_bytes=300000000 programs=600 arena_bytes=268435456 changes=30000 change_bytes=1610612736
 
 use("build:lib.shale")
 
@@ -20,7 +21,7 @@ use("build:lib.shale")
 -- faults below planted in a copy of c/ (`run_plants`), each caught by its
 -- `aim` tests.
 
-const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 14, ["c/tests/host_builtins/test_run_guards.c"] = 19, ["c/tests/host_builtins/test_run_secret_args.c"] = 2}
+const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 15, ["c/tests/host_builtins/test_run_guards.c"] = 21, ["c/tests/host_builtins/test_run_secret_args.c"] = 2}
 const HOST_BUILTINS_PLANTS = {
   {name = "an unconfined run is any program", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
@@ -51,7 +52,7 @@ const HOST_BUILTINS_PLANTS = {
    old = "    size_t from = 0;\n    while (from <= hosts.len) {", new = "    if (hosts.len == 0) return true;\n    size_t from = 0;\n    while (from <= hosts.len) {"},
   {name = "a hosts file's bad line is taken", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "an_unconfined_copy_s_hosts_are_the_hosts_file_s_and_none_without_one",
-   old = "        if (!host_unconfined_host_line(line)) return", new = "        if (0) return"},
+   old = "        if (!line_ok(line)) return", new = "        if (0) return"},
   {name = "an unconfined scp takes any option", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
    old = "        if (!host_unconfined_named(flags, host_unconfined_word(a, i))) return", new = "        if (0) return"},
@@ -90,10 +91,55 @@ const HOST_BUILTINS_PLANTS = {
    old = "    if (got != SPAWN_OK) {\n        Str why", new = "    if (0) {\n        Str why"},
   {name = "a secret's start at a read's end is passed on raw", file = "host_run_secrets.c", dir = "host", caught_by = "host_builtins/test_host_run",
    aim = "the_scrubber_holds_back_a_secret_split_across_reads_and_widens_an_overlap",
-   old = "if (host_is_proper_prefix(rest, at(s->secrets, k).value)) return true;", new = "if (0 && host_is_proper_prefix(rest, at(s->secrets, k).value)) return true;"},
+   old = "if (host_is_proper_prefix(rest, v)) return true;", new = "if (0 && host_is_proper_prefix(rest, v)) return true;"},
   {name = "a secret inside another is not widened over", file = "host_run_secrets.c", dir = "host", caught_by = "host_builtins/test_host_run",
    aim = "the_scrubber_holds_back_a_secret_split_across_reads_and_widens_an_overlap",
-   old = "if (j + o.len > *end) *end = j + o.len;", new = "(void)end;"},
+   old = "        if (end <= upto) continue;", new = "        if (end <= upto || j < upto) continue;"},
+  {name = "a part of a secret is passed on raw", file = "host_run_secrets.c", dir = "host", caught_by = "host_builtins/test_host_run",
+   aim = "the_scrubber_takes_out_a_part_of_a_secret_twelve_bytes_or_more",
+   old = "host_scrub_part_at(s, buf, j, &k) && j + HOST_SCRUB_PART > end) end", new = "0 && j + HOST_SCRUB_PART > end) end"},
+  {name = "a part's start at a read's end is passed on raw", file = "host_run_secrets.c", dir = "host", caught_by = "host_builtins/test_host_run",
+   aim = "the_scrubber_takes_out_a_part_of_a_secret_twelve_bytes_or_more",
+   old = "        } else if (rest.len < HOST_SCRUB_PART && mem_find(", new = "        } else if (0 && mem_find("},
+  {name = "an unconfined push forces", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_push_reaches_the_remotes_file_s_remotes_alone",
+   old = "        if (host_unconfined_named(forces, w) || bundle_forces) return", new = "        if (0) return"},
+  {name = "an unconfined push forces by a `+`", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_push_reaches_the_remotes_file_s_remotes_alone",
+   old = "    if (str_starts_with(w, S(\"+\"))) return", new = "    if (0) return"},
+  {name = "an unconfined push deletes main", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_push_reaches_the_remotes_file_s_remotes_alone",
+   old = "    if (deleting && host_unconfined_kept_ref(dst)) return", new = "    if (0) return"},
+  {name = "an unconfined push leases main", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_push_reaches_the_remotes_file_s_remotes_alone",
+   old = "    if (lease && host_unconfined_kept_ref(dst)) return", new = "    if (0) return"},
+  {name = "an unconfined push takes any option", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_push_reaches_the_remotes_file_s_remotes_alone",
+   old = "        if (!host_unconfined_named(flags, w)) return", new = "        if (0) return"},
+  {name = "an unconfined push goes to any remote", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_push_reaches_the_remotes_file_s_remotes_alone",
+   old = "        if (!host_unconfined_remote_ok(remotes, url, &this_host) || (host->len > 0 && !str_eq(*host, this_host))) {", new = "        if (!host_unconfined_remote_ok(remotes, url, &this_host) && 0) {"},
+  {name = "an unconfined push's ssh goes to the URL's host", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_push_reaches_the_remotes_file_s_remotes_alone",
+   old = "S(\"core.sshCommand=ssh -o HostName=\"), host,", new = "S(\"core.sshCommand=ssh\"), S(\"\"),"},
+  {name = "an unconfined push takes any protocol", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_push_reaches_the_remotes_file_s_remotes_alone",
+   old = "os_str_own(S(\"GIT_ALLOW_PROTOCOL=ssh\"));", new = "os_str_own(S(\"GIT_ALLOW_PROTOCOL_NOT=ssh\"));"},
+  {name = "gh auth runs", file = "host_refusals.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "gh_reads_no_configuration_and_never_says_its_token",
+   old = "        if (str_eq(w, S(\"auth\"))) return", new = "        if (0) return"},
+  {name = "gh alias runs", file = "host_refusals.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "gh_reads_no_configuration_and_never_says_its_token",
+   old = "        if (str_eq(w, S(\"alias\"))) return", new = "        if (0) return"},
+  {name = "a script's env hands gh a token", file = "host_refusals.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "gh_reads_no_configuration_and_never_says_its_token",
+   old = "            if (!str_eq(k, (Str){at(gh, j), strlen(at(gh, j))})) continue;", new = "            if (1) continue;"},
+  {name = "gh reads the home's configuration", file = "host_confine.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "gh_reads_no_configuration_and_never_says_its_token",
+   old = "(HostConfineSet){S(\"GH_CONFIG_DIR\"), gh};", new = "(HostConfineSet){S(\"GH_CONFIG_NOT\"), gh};"},
+  {name = "Playwright's browsers are the home's", file = "host_confine.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "ssh_reads_its_known_hosts_and_no_key_and_the_caches_are_the_build_mount_s",
+   old = "(HostConfineSet){S(\"PLAYWRIGHT_BROWSERS_PATH\"), browsers};", new = "(HostConfineSet){S(\"PLAYWRIGHT_NOT\"), browsers};"},
   {name = "a want lets `grep` run", file = "host_refusals.c", dir = "host", caught_by = "host_builtins/test_host_run",
    aim = "run_refuses_each_bad_call_with_its_message",
    old = "    HostRefusedGroups refused = {HOST_REFUSED, sizeof HOST_REFUSED / sizeof *HOST_REFUSED};\n    for (int pass", new = "    HostRefusedGroups refused = {HOST_REFUSED, sizeof HOST_REFUSED / sizeof *HOST_REFUSED};\n    if (has_want) return OK;\n    for (int pass"},

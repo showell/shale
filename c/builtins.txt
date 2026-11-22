@@ -1176,7 +1176,11 @@ git_real(repo: Path, shown: Str) -> Str
   impl: prelude git
   kind: internal
 
-git_call(repo: Path, args: List(Str), opts: Opts | Nil, reading: Bool, stdin: Str | Nil) -> RunResult
+git_call(repo: Path, args: List(Str), opts: Opts | Nil, reading: Bool, stdin: Str | Nil, unconfined?: Str) -> RunResult
+  impl: prelude git
+  kind: internal
+
+git_push_over_ssh(repo: Path, remote: Str) -> Bool
   impl: prelude git
   kind: internal
 
@@ -1249,9 +1253,9 @@ git_commit(repo: Path, msg: Str, opts?: Opts) -> Str
 git_push(repo: Path, opts?: Opts) -> Nil
   impl: prelude git
   kind: effect
-  stops: fail (no upstream, or one of another name)
-  opts: remote: Str, branch: Str, tag: Str, timeout_ms: Int
-  doc: the branch pushed to its namesake upstream, or a tag alone
+  stops: fail (no upstream, or one of another name; over ssh, `run`'s refusals: a force but a lease to a lane, a deletion of main or master, a remote not the remotes file's)
+  opts: remote: Str, branch: Str, tag: Str, to: Str, delete: Str, lease: Bool, timeout_ms: Int
+  doc: the branch pushed to its namesake upstream, HEAD to `to`, a tag alone, or a branch deleted; unconfined over ssh
   anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
 
 git_fetch(repo: Path, opts?: Opts) -> Nil

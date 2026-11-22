@@ -268,8 +268,8 @@ static void guards_git_bare(Ran *x, Str path) {
 
 // ssh reads its known hosts and its configuration from a decoy home, and no
 // key file there; gh's configuration stays closed; every program gets its
-// caches in the `build` mount's cache folder, unless the script's `env`
-// says otherwise.
+// caches in the `build` mount's cache folder, Playwright's browsers there
+// too, unless the script's `env` says otherwise.
 TEST(ssh_reads_its_known_hosts_and_no_key_and_the_caches_are_the_build_mount_s) {
     static Ran x;
     guards_ran_with(&x, "build = D/b\n", false);
@@ -291,25 +291,24 @@ TEST(ssh_reads_its_known_hosts_and_no_key_and_the_caches_are_the_build_mount_s) 
                   "print(c({\"cp\", h .. \"/.ssh/config\", \"cf\"}))\n"
                   "print(c({\"cp\", h .. \"/.ssh/id_ed25519\", \"key\"}))\n"
                   "print(c({\"cp\", h .. \"/.config/gh/hosts.yml\", \"gh\"}))\n"
-                  "print(host(\"run\", {\"printenv\", \"XDG_CACHE_HOME\", \"ZIG_GLOBAL_CACHE_DIR\"}, {timeout_ms = 5000, tail = 3}).out)\n"
+                  "print(host(\"run\", {\"printenv\", \"XDG_CACHE_HOME\", \"ZIG_GLOBAL_CACHE_DIR\", \"PLAYWRIGHT_BROWSERS_PATH\"}, {timeout_ms = 5000, tail = 3}).out)\n"
                   "print(host(\"run\", {\"printenv\", \"XDG_CACHE_HOME\"}, {timeout_ms = 5000, tail = 3, env = {XDG_CACHE_HOME = \"mine\"}}).out)\n"),
            ran_budgets());
     EXPECT_OK_IN(&x.r.ctx, x.ran);
-    EXPECT_STR(buf_view(&x.r.out), ran_d(&x, "0\n0\n1\n1\nD/b/cache\nD/b/cache\n\nmine\n\n"));
+    EXPECT_STR(buf_view(&x.r.out), ran_d(&x, "0\n0\n1\n1\nD/b/cache\nD/b/cache\nD/b/cache/ms-playwright\n\nmine\n\n"));
     EXPECT_STR(guards_decoy(&x, "root/kh"), S("known\n"));
     EXPECT_STR(guards_decoy(&x, "root/key"), S("absent"));
     EXPECT_STR(guards_decoy(&x, "root/gh"), S("absent"));
     ran_free(&x);
 }
 
-// `unconfined` runs a git push past the mounts, to a bare repository no
-// mount names, and a deploy's `ssh`, `scp` and `rsync` to a host of a
-// planted hosts file (SHALE_HOSTS),
-// and nothing else: another program (one with a `push` among its words
-// too), a `-c`, a `--receive-pack`, another host, an ssh option, an scp
-// option, a local path outside the mounts, an rsync shell, option or daemon,
-// and an `env` are each refused, and the record says the push was
-// unconfined. No test reaches any host: `ssh`, `scp` and `rsync` are fakes
+// `unconfined` runs a deploy's `ssh`, `scp` and `rsync` to a host of a
+// planted hosts file (SHALE_HOSTS), and a git push (the next test's), and
+// nothing else: another program (one with a `push` among its words too), a
+// `-c`, a `--receive-pack`, another host, an ssh option, an scp option, a
+// local path outside the mounts, an rsync shell, option or daemon, and an
+// `env` are each refused; a confined push cannot reach a bare repository no
+// mount names. No test reaches any host: `ssh`, `scp` and `rsync` are fakes
 // first on PATH that say how they were called, so a planted fault that let
 // one through would print, never connect.
 TEST(an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone) {
@@ -358,8 +357,7 @@ TEST(an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone) {
                   "print(c({\"rsync\", \"-rlt\", \"--delete\", \"--chmod=D755,F644\", \"-e\", \"ssh\", \"where.txt\", \"deploy@example.com:/tmp/\"}, o).out)\n"
                   "print(attempt(c, {\"git\", \"-c\", \"core.sshCommand=x\", \"push\", out, \"master\"}, o).error)\n"
                   "print(attempt(c, {\"git\", \"push\", \"--receive-pack=x\", out, \"master\"}, o).error)\n"
-                  "print(attempt(c, {\"git\", \"push\", out, \"master\"}, {timeout_ms = 10000, tail = 3, unconfined = \"t: x\", env = {GIT_SSH_COMMAND = \"x\"}}).error)\n"
-                  "print(c({\"git\", \"push\", \"-q\", out, \"master\"}, o).code)\n"),
+                  "print(attempt(c, {\"git\", \"push\", out, \"master\"}, {timeout_ms = 10000, tail = 3, unconfined = \"t: x\", env = {GIT_SSH_COMMAND = \"x\"}}).error)\n"),
            ran_budgets());
     EXPECT_EQ(unsetenv("SHALE_HOSTS"), 0);
     EXPECT_OK_IN(&x.r.ctx, x.ran);
@@ -381,16 +379,150 @@ TEST(an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone) {
                                      "fake rsync -rlt --delete --chmod=D755,F644 -e ssh where.txt deploy@example.com:/tmp/\n\n"
                                      "`run`'s `unconfined` push takes no `-c` but `color.ui=never`: a setting could name a program git starts outside the confinement\n"
                                      "`run`'s `unconfined` push takes no `--receive-pack` or `--exec`: each names a program it would start outside the confinement\n"
-                                     "`run`'s `unconfined` git takes no `env` (git: but GIT_TERMINAL_PROMPT), not GIT_SSH_COMMAND: a variable could name a program it starts\n"
+                                     "`run`'s `unconfined` git takes no `env` (git: but GIT_TERMINAL_PROMPT), not GIT_SSH_COMMAND: a variable could name a program it starts\n"));
+    ran_free(&x);
+}
+
+// An unconfined push goes to a remote of a planted remotes file
+// (SHALE_REMOTES) alone, by every push URL git reads for it (an
+// `insteadOf` and a `pushurl` among them), over ssh alone, and to the
+// file's host whatever the URL says: the forms the box pushes with run (HEAD
+// to main, `main`, a lane's branch and a lease to it after a rewind, a
+// deletion of a lane), and a force (an option, a bundle, a `+`, a mirror), a
+// lease or a deletion of main or master, another option, a pattern, a push
+// with no refspec, a URL for a remote, another remote and a `-C` outside the
+// mounts are each refused. `ssh` is a fake first on PATH that says how git
+// called it and hands the push to a bare repository outside every mount,
+// so nothing is reached; the record says the push was unconfined.
+TEST(an_unconfined_push_reaches_the_remotes_file_s_remotes_alone) {
+    static Ran x;
+    guards_ran_with(&x, "", false);
+    guards_zig_fake(&x, "fakebin/ssh", "");
+    ran_write(&x, "fakebin/ssh", ran_d(&x, "#!/bin/sh\necho \"$* allow=$GIT_ALLOW_PROTOCOL\" >> D/ssh.log\nexec git receive-pack D/github.git\n"));
+    static OsStr path_env[1];
+    SLICE_TYPE(EnvRoom, OsStr);
+    EnvRoom room = {path_env, 1};
+    Buf pb = buf_make(&x.host);
+    EXPECT_EQ(buf_lit(&pb, "PATH="), OK);
+    EXPECT_EQ(buf_str(&pb, ran_at(&x, "fakebin")), OK);
+    EXPECT_EQ(buf_lit(&pb, ":/usr/bin:/bin"), OK);
+    at(room, 0) = os_str_own(buf_view(&pb));
+    x.lh.env = (SpawnStrs){path_env, 1};
+    ran_put(&x, "remotes", "# the box's\n\ngit@github.com:showell/\n");
+    FileSystemCPath remotes_cp;
+    const char *remotes_c = NULL;
+    EXPECT_EQ(file_system_cstr(&remotes_cp, os_str_own(ran_at(&x, "remotes")), &remotes_c), FILE_SYSTEM_OK);
+    EXPECT_EQ(setenv("SHALE_REMOTES", remotes_c, 1), 0);
+    guards_git_bare(&x, ran_at(&x, "github.git"));
+    ran_put(&x, "root/where.txt", "w\n");
+    ran_run(&x, S("function c(a, o) return host(\"run\", a, o) end\n"
+                  "function g(args)\n  local argv = {\"git\", \"-c\", \"user.name=t\", \"-c\", \"user.email=t@t\"}\n  for a in args do push(argv, a) end\n  return c(argv, {timeout_ms = 10000, tail = 3}).code\nend\n"
+                  "function p(args)\n  local argv = {\"git\"}\n  for a in args do push(argv, a) end\n  return c(argv, {timeout_ms = 10000, tail = 3, unconfined = \"t: push\"}).code\nend\n"
+                  "function no(args)\n  local argv = {\"git\", \"push\", \"-q\"}\n  for a in args do push(argv, a) end\n  return attempt(c, argv, {timeout_ms = 10000, tail = 3, unconfined = \"t: push\"}).error\nend\n"
+                  "print(g({\"init\", \"-q\", \"-b\", \"main\"}), g({\"add\", \"where.txt\"}), g({\"commit\", \"-q\", \"-m\", \"m1\"}), g({\"commit\", \"-q\", \"--allow-empty\", \"-m\", \"m2\"}))\n"
+                  "print(g({\"remote\", \"add\", \"origin\", \"git@github.com:showell/t.git\"}), g({\"remote\", \"add\", \"other\", \"git@github.com:someone/t.git\"}), g({\"remote\", \"add\", \"short\", \"git@gh:showell/t.git\"}), g({\"remote\", \"add\", \"sneaky\", \"git@github.com:showell/s.git\"}), g({\"remote\", \"add\", \"twice\", \"git@github.com:showell/t.git\"}))\n"
+                  "print(g({\"config\", \"url.git@github.com:showell/.insteadOf\", \"git@gh:showell/\"}), g({\"config\", \"url.git@evil.example:x/.insteadOf\", \"git@github.com:showell/s\"}), g({\"config\", \"--add\", \"remote.twice.pushurl\", \"git@github.com:showell/t.git\"}), g({\"config\", \"--add\", \"remote.twice.pushurl\", \"git@github.com:someone/t.git\"}))\n"
+                  "print(no({\"--force\", \"origin\", \"lane\"}))\n"
+                  "print(no({\"-qf\", \"origin\", \"lane\"}))\n"
+                  "print(no({\"origin\", \"+lane\"}))\n"
+                  "print(no({\"--mirror\", \"origin\"}))\n"
+                  "print(no({\"--force-with-lease\", \"origin\", \"HEAD:main\"}))\n"
+                  "print(no({\"--force-with-lease\", \"origin\", \"master\"}))\n"
+                  "print(no({\"origin\", \"--delete\", \"main\"}))\n"
+                  "print(no({\"origin\", \":refs/heads/master\"}))\n"
+                  "print(no({\"--repo=x\", \"origin\", \"HEAD:main\"}))\n"
+                  "print(no({\"origin\", \"lane*\"}))\n"
+                  "print(no({\"origin\"}))\n"
+                  "print(no({\"git@github.com:showell/t.git\", \"HEAD:main\"}))\n"
+                  "print(no({\"other\", \"HEAD:main\"}))\n"
+                  "print(no({\"sneaky\", \"HEAD:main\"}))\n"
+                  "print(no({\"twice\", \"HEAD:main\"}))\n"
+                  "print(attempt(c, {\"git\", \"-C\", \"..\", \"push\", \"origin\", \"HEAD:main\"}, {timeout_ms = 10000, tail = 3, unconfined = \"t: push\"}).error)\n"
+                  "print(p({\"-C\", \".\", \"-c\", \"color.ui=never\", \"push\", \"-q\", \"origin\", \"HEAD:refs/heads/main\"}), p({\"push\", \"origin\", \"main\"}))\n"
+                  "print(g({\"branch\", \"lane\"}), p({\"push\", \"-q\", \"-u\", \"origin\", \"lane\"}), g({\"branch\", \"-f\", \"lane\", \"HEAD~1\"}))\n"
+                  "print(p({\"push\", \"-q\", \"origin\", \"lane\"}) ~= 0, p({\"push\", \"-q\", \"--force-with-lease\", \"origin\", \"lane\"}), p({\"push\", \"-q\", \"short\", \"HEAD:refs/heads/short\"}))\n"
+                  "print(p({\"push\", \"-q\", \"origin\", \"--delete\", \"lane\"}))\n"),
+           ran_budgets());
+    EXPECT_EQ(unsetenv("SHALE_REMOTES"), 0);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("0\t0\t0\t0\n0\t0\t0\t0\t0\n0\t0\t0\t0\n"
+                                     "`run`'s `unconfined` push does not force, not --force: `--force-with-lease` to a branch other than main and master is the one rewrite it takes\n"
+                                     "`run`'s `unconfined` push does not force, not -qf: `--force-with-lease` to a branch other than main and master is the one rewrite it takes\n"
+                                     "`run`'s `unconfined` push does not force, not +lane: `--force-with-lease` to a branch other than main and master is the one rewrite it takes\n"
+                                     "`run`'s `unconfined` push does not force, not --mirror: `--force-with-lease` to a branch other than main and master is the one rewrite it takes\n"
+                                     "`run`'s `unconfined` push forces (`--force-with-lease`) only a branch other than main and master, named whole, not HEAD:main\n"
+                                     "`run`'s `unconfined` push forces (`--force-with-lease`) only a branch other than main and master, named whole, not master\n"
+                                     "`run`'s `unconfined` push does not delete main or master, not main\n"
+                                     "`run`'s `unconfined` push does not delete main or master, not :refs/heads/master\n"
+                                     "`run`'s `unconfined` push does not take --repo=x: its options are HOST_UNCONFINED_PUSH_FLAGS' (c/host/host_unconfined.c)\n"
+                                     "`run`'s `unconfined` push names each ref whole, not lane*\n"
+                                     "`run`'s `unconfined` push names its remote and what it pushes (`git push origin HEAD:main`): a push by the remote's own settings could force, or go to another branch\n"
+                                     "`run`'s `unconfined` push names a remote, not git@github.com:showell/t.git: its push URL is held to the remotes file\n"
+                                     "`run`'s `unconfined` push goes only to a remote of the remotes file (~/.config/shale/remotes, or SHALE_REMOTES's), `<user@host:owner/><repo>.git`: `other` pushes to git@github.com:someone/t.git\n"
+                                     "`run`'s `unconfined` push goes only to a remote of the remotes file (~/.config/shale/remotes, or SHALE_REMOTES's), `<user@host:owner/><repo>.git`: `sneaky` pushes to git@evil.example:x/.git\n"
+                                     "`run`'s `unconfined` push goes only to a remote of the remotes file (~/.config/shale/remotes, or SHALE_REMOTES's), `<user@host:owner/><repo>.git`: `twice` pushes to git@github.com:someone/t.git\n"
+                                     "`run`'s `unconfined` git: its local path .. is under neither the root nor a mount\n"
+                                     "0\t0\n"
+                                     "0\t0\t0\n"
+                                     "true\t0\t0\n"
                                      "0\n"));
     Str ref = S("");
-    EXPECT(ran_file(&x, "outside.git/refs/heads/master", &ref));
+    EXPECT(ran_file(&x, "github.git/refs/heads/main", &ref));
+    EXPECT(ran_file(&x, "github.git/refs/heads/short", &ref));
+    EXPECT(!ran_file(&x, "github.git/refs/heads/lane", &ref));
+    Str said = S("");
+    EXPECT(ran_file(&x, "ssh.log", &said));
+    EXPECT(guards_holds(said, "-o HostName=github.com "));
+    EXPECT(guards_holds(said, "git@github.com git-receive-pack 'showell/t.git' allow=ssh\n"));
     EXPECT(x.lh.records.len > 0);
-    Buf want = buf_make(&x.host);
-    EXPECT_EQ(buf_lit(&want, "run git push -q "), OK);
-    EXPECT_EQ(buf_str(&want, ran_at(&x, "outside.git")), OK);
-    EXPECT_EQ(buf_lit(&want, " master (unconfined: t: past the mounts) -> exit 0"), OK);
-    EXPECT(str_starts_with(at(x.lh.records, x.lh.records.len - 1), buf_view(&want)));
+    EXPECT(str_starts_with(at(x.lh.records, x.lh.records.len - 1), S("run git push -q origin --delete lane (unconfined: t: push) -> exit 0")));
+    ran_free(&x);
+}
+
+// gh runs with GH_CONFIG_DIR an empty folder of the run's own, its token from
+// `secrets` alone, scrubbed whole and in part (its first 33 characters, as
+// `gh auth status` prints them); `gh auth` (status, token, git-credential,
+// past an option too) and `gh alias` are refused even with a want, and so is
+// an `env` that sets GH_CONFIG_DIR or a token; `auth` as a later word is
+// gh's to read. `gh` is a fake in a read-only mount first on PATH that says
+// what it was handed, so nothing is reached.
+TEST(gh_reads_no_configuration_and_never_says_its_token) {
+    static Ran x;
+    // The fake's folder is a mount: a confined program runs from the mounts
+    // alone, and execvp would pass a refused fake by for the real gh.
+    guards_ran_with(&x, "k = D/keys secrets\nfake = D/fakebin ro\n", false);
+    guards_zig_fake(&x, "fakebin/gh", "#!/bin/sh\ncase \"$GH_CONFIG_DIR\" in */gh-config) echo \"config: the run's, $(ls -A \"$GH_CONFIG_DIR\" | wc -l) files\";; *) echo \"config: $GH_CONFIG_DIR\";; esac\necho \"token=$GH_TOKEN\"\nprintf 'prefix=%.33s\\n' \"$GH_TOKEN\"\n");
+    static OsStr path_env[1];
+    SLICE_TYPE(EnvRoom, OsStr);
+    EnvRoom room = {path_env, 1};
+    Buf pb = buf_make(&x.host);
+    EXPECT_EQ(buf_lit(&pb, "PATH="), OK);
+    EXPECT_EQ(buf_str(&pb, ran_at(&x, "fakebin")), OK);
+    EXPECT_EQ(buf_lit(&pb, ":/usr/bin:/bin"), OK);
+    at(room, 0) = os_str_own(buf_view(&pb));
+    x.lh.env = (SpawnStrs){path_env, 1};
+    ran_put(&x, "keys/github-token", "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ab\n");
+    ran_run(&x, S("function c(a, o) return host(\"run\", a, o) end\n"
+                  "local s = {GH_TOKEN = \"k:github-token\"}\n"
+                  "print(c({\"gh\", \"api\", \"user\"}, {timeout_ms = 10000, tail = 5, secrets = s}).out)\n"
+                  "print(attempt(c, {\"gh\", \"auth\", \"status\"}, {timeout_ms = 10000, tail = 5, secrets = s}).error)\n"
+                  "print(attempt(c, {\"gh\", \"auth\", \"token\"}, {timeout_ms = 10000, tail = 5, want = \"t: x\"}).error)\n"
+                  "print(attempt(c, {\"gh\", \"--help\", \"auth\", \"git-credential\"}, {timeout_ms = 10000, tail = 5}).error)\n"
+                  "print(attempt(c, {\"gh\", \"alias\", \"set\", \"t\", \"auth token\"}, {timeout_ms = 10000, tail = 5}).error)\n"
+                  "print(attempt(c, {\"gh\", \"api\", \"user\"}, {timeout_ms = 10000, tail = 5, env = {GH_CONFIG_DIR = \"x\"}}).error)\n"
+                  "print(attempt(c, {\"gh\", \"api\", \"user\"}, {timeout_ms = 10000, tail = 5, env = {GH_TOKEN = \"x\"}, want = \"t: x\"}).error)\n"
+                  "print(c({\"gh\", \"pr\", \"list\", \"--search\", \"auth\"}, {timeout_ms = 10000, tail = 5}).code)\n"),
+           ran_budgets());
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("config: the run's, 0 files\ntoken=<secret GH_TOKEN>\nprefix=<secret GH_TOKEN>\n\n"
+                                     "`gh auth` is refused, even with a want: `gh auth status` prints the token's first characters, `gh auth token` and `gh auth git-credential` all of it, and gh needs no login here: its token comes from `secrets = {GH_TOKEN = \"keys:github-token\"}`\n"
+                                     "`gh auth` is refused, even with a want: `gh auth status` prints the token's first characters, `gh auth token` and `gh auth git-credential` all of it, and gh needs no login here: its token comes from `secrets = {GH_TOKEN = \"keys:github-token\"}`\n"
+                                     "`gh auth` is refused, even with a want: `gh auth status` prints the token's first characters, `gh auth token` and `gh auth git-credential` all of it, and gh needs no login here: its token comes from `secrets = {GH_TOKEN = \"keys:github-token\"}`\n"
+                                     "`gh alias` is refused, even with a want: an alias could run `gh auth token` by another name\n"
+                                     "`run`'s `env` GH_CONFIG_DIR is the host's, even with a want: gh reads its configuration from an empty folder of the run's own, and its token from `secrets = {GH_TOKEN = \"keys:github-token\"}`\n"
+                                     "`run`'s `env` GH_TOKEN would put a token in the script's hands, even with a want: `secrets = {GH_TOKEN = \"keys:github-token\"}` hands it to gh, scrubbed\n"
+                                     "0\n"));
+    EXPECT(!guards_holds(buf_view(&x.r.out), "ABCDEFGHIJKL"));
     ran_free(&x);
 }
 
@@ -744,4 +876,5 @@ TEST_PART(run_guards, TEST_CASE(a_program_writes_and_reads_only_where_the_mounts
           TEST_CASE(job_wait_names_the_script_s_path_never_the_os_path),
           TEST_CASE(zig_ast_s_stderr_is_drained_while_it_answers_and_a_hung_one_stops_at_the_deadline), TEST_CASE(zig_ast_runs_confined_to_the_mounts),
           TEST_CASE(ssh_reads_its_known_hosts_and_no_key_and_the_caches_are_the_build_mount_s), TEST_CASE(an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone), TEST_CASE(an_unconfined_copy_s_hosts_are_the_hosts_file_s_and_none_without_one),
-          TEST_CASE(an_unconfined_deploy_s_host_may_be_a_secret_and_is_never_shown));
+          TEST_CASE(an_unconfined_deploy_s_host_may_be_a_secret_and_is_never_shown),
+          TEST_CASE(an_unconfined_push_reaches_the_remotes_file_s_remotes_alone), TEST_CASE(gh_reads_no_configuration_and_never_says_its_token));
