@@ -239,14 +239,14 @@ find_deep_calls (Roc): 1 files; nested 0 (min 3, strict)
 refused: cookbook:roc/plants/find_unused_imports/broken/refused.roc: 4 parse problem(s): a file that does not parse has no tree to hunt
 ── stop: fail: find_deep_calls: roc-ast refused 1 files (named above), which have no tree to judge; every other file was judged
 === broken and plants (exit 1)
-find_deep_calls (Roc): 639 files; nested 6 (min 4, strict); depth 4 4, depth 7 1, depth 8 1
+find_deep_calls (Roc): 642 files; nested 6 (min 4, strict); depth 4 4, depth 7 1, depth 8 1
 cookbook:roc/plants/check_foreign_code/Style.roc:20:14: nested: depth 4, Num.a to Num.d: depth = |x| Num.a(Num.b(Num.c(Num.d(x))))
 cookbook:roc/plants/find_deep_calls/nested_interpolation.roc:6:13: nested: depth 4, Str.concat to List.concat: label = |l| Str.concat("n", "${Num.to_str(List.len(List.concat(l, l)))}") # depth 4
 cookbook:roc/plants/find_deep_calls/nested_outermost.roc:3:12: nested: depth 4, List.len to Str.with_ascii_uppercased: four = |s| List.len(Str.to_utf8(Str.trim(Str.with_ascii_uppercased(s)))) # depth 4
 cookbook:roc/plants/find_deep_calls/nested_two.roc:4:46: nested: depth 4, List.len to Str.trim: both = |s| (Str.trim(Str.trim(Str.trim(s))), List.len(Str.to_utf8(Str.trim(Str.trim(s))))) # depth 3, 4
 cookbook:roc/plants/wrap_long_lines/at_the_cap.roc:4:8: nested: depth 7, f to f: deep = f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, c, d, e, g, h, i)))))))
 cookbook:roc/plants/wrap_long_lines/too_deep/too_deep.roc:4:8: nested: depth 8, f to f: deep = f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, c, d, e, g, h, i))))))))
-find_deep_calls (Roc): 639 files; nested 6 (min 4, strict); depth 4 4, depth 7 1, depth 8 1
+find_deep_calls (Roc): 642 files; nested 6 (min 4, strict); depth 4 4, depth 7 1, depth 8 1
 refused: cookbook:roc/plants/check_boundaries_edges/broken/bad.roc: 3 parse problem(s): a file that does not parse has no tree to hunt
 refused: cookbook:roc/plants/check_errors/edges/broken/bad.roc: 3 parse problem(s): a file that does not parse has no tree to hunt
 refused: cookbook:roc/plants/check_families/broken/refused.roc: 4 parse problem(s): a file that does not parse has no tree to hunt
