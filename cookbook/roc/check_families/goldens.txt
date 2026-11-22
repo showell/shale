@@ -36,7 +36,7 @@ check_families (Roc): 2 files; family 0, twin_name 1, unpaired_conversion 0
 ── stop: fail: check_families (Roc): 2 files; family 0, twin_name 1, unpaired_conversion 0
 === conversion/*.roc (exit 1)
 check_families (Roc): 1 files; family 0, twin_name 0, unpaired_conversion 1
-cookbook:roc/plants/check_families/conversion/Span.roc:4: unpaired_conversion: `Span.metres` gives a `Span` beside `Span.to_metres`: name it `from_metres`, the way back
+cookbook:roc/plants/check_families/conversion/Span.roc:4: unpaired_conversion: `Span.metres` gives its own type beside `Span.to_metres`: name it `from_metres`, the way back
 check_families (Roc): 1 files; family 0, twin_name 0, unpaired_conversion 1
 ── stop: fail: check_families (Roc): 1 files; family 0, twin_name 0, unpaired_conversion 1
 === conversion_paired/*.roc (exit 0)
@@ -47,7 +47,7 @@ refused: cookbook:roc/plants/check_families/broken/refused.roc: 4 parse problem(
 ── stop: fail: check_families: roc-ast refused 1 files (named above), which have no tree to judge; every other file was judged
 === */*.roc (exit 1)
 check_families (Roc): 30 files; family 10, twin_name 2, unpaired_conversion 1
-cookbook:roc/plants/check_families/conversion/Span.roc:4: unpaired_conversion: `Span.metres` gives a `Span` beside `Span.to_metres`: name it `from_metres`, the way back
+cookbook:roc/plants/check_families/conversion/Span.roc:4: unpaired_conversion: `Span.metres` gives its own type beside `Span.to_metres`: name it `from_metres`, the way back
 cookbook:roc/plants/check_families/family/RailSighting.roc:4: family: `RailSighting` has no `in_view`, which 9 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
 cookbook:roc/plants/check_families/family_half/CatSighting.roc:3: family: `CatSighting` has no `depth_keys`, which 8 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
 cookbook:roc/plants/check_families/family_half/GroundSighting.roc:3: family: `GroundSighting` has no `depth_keys`, which 8 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
@@ -65,7 +65,7 @@ refused: cookbook:roc/plants/check_families/broken/refused.roc: 4 parse problem(
 ── stop: fail: check_families: roc-ast refused 1 files (named above), which have no tree to judge; every other file was judged
 === */*.roc roles=cookbook:roc/plants/check_families/roles.txt (exit 1)
 check_families (Roc): 30 files; family 10, twin_name 1, unpaired_conversion 1
-cookbook:roc/plants/check_families/conversion/Span.roc:4: unpaired_conversion: `Span.metres` gives a `Span` beside `Span.to_metres`: name it `from_metres`, the way back
+cookbook:roc/plants/check_families/conversion/Span.roc:4: unpaired_conversion: `Span.metres` gives its own type beside `Span.to_metres`: name it `from_metres`, the way back
 cookbook:roc/plants/check_families/family/RailSighting.roc:4: family: `RailSighting` has no `in_view`, which 9 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
 cookbook:roc/plants/check_families/family_half/CatSighting.roc:3: family: `CatSighting` has no `depth_keys`, which 8 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not
 cookbook:roc/plants/check_families/family_half/GroundSighting.roc:3: family: `GroundSighting` has no `depth_keys`, which 8 of the 14 `*sighting` modules have: spell it alike, or name it in the module's doc to say why not

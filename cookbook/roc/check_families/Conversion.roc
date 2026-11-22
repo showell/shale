@@ -32,7 +32,7 @@ unpaired_finding : Declarations.ValueDeclared -> Finding
 unpaired_finding = |value| {
 	owner = value.owner
 	name = value.name
-	beside = "`${owner}.${name}` gives a `${owner}` beside `${owner}.to_${name}`"
+	beside = "`${owner}.${name}` gives its own type beside `${owner}.to_${name}`"
 	{
 		path: value.path,
 		line: value.line,
