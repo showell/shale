@@ -17,6 +17,14 @@
 --   shale cookbook:build_on_github.shale run=40518919602
 --   shale cookbook:build_on_github.shale ref=master wait=yes
 --
+-- **gh runs confined** (Landlock, c/host/host_confine.c), so its own
+-- configuration under the home, and the token in it, is closed to it. Its
+-- token comes from `token`, a file in a secrets mount (`keys:github-token`
+-- unless named), handed to each `gh` as GH_TOKEN by `run`'s `secrets`
+-- (scrubbed from what it prints), and its configuration folder
+-- (GH_CONFIG_DIR) is an empty one of the run's own below `config_in`, a
+-- writable mount's folder (`build:` unless named), removed at the end.
+--
 -- `repo` is showell/<repo> (default shale), `ref` the branch, tag or
 -- commit the workflow checks out (default the branch checked out here),
 -- `workflow` its file (default test.yml), `plants` c-full.yml's `plants`
@@ -36,6 +44,8 @@ const WAIT = arg("wait", "no")
 const RUN = arg("run", "")
 const EVERY = arg("every", 15)
 const PLANTS = arg("plants", "")
+const TOKEN = arg("token", "keys:github-token")
+const CONFIG_IN = arg("config_in", "build:")
 
 not_option("build_on_github", "repo", REPO)
 not_option("build_on_github", "ref", REF)
@@ -45,12 +55,20 @@ if WAIT ~= "yes" and WAIT ~= "no" then fail("build_on_github: `wait` is yes or n
 if PLANTS ~= "" and (PLANTS ~= "all" or WORKFLOW ~= "c-full.yml") then fail("build_on_github: `plants` is `all`, for workflow=c-full.yml alone, not " .. PLANTS .. " for " .. WORKFLOW) end
 const SLUG = "showell/" .. REPO
 
+-- gh's configuration folder, empty, the run's own.
+const GH_DIR = fresh_dir(CONFIG_IN, "gh-config")
+
 -- A `gh` program's output, trimmed; its failure fails the launch. `USED.n`
 -- counts them, for the summary.
 const USED = {n = 0}
 function gh(argv)
   USED.n = USED.n + 1
-  local r = run(argv, {tail = 40, timeout_ms = 60000})
+  local o = {tail = 40, timeout_ms = 60000}
+  if argv[1] == "gh" then
+    o.env = {GH_CONFIG_DIR = real(GH_DIR)}
+    o.secrets = {GH_TOKEN = TOKEN}
+  end
+  local r = run(argv, o)
   if not has_key(r, "code") or r.code ~= 0 then fail("build_on_github: `" .. join(argv, " ") .. "` failed:\n" .. r.out) end
   return trim(r.out)
 end
@@ -106,12 +124,12 @@ function verdict(v)
   elseif v.conclusion == "success" then
     -- c-full.yml's PASS says the tier's own verdict and wall time, from its log.
     if ends_with(v.path, "/c-full.yml") then
-      local r = run({"gh", "run", "view", v.id, "--repo", SLUG, "--log"}, {tail = 4, timeout_ms = 60000, re = "PASS full$|full tier: [0-9]+ s of wall time"})
+      local r = run({"gh", "run", "view", v.id, "--repo", SLUG, "--log"}, {tail = 4, timeout_ms = 60000, re = "PASS full$|full tier: [0-9]+ s of wall time", env = {GH_CONFIG_DIR = real(GH_DIR)}, secrets = {GH_TOKEN = TOKEN}})
       for l in lines(r.out) do print("   " .. sub(l, 1, 240)) end
     end
     print("PASS in " .. v.secs .. " s: " .. v.url)
   else
-    local r = run({"gh", "run", "view", v.id, "--repo", SLUG, "--log-failed"}, {tail = 40, timeout_ms = 60000})
+    local r = run({"gh", "run", "view", v.id, "--repo", SLUG, "--log-failed"}, {tail = 40, timeout_ms = 60000, env = {GH_CONFIG_DIR = real(GH_DIR)}, secrets = {GH_TOKEN = TOKEN}})
     for l in lines(r.out) do print("   " .. sub(l, 1, 240)) end
     print("FAIL (" .. v.conclusion .. ") in " .. v.secs .. " s: " .. v.url)
     fail("build_on_github: run " .. v.id .. " " .. v.conclusion)
@@ -120,6 +138,7 @@ end
 
 if RUN ~= "" then
   verdict(look(RUN))
+  remove_tree(GH_DIR)
 else
   local ref = REF
   if ref == "" then
@@ -140,4 +159,5 @@ else
     end
     verdict(v)
   end
+  remove_tree(GH_DIR)
 end

@@ -3,7 +3,9 @@
 -- host_write_gate.c, host_run_secrets.c, host_run.c, jobs.c, host_jobs.c).
 -- c/build.shale runs it, with the `build` mount that `use` below reads; see
 -- that file for the tiers and the blocks.
--- budget: steps=40000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
+-- (steps: 100M since 2026-11-19: its plants, 26 with the Landlock lane's
+-- and the unconfined gate's, each copy c/, about 1.75M steps a copy.)
+-- budget: steps=100000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
 
 use("build:lib.shale")
 
@@ -17,8 +19,56 @@ use("build:lib.shale")
 -- faults below planted in a copy of c/ (`run_plants`), each caught by its
 -- `aim` tests.
 
-const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 14, ["c/tests/host_builtins/test_run_guards.c"] = 12, ["c/tests/host_builtins/test_run_secret_args.c"] = 2}
+const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 14, ["c/tests/host_builtins/test_run_guards.c"] = 18, ["c/tests/host_builtins/test_run_secret_args.c"] = 2}
 const HOST_BUILTINS_PLANTS = {
+  {name = "an unconfined run is any program", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
+   old = "    bool git = named && str_eq(base, S(\"git\"));", new = "    bool git = true;"},
+  {name = "an unconfined ssh reaches any host", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
+   old = "    if (!host_unconfined_host(hosts, first)) return", new = "    if (0) return"},
+  {name = "an unconfined ssh takes any option", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
+   old = "    if (str_starts_with(first, S(\"-\"))) return", new = "    if (0) return"},
+  {name = "an unconfined copy reaches any host", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
+   old = "            if (!host_unconfined_host(hosts, host)) return", new = "            if (0) return"},
+  {name = "no hosts file is every host", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_copy_s_hosts_are_the_hosts_file_s_and_none_without_one",
+   old = "    size_t from = 0;\n    while (from <= hosts.len) {", new = "    if (hosts.len == 0) return true;\n    size_t from = 0;\n    while (from <= hosts.len) {"},
+  {name = "a hosts file's bad line is taken", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_copy_s_hosts_are_the_hosts_file_s_and_none_without_one",
+   old = "        if (!host_unconfined_host_line(line)) return", new = "        if (0) return"},
+  {name = "an unconfined scp takes any option", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
+   old = "        if (!host_unconfined_named(flags, at(argv, i).s)) return", new = "        if (0) return"},
+  {name = "an unconfined copy writes outside the mounts", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
+   old = "    if (mounts_in_folder(resolved, paths_root_of(&h->paths, pr))) return OK;", new = "    return OK;"},
+  {name = "an unconfined rsync takes any shell", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
+   old = "            if (i + 1 >= argv.len || !str_eq(at(argv, i + 1).s, S(\"ssh\"))) return", new = "            if (i + 1 >= argv.len) return"},
+  {name = "an unconfined rsync takes any option", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
+   old = "        if (!short_ok && !host_unconfined_named(longs, o)) return", new = "        if (0) return"},
+  {name = "an unconfined program takes any env", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
+   old = "        if (!(git && str_eq(k, S(\"GIT_TERMINAL_PROMPT\")))) return", new = "        if (0) return"},
+  {name = "zig-ast runs unconfined", file = "host_call.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "zig_ast_runs_confined_to_the_mounts",
+   old = "    if (host_zig_is_call(name) && !lh->zig->started) TRY(", new = "    if (0) TRY("},
+  {name = "a program runs unconfined", file = "spawn_child.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "a_program_writes_and_reads_only_where_the_mounts_allow",
+   old = "    if (c->confine_fd >= 0) {\n        if (prctl(", new = "    if (0) {\n        if (prctl("},
+  {name = "a read-only mount is a program's to write", file = "host_confine.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "a_program_writes_and_reads_only_where_the_mounts_allow",
+   old = "m->access == MOUNT_READ_ONLY ? LANDLOCK_READ_RIGHTS : handled;", new = "handled;"},
+  {name = "a secrets folder inside the root is a program's to read", file = "host_confine.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "a_program_by_a_secret_s_path_is_the_secrets_guard_s_before_git_is_asked",
+   old = "    if (leaks) {\n", new = "    if (0) {\n"},
+  {name = "a confined program cannot move a file between folders", file = "landlock.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "a_program_writes_and_reads_only_where_the_mounts_allow",
+   old = "    if (abi >= 2) all |= LANDLOCK_REFER;\n", new = ""},
   {name = "a script's NUL is made an OS string", file = "host.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "a_nul_in_an_argument_an_env_a_secrets_name_or_a_secret_is_refused_before_any_guard",
    old = "    if (os_str_of(s, out)) return OK;\n", new = "    out->s = s;\n    return OK;\n"},

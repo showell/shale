@@ -233,7 +233,10 @@ function self_test()
   local T = fresh_dir("scratch:", "remove_lane_self_test")
   local Tos = real(T)
   for d in {"lanes", "build", "tools", "memory"} do mkdir(T .. "/" .. d) end
-  create(T .. "/mounts", "cookbook = " .. real("cookbook:") .. " ro\nbuild = " .. Tos .. "/build\ntools = " .. Tos .. "/tools ro\nmemory = " .. Tos .. "/memory ro\n")
+  -- `main` holds the main checkout, whose .git the lanes' git reads: a
+  -- program runs confined to the root and the mounts, as the box's lanes
+  -- reach theirs through the `repos` mount.
+  create(T .. "/mounts", "cookbook = " .. real("cookbook:") .. " ro\nbuild = " .. Tos .. "/build\ntools = " .. Tos .. "/tools ro\nmemory = " .. Tos .. "/memory ro\nmain = " .. Tos .. "/main ro\n")
   local env = {SHALE_MOUNTS = Tos .. "/mounts"}
   local L = T .. "/lanes"
   local Los = real(L)

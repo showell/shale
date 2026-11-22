@@ -12,8 +12,8 @@
 // holds (c/shale.c's run, the tests' Ran) and hands the host (`Host.zig`),
 // never a static.
 //
-// Include spawn_argv.c, pgroup.c, spawn_child.c, zig_wire.c, paths.c and
-// builtins_change.c first.
+// Include spawn_argv.c, pgroup.c, landlock.c, spawn_child.c, zig_wire.c,
+// paths.c and builtins_change.c first.
 
 #include <errno.h>
 #include <fcntl.h>
@@ -68,6 +68,10 @@ typedef struct HostZigProc {
     bool late;
     // How long one request may wait on zig-ast.
     uint64_t answer_ms;
+    // The Landlock ruleset its start confines it to (host_call.c opens it
+    // before a Zig call that may start it, and closes it after), or -1: a
+    // unit test of zig-ast's wire alone.
+    int confine_fd;
 } HostZigProc;
 
 // Makes `*p` a run's zig-ast not yet started, which the run's first Zig call
@@ -78,6 +82,7 @@ static inline void host_zig_init(HostZigProc *p) {
     p->out_r = -1;
     p->err_r = -1;
     p->answer_ms = HOST_ZIG_ANSWER_MS;
+    p->confine_fd = -1;
 }
 
 static void host_zig_close(int *fd) {
@@ -343,6 +348,15 @@ static STATUS_MUST_USE Status host_zig_proc_of(HostZigProc *p, Paths *h, Run *r,
                          S("`"), who, S("`: no tools:zig-ast/bin/zig-ast, the program that reads Zig: zig-ast's own repository builds it (github.com/showell/zig-ast, `shale install.shale` in its checkout)"));
     }
     if (r->host_runs >= r->ctx.budgets.programs) return run_budget_stop(&r->ctx, pos, BUDGET_PROGRAMS);
+    // Its program may lie outside every mount (SHALE_ZIG_AST's), so the
+    // ruleset allows that one file read and run, before the fork.
+    if (p->confine_fd >= 0) {
+        char *exe_c = arena_cstr(a, exe);
+        if (exe_c == NULL) return run_values_oom(r, pos);
+        int abi = landlock_abi();
+        int le = abi < 0 ? -abi : landlock_allow(p->confine_fd, exe_c, LANDLOCK_EXECUTE | LANDLOCK_READ_FILE, landlock_handled(abi));
+        if (le != 0 && le != ENOENT && le != ENOTDIR) return run_failf(r, pos, CLASS_HOST, "`{s}`: Landlock refused zig-ast's own file a rule: {t}", S("`"), who, S("`: Landlock refused zig-ast's own file a rule: "), file_system_err_name(file_system_err_of(le)));
+    }
     r->host_runs++;
     char *argv_room[3] = {arena_cstr(a, exe), arena_cstr(a, os_str_own(S("--serve"))), NULL};
     SpawnCStrs argv = {argv_room, 3};
@@ -381,6 +395,7 @@ static STATUS_MUST_USE Status host_zig_proc_of(HostZigProc *p, Paths *h, Run *r,
         child.paths = paths;
         child.argv = argv_room;
         child.envp = environ;
+        child.confine_fd = p->confine_fd;
         child.report_w = at(why_s, 1);
         pid = fork();
         if (pid < 0) e = errno;

@@ -71,6 +71,10 @@ typedef struct {
     HostStartedJobs started;
     // The run's zig-ast (zig_ast.c), which the run's owner holds and ends.
     struct HostZigProc *zig;
+    // The run's own temporary folder, an OS path, made at its first program
+    // (host_confine.c), which every program gets as TMPDIR and may write;
+    // empty until then.
+    Str tmp;
 } Host;
 
 static void host_make(Host *h, SpawnStrs env, struct HostZigProc *zig) {
@@ -81,6 +85,7 @@ static void host_make(Host *h, SpawnStrs env, struct HostZigProc *zig) {
     h->records = HostRecords_make(h->paths.arena);
     h->reaper = S("");
     h->started = HostStartedJobs_make(h->paths.arena);
+    h->tmp = S("");
 }
 
 // ── the time line ──

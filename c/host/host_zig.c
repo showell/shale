@@ -956,6 +956,11 @@ static STATUS_MUST_USE Status host_zig_with_scratch(HostZigCall f, Paths *h, Hos
     return s;
 }
 
+// Whether `name` is a Zig call, one that may start the run's zig-ast.
+static bool host_zig_is_call(Str name) {
+    return str_eq(name, S("zig_rename")) || str_eq(name, S("zig_decls")) || str_eq(name, S("zig_move")) || str_eq(name, S("zig_imports")) || str_eq(name, S("zig_tokens"));
+}
+
 // The Zig call `name`, `*handled` false for a name that is none of them,
 // asked of the run's zig-ast `z`.
 static STATUS_MUST_USE Status host_zig_call(Paths *h, HostZigProc *z, Run *r, Pos pos, Str name, ConstValues args, Value *out, bool *handled) {

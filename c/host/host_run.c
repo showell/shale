@@ -7,8 +7,8 @@
 // budget, so a tail of 3 over a 10 GB log holds three lines; only the answer
 // goes to the values' arena.
 //
-// Include host.c, host_refusals.c, host_write_gate.c and host_run_secrets.c
-// first.
+// Include host.c, host_confine.c, host_refusals.c, host_unconfined.c,
+// host_write_gate.c and host_run_secrets.c first.
 
 // The most a `sleep` waits in one call: ten minutes.
 enum { HOST_SLEEP_MAX_MS = 600000 };
@@ -63,6 +63,9 @@ typedef struct {
     Value stage;
     // The program's niceness, 0 to 19; HOST_UNSET leaves `shale`'s.
     uint64_t nice;
+    // `unconfined = "tag: why"`: a `git push` run outside the Landlock
+    // confinement (host_run_unconfined); nil for none.
+    Value unconfined;
     // Decided from the keep options once they are read: then `head` and
     // `tail` are 0 unset, and `width` KEEP_WIDTH_DEFAULT.
     HostKeepMode keep;
@@ -126,6 +129,7 @@ static STATUS_MUST_USE Status host_read_opts(Run *r, Pos pos, const Value *v, Ru
     value_nil(&o->want);
     value_nil(&o->stdout_secret);
     value_nil(&o->stage);
+    value_nil(&o->unconfined);
     if (v->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`run`'s options are a map, not {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(value_type_name(v))));
     Table *m = v->as.table;
     if (m->kind == TABLE_LIST) return host_fail_plain(r, pos, CLASS_TYPE, S("`run`'s options are a map, `{{timeout_ms = ..., tail = ...}}`, not a list"));
@@ -176,11 +180,13 @@ static STATUS_MUST_USE Status host_read_opts(Run *r, Pos pos, const Value *v, Ru
             TRY(host_int_opt(r, pos, who, k, &x, &o->cpu_budget_ms));
         } else if (str_eq(k, S("stage"))) {
             TRY(host_str_value_opt(r, pos, who, k, &x, &o->stage));
+        } else if (str_eq(k, S("unconfined"))) {
+            TRY(host_str_value_opt(r, pos, who, k, &x, &o->unconfined));
         } else if (str_eq(k, S("nice"))) {
             TRY(host_int_opt(r, pos, who, k, &x, &o->nice));
             if (o->nice > 19) return host_fail(r, pos, CLASS_ARGUMENT, S("`run`'s `nice` is 0 to 19 (19 the lowest priority), not {d}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(run_num(r, x.as.integer))));
         } else {
-            return host_fail(r, pos, CLASS_ARGUMENT, S("`run` takes timeout_ms, re, not_re, nocase, before, after, head, tail, width, whole, log, cwd, stdin, env, secrets, secret_args, want, stdout_secret, secret_replace, cpu_budget_ms, stage and nice, not `{s}`"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(k)));
+            return host_fail(r, pos, CLASS_ARGUMENT, S("`run` takes timeout_ms, re, not_re, nocase, before, after, head, tail, width, whole, log, cwd, stdin, env, secrets, secret_args, want, stdout_secret, secret_replace, cpu_budget_ms, stage, nice and unconfined, not `{s}`"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(k)));
         }
     }
     if (o->timeout_ms == HOST_UNSET) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run` needs `timeout_ms`: how long the program may take is the script's to say"));
@@ -257,17 +263,20 @@ static STATUS_MUST_USE Status host_over_budget(Run *r, Pos pos, Str stage, uint6
 }
 
 // What `run` holds while a program runs, released on every way out (a
-// defer, in C): the stream's arena, the log and the secret's file.
+// defer, in C): the stream's arena, the log, the secret's file and the
+// Landlock ruleset.
 typedef struct {
     Arena stream;
     bool has_stream;
     int log_fd;
     HostSecretFile secret;
     bool has_secret;
+    int confine_fd;
 } HostRunHeld;
 
 static void host_run_release(HostRunHeld *held) {
     if (held->has_secret) host_secret_discard(&held->secret);
+    host_confine_close(&held->confine_fd);
     if (held->log_fd >= 0) close(held->log_fd);
     held->log_fd = -1;
     if (held->has_stream) arena_deinit(&held->stream);
@@ -322,7 +331,8 @@ static STATUS_MUST_USE Status host_run_answer(Run *r, Pos pos, SpawnStrs argv, c
     return OK;
 }
 
-// The record of a program run: `run ARGV[ ENV] [(want: W)] -> ENDED[ CODE]
+// The record of a program run: `run ARGV[ ENV] [(want: W)] [(unconfined:
+// U)] -> ENDED[ CODE]
 // (MS ms)[, stdout to ...]`.
 static STATUS_MUST_USE Status host_run_record(Host *h, Run *r, Pos pos, Str joined, Str shown_env, const RunOpts *o, const SpawnOutcome *out, Str secret_said) {
     Buf b = buf_make(r->ctx.values);
@@ -332,6 +342,9 @@ static STATUS_MUST_USE Status host_run_record(Host *h, Run *r, Pos pos, Str join
     if (s == OK && host_given(&o->want)) s = buf_lit(&b, " (want: ");
     if (s == OK && host_given(&o->want)) s = buf_str(&b, o->want.as.string);
     if (s == OK && host_given(&o->want)) s = buf_byte(&b, ')');
+    if (s == OK && host_given(&o->unconfined)) s = buf_lit(&b, " (unconfined: ");
+    if (s == OK && host_given(&o->unconfined)) s = buf_str(&b, o->unconfined.as.string);
+    if (s == OK && host_given(&o->unconfined)) s = buf_byte(&b, ')');
     if (s == OK) s = buf_lit(&b, " -> ");
     if (s == OK) s = buf_str(&b, host_ended_word(out->ended));
     if (s == OK && out->code != SPAWN_NO_CODE) s = buf_byte(&b, ' ');
@@ -495,6 +508,7 @@ static STATUS_MUST_USE Status host_run_spawn(Run *r, Pos pos, const SpawnSpec *s
     case SPAWN_NOT_RUNNABLE: return host_fail(r, pos, CLASS_HOST, S("`run`: `{s}` is there but cannot be run (its permissions, or not a program)"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(argv0)));
     case SPAWN_NO_CWD: return host_fail(r, pos, CLASS_ARGUMENT, S("`run`: its cwd is not a folder that can be entered: {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(file_system_err_name(file_system_err_of(outcome->err)))));
     case SPAWN_REFUSED: return host_fail(r, pos, CLASS_HOST, S("`run`: the program could not be started (a pipe, a fork or a pidfd refused): {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(file_system_err_name(file_system_err_of(outcome->err)))));
+    case SPAWN_NOT_CONFINED: return host_fail(r, pos, CLASS_HOST, S("`run`: the kernel refused the program its Landlock confinement, so it was not run: {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(file_system_err_name(file_system_err_of(outcome->err)))));
     }
     if (host_scrub_finish(&s->scrub) != OK) return host_stream_refused(r, pos, sa, most);
     return OK;
@@ -600,6 +614,15 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     spec.stdin_bytes = has_stdin ? &stdin_bytes : NULL;
     if (secret) host_secret_as_stdout(&held->secret, &spec);
     if (o->nice != HOST_UNSET) spec.nice = (int)o->nice;
+    // The confinement is the mounts' alone: a `want` lets a refused program
+    // run, and never widens what it may touch. Only `unconfined`, for a git
+    // push alone, runs a program outside it.
+    if (host_given(&o->unconfined)) {
+        TRY(host_run_unconfined(h, r, pos, argv, &o->env, o->unconfined.as.string, cwd, &spec.argv));
+    } else {
+        TRY(host_confine_open(h, r, pos, S("run"), &held->confine_fd));
+    }
+    spec.confine_fd = held->confine_fd;
     spec.timeout_ms = o->timeout_ms;
     SpawnOutcome outcome;
     TRY(host_run_spawn(r, pos, &spec, &sinks, &held->stream, most, &outcome));
@@ -649,6 +672,7 @@ static STATUS_MUST_USE Status host_run_program(Host *h, Run *r, Pos pos, ConstVa
     memset(&held, 0, sizeof held);
     held.log_fd = -1;
     held.secret.file.fd = -1;
+    held.confine_fd = -1;
     Status s = host_run_spawned(h, r, pos, argv, &o, &held, out);
     host_run_release(&held);
     return s;

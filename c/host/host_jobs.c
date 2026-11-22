@@ -298,10 +298,16 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     Str record_os = S("");
     TRY(host_job_place(h, r, pos, o.log, &log_os, &record_os));
 
+    // The reaper and its job run confined, as `run`'s program does; a
+    // `want` widens nothing.
+    int confine_fd = -1;
+    TRY(host_confine_open(h, r, pos, S("job_start"), &confine_fd));
     r->host_runs++;
     JobRecord rec;
     // The reaper is the CLI's own path, and the log and record CheckedPaths'.
-    switch (jobs_launch(a, os_str_own(h->reaper), os_str_own(record_os), os_str_own(log_os), cwd_os, program, argv, env, &rec)) {
+    JobsLaunched launched = jobs_launch(a, os_str_own(h->reaper), os_str_own(record_os), os_str_own(log_os), cwd_os, program, argv, env, confine_fd, &rec);
+    host_confine_close(&confine_fd);
+    switch (launched) {
     case JOBS_LAUNCHED: break;
     case JOBS_OUT_OF_MEMORY: return run_values_oom(r, pos);
     case JOBS_SPAWN: return host_fail_plain(r, pos, CLASS_HOST, S("`job_start`: the reaper could not be forked"));

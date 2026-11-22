@@ -34,6 +34,7 @@
 #include "host/undo.c"
 #include "host/spawn_argv.c"
 #include "host/pgroup.c"
+#include "host/landlock.c"
 #include "host/spawn_child.c"
 #include "host/spawn.c"
 #include "host/keep.c"
@@ -41,7 +42,9 @@
 #include "host/job_record.c"
 #include "host/jobs.c"
 #include "host/host.c"
+#include "host/host_confine.c"
 #include "host/host_refusals.c"
+#include "host/host_unconfined.c"
 #include "host/host_write_gate.c"
 #include "host/host_run_secrets.c"
 #include "host/host_run.c"
@@ -782,6 +785,8 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     // The run's zig-ast, if a Zig call started one, ends with the run, before
     // any report line, so no early return below can skip it.
     host_zig_stop(&zig);
+    // The run's temporary folder goes with it, unless a job may use it.
+    host_confine_tmp_remove(&lh, &host_arena);
     // A stdout that refuses the output does not end the run's work: the
     // report, the jobs' end and the undo still come, then the failure.
     Str out_failed = write_stdout(buf_view(&r.out));

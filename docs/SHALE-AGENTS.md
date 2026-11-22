@@ -234,6 +234,48 @@ has none of it):
   refused by its own name and by the name of the file it reaches, every
   link followed (`tool`, which is `bash`). An `env` that sets PATH, an
   `LD_` name, BASH_ENV or ENV needs a want too: each picks what runs.
+  **A program runs confined to the mounts** (Landlock, Linux 6.2 or
+  later; `c/host/host_confine.c` holds the list): it may write only under
+  the root and the mounts without ` ro`; it may read and run only those, the
+  read-only mounts and the system's folders (`/usr`, `/etc`, `/proc`,
+  `/sys`, `/bin`, `/lib*`, the resolver's `/run/systemd/resolve`), plus
+  `/dev/null`, `/dev/zero`, `/dev/full`, the pseudo-terminals and
+  `/dev/urandom`, and a few named files (git's `~/.gitconfig` and
+  `~/.config/git/` config, ignore and attributes, the mounts file and the
+  user prelude); a secrets mount's folder is in no rule. Everything it
+  starts is held the same, for good. Each program gets the run's own
+  temporary folder as TMPDIR (below the inherited TMPDIR, else `/tmp`),
+  which it may write and which goes when the run ends (unless the run
+  started a job); `/tmp` itself and the home's caches (`~/.cache`) are
+  outside it, so every program gets `XDG_CACHE_HOME` and
+  `ZIG_GLOBAL_CACHE_DIR` set to `build:cache` (the `build` mount's `cache`
+  folder, or the run's temporary folder's when no writable mount is named
+  `build`), and each of the three unless the script's `env` sets it. ssh
+  reads `~/.ssh/known_hosts` and `~/.ssh/config`, and no key file: a
+  confined ssh authenticates only through an agent (`SSH_AUTH_SOCK` is
+  passed on). **`run`'s `unconfined = "tag: why"`** runs four shapes past
+  the rules, each recorded as `(unconfined: ...)`
+  (`c/host/host_unconfined.c`): a `git push` (no `-c` but `color.ui=never`,
+  no `--receive-pack` or `--exec`, its hooks, fsmonitor and credential
+  helpers off), and a deploy's `ssh`, `scp` and `rsync` to a host of the
+  **hosts file** alone: `~/.config/shale/hosts`, beside the mounts file (or
+  the file `SHALE_HOSTS` names), one `user@host` a line, `#` lines and blank
+  ones skipped (`deploy@example.com`). Shale ships no host: no file, or no
+  line, is no host allowed; a line that is not `user@host` stops the run
+  naming it. A host is written as in the file (`user@host:path` in a
+  copy): ssh with no option before its host, scp with `-q`, `-r` and `-p`
+  alone, rsync with its listed options and `-e ssh` alone of a shell, no
+  daemon module, and each local path under the root or a mount (a written
+  one under a writable mount). None takes an `env` (git but
+  GIT_TERMINAL_PROMPT). gh's configuration is closed too: hand it
+  `GH_TOKEN` through `secrets` and an empty `GH_CONFIG_DIR`, as
+  `cookbook/build_on_github.shale` does. A `want` never widens it. A program it
+  refuses gets EACCES from the call it made, so a script sees the
+  program's own words, `Permission denied`, and its exit code: a refusal
+  is a gap to name in host_confine.c on purpose. A kernel without Landlock
+  (or older than ABI 3) runs no program, and nor does a secrets mount
+  whose folder lies inside the root or another mount: no rule could hide
+  it.
   A program runs in a process group of its own, and when it exits, what it
   left running there gets TERM, 2 seconds, then KILL before `run` returns:
   a server meant to outlive the call is a job (`job_start`, below).

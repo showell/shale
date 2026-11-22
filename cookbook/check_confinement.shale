@@ -1,0 +1,25 @@
+-- check_confinement.shale: whether a program can run here, confined to this
+-- run's root and mounts (Landlock, c/host/host_confine.c), with nothing
+-- else done. It runs `true`, which touches no file, and says PASS, or FAIL
+-- with the stop that refused it: a kernel without Landlock or older than
+-- ABI 3, or a secrets mount whose folder lies inside the root or another
+-- mount (a rule could not hide it). That stop names neither folder, so the
+-- verdict is safe to share. Run it from the root you mean to work in, with
+-- the `shale` you mean to judge:
+--
+--   shale cookbook:check_confinement.shale
+--
+-- A pass says programs start; what each one then needs that the rules
+-- leave out (a cache, a key file) is its own refusal, EACCES, when it runs.
+
+function try_true()
+  return run({"true"}, {timeout_ms = 10000, tail = 1})
+end
+
+local r = attempt(try_true)
+if r.ok then
+  print("PASS: a program runs here, confined to the root and the mounts")
+else
+  print("FAIL: " .. r.error)
+  fail("check_confinement: no program can run here")
+end

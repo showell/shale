@@ -25,8 +25,8 @@
 // does nothing, so a write to a closed stdin is an error, not a death, and a
 // program still starts with SIGPIPE's default.
 //
-// Include spawn_argv.c, pgroup.c and spawn_child.c first: spawn_argv.c's
-// strings and pipes are jobs.c's too.
+// Include spawn_argv.c, pgroup.c, landlock.c and spawn_child.c first:
+// spawn_argv.c's strings and pipes are jobs.c's too.
 
 #ifndef _GNU_SOURCE
 #error "spawn.c needs _GNU_SOURCE defined before the first include: pipe2, wait4, signalfd and syscall"
@@ -75,6 +75,9 @@ typedef struct {
     // exec (`run`'s `nice`), so no `nice` program wraps it; SPAWN_NICE_UNSET
     // leaves `shale`'s own.
     int nice;
+    // The Landlock ruleset the program is confined to (spawn_child.c), or -1
+    // for none: only a unit test of the spawn alone gives none.
+    int confine_fd;
     // When the program's group gets TERM.
     uint64_t timeout_ms;
     // The time between TERM and KILL.
@@ -89,6 +92,7 @@ static void spawn_spec_default(SpawnSpec *s) {
     s->stdout_fd = -1;
     s->file_max = SPAWN_UNLIMITED;
     s->nice = SPAWN_NICE_UNSET;
+    s->confine_fd = -1;
     s->grace_ms = 2000;
     s->drain_ms = 200;
 }
@@ -122,8 +126,9 @@ typedef struct {
     // barely moves this, so a budget can judge it.
     uint64_t cpu_ms;
     // Why a program did not start, when spawn_run said SPAWN_NOT_RUNNABLE,
-    // SPAWN_NO_CWD or SPAWN_REFUSED: the errno of the call that failed (the
-    // exec, the `chdir`, or the pipe, fork, signalfd or pidfd). 0 otherwise.
+    // SPAWN_NO_CWD, SPAWN_REFUSED or SPAWN_NOT_CONFINED: the errno of the
+    // call that failed (the exec, the `chdir`, the pipe, fork, signalfd or
+    // pidfd, or the Landlock restrict). 0 otherwise.
     int err;
 } SpawnOutcome;
 
@@ -140,6 +145,9 @@ typedef enum {
     SPAWN_NO_CWD,
     // The kernel refused a pipe, a fork or a pidfd.
     SPAWN_REFUSED,
+    // The kernel refused the child its Landlock confinement, so the program
+    // was not run.
+    SPAWN_NOT_CONFINED,
     // The sink returned STOP; the program's group was killed and reaped
     // first. The sink's own state says why.
     SPAWN_SINK_STOPPED,
@@ -452,6 +460,10 @@ static SpawnResult spawn_parent(const SpawnSpec *spec, SpawnSink sink, pid_t pid
     if (n == (ssize_t)sizeof why) {
         int status = 0;
         spawn_reap(pid, &status, NULL);
+        if (why >= SPAWN_CHILD_NOT_CONFINED) {
+            outcome->err = (int)(why - SPAWN_CHILD_NOT_CONFINED);
+            return SPAWN_NOT_CONFINED;
+        }
         if (why >= SPAWN_CHILD_NO_CWD) {
             outcome->err = (int)(why - SPAWN_CHILD_NO_CWD);
             return SPAWN_NO_CWD;
@@ -616,6 +628,7 @@ static SpawnResult spawn_started(const SpawnSpec *spec, SpawnSink sink, SpawnFds
     child.file_max = spec->file_max;
     child.nice = spec->nice;
     child.cwd = cwd;
+    child.confine_fd = spec->confine_fd;
     child.paths = paths;
     child.argv = argv;
     child.envp = envp;

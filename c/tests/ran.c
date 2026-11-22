@@ -24,6 +24,7 @@
 #include "../host/undo.c"
 #include "../host/spawn_argv.c"
 #include "../host/pgroup.c"
+#include "../host/landlock.c"
 #include "../host/spawn_child.c"
 #include "../host/spawn.c"
 #include "../host/keep.c"
@@ -31,7 +32,9 @@
 #include "../host/jobs.c"
 #include "../host/swap_file.c"
 #include "../host/host.c"
+#include "../host/host_confine.c"
 #include "../host/host_refusals.c"
+#include "../host/host_unconfined.c"
 #include "../host/host_write_gate.c"
 #include "../host/host_run_secrets.c"
 #include "../host/host_run.c"
@@ -261,6 +264,10 @@ static void ran_free(Ran *x) {
     host_zig_stop(&x->zig);
     regex_cache_deinit(&x->r.patterns);
     ran_wait_reapers(x);
+    // Every job's reaper has ended, so no job uses the run's temporary
+    // folder any more.
+    x->lh.started.len = 0;
+    host_confine_tmp_remove(&x->lh, &x->host);
     FileSystemErr del = file_system_delete_tree(&x->host, os_str_own(x->dir));
     if (del != FILE_SYSTEM_OK) {
         Str why = file_system_err_name(del);
