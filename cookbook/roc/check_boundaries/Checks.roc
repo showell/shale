@@ -5,12 +5,12 @@
 import lib.Finding
 import lib.Forest
 import lib.Headers
+import lib.RocTypes
 import lib.Text
 import lib.Tree
 import Functions
 import References
 import Source
-import Types
 
 Checks := [].{
 
@@ -27,7 +27,7 @@ Checks := [].{
 		checked : Set(Str),
 		headers : Dict(Str, { dictated : Set(Str), exposed : Set(Str) }),
 		exposed_modules : Dict(Str, List(Str)),
-		typing : Types.Typing,
+		typing : RocTypes.Typing,
 		files_read : Str,
 		is_dead_by_production : Bool,
 	}
@@ -145,7 +145,7 @@ bool_params = |judging, judged| {
 	for param in function.params {
 		$number = $number + 1
 		node = Forest.node(judging.forest, param)
-		is_bool = node.kind == "p-ident" and Types.pattern_type(judging.typing, function.path, node) == Ok("Bool")
+		is_bool = node.kind == "p-ident" and RocTypes.type_at(judging.typing, function.path, node) == Ok("Bool")
 		if is_bool {
 			var $literal_calls = []
 			for call in every {

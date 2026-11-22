@@ -28,6 +28,7 @@ import lib.Forest
 import Functions
 import lib.Headers
 import References
+import lib.RocTypes
 import SelfTest
 import lib.Text
 import lib.Tree
@@ -42,15 +43,15 @@ main! = |{}| {
 	checked = Set.from_list(checked_files)
 	test_paths = Set.from_list(globbed!(asked.tests))
 	types = if asked.use_types {
-		roc = Types.roc_bin!(asked.self_test)
+		roc = Types.roc_bin!("check_boundaries", asked.self_test)
 		exempt = if asked.self_test {
 			Set.from_list(checked_files.drop_if(|path| path.starts_with(SelfTest.typed_plants)))
 		} else {
 			Set.empty()
 		}
-		Types.gather!({ root: asked.root, roc, paths: checked_files, exempt })
+		Types.gather!({ who: "check_boundaries", kind: Patterns, root: asked.root, roc, paths: checked_files, exempt })
 	} else {
-		{ typing: Types.none, unreached: [] }
+		{ typing: RocTypes.no_types, unreached: [] }
 	}
 	read = read_files!(checked_files.concat(client_files))
 	forest = Forest.join(read.parsed)

@@ -30,6 +30,7 @@ import Fallbacks
 import lib.Finding
 import lib.Forest
 import OptionalTag
+import lib.RocTypes
 import SelfTest
 import lib.Text
 import Types
@@ -64,7 +65,7 @@ main! = |{}| {
 		Shale.glob!(glob)
 	}
 	types = if use_types {
-		roc = Types.roc_bin!(self_test)
+		roc = Types.roc_bin!("check_errors", self_test)
 		# The self-test's untyped plants are exempt from being reached by its
 		# root.
 		exempt = if self_test {
@@ -72,9 +73,9 @@ main! = |{}| {
 		} else {
 			Set.empty()
 		}
-		Types.gather!({ root, roc, paths, exempt })
+		Types.gather!({ who: "check_errors", kind: Expressions, root, roc, paths, exempt })
 	} else {
-		{ typing: { on: Bool.False, real: Dict.empty(), exprs: Dict.empty() }, unreached: [] }
+		{ typing: RocTypes.no_types, unreached: [] }
 	}
 	var $parsed = []
 	var $refused = []

@@ -17,13 +17,9 @@ import lib.RocTypes
 
 Fallbacks := [].{
 
-	## The types of the files reached by a root of the types: each file's real
-	## path, and each expression's type by its file's real path, then its
-	## region (RocTypes.span_of).
-	Typing : { on : Bool, real : Dict(Str, Str), exprs : Dict(Str, Dict(Str, Str)) }
-
-	## The findings, in the order of the `??`s.
-	judge! : Forest, Fallbacks.Typing => List(Finding)
+	## The findings, in the order of the `??`s, with the expressions' types
+	## when the run has them.
+	judge! : Forest, RocTypes.Typing => List(Finding)
 	judge! = |forest, typing| {
 		var $findings = []
 		$at : U64
@@ -49,9 +45,9 @@ Fallbacks := [].{
 Pair : { lookup : U64, fallback : U64, path : Str }
 
 ## What one `??` is: its set_fallback, its placeholder, its number_fallback.
-judge_pair! : Forest, Fallbacks.Typing, Pair => List(Finding)
+judge_pair! : Forest, RocTypes.Typing, Pair => List(Finding)
 judge_pair! = |forest, typing, pair| {
-	has_types = typing.on and typing.real.contains(pair.path)
+	has_types = typing.real.contains(pair.path)
 	lookup_error = if has_types {
 		lookup_error_of!(forest, typing, pair)
 	} else {
@@ -98,7 +94,7 @@ judge_pair! = |forest, typing, pair| {
 
 ## The tag union the lookup's `Try` fails with, such as `[OutOfBounds]`, or
 ## `""` when the checker gave it no such type.
-lookup_error_of! : Forest, Fallbacks.Typing, Pair => Str
+lookup_error_of! : Forest, RocTypes.Typing, Pair => Str
 lookup_error_of! = |forest, typing, pair|
 	match type_at(forest, typing, { path: pair.path, at: pair.lookup }) {
 		Ok(lookup_type) =>
@@ -110,17 +106,8 @@ lookup_error_of! = |forest, typing, pair|
 	}
 
 ## The checker's type of the expression at a place in a file it reached.
-type_at : Forest, Fallbacks.Typing, { path : Str, at : U64 } -> Try(Str, [NoType])
-type_at = |forest, typing, spot| {
-	node = Forest.node(forest, spot.at)
-	real = typing.real.get(spot.path) ?? ""
-	span = RocTypes.span_of({ line: node.line, column: node.column, end_line: node.end_line, end_column: node.end_column })
-	by_span = typing.exprs.get(real) ?? Dict.empty()
-	match by_span.get(span) {
-		Ok(written) => Ok(written)
-		Err(_) => Err(NoType)
-	}
-}
+type_at : Forest, RocTypes.Typing, { path : Str, at : U64 } -> Try(Str, [NoType])
+type_at = |forest, typing, spot| RocTypes.type_at(typing, spot.path, Forest.node(forest, spot.at))
 
 ## Whether the expressions at two places are the same value written twice
 ## (`board`, `r.b`): the same kinds, names and fields, all the way down.

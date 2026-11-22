@@ -26,7 +26,9 @@ app [main!] { lib: "../lib/main.roc", pf: platform "../../../roc_platform/platfo
 
 import pf.Shale
 import lib.Finding
+import lib.RocTypes
 import lib.Text
+import lib.Tree
 import DocNames
 import Facts
 import Judge
@@ -73,16 +75,16 @@ main! = |{}| {
 		Shale.glob!(glob)
 	}
 	types = if use_types {
-		roc = Types.roc_bin!(self_test)
+		roc = Types.roc_bin!("hunt_names", self_test)
 		# The self-test's untyped plants are imported by no root.
 		exempt = if self_test {
 			Set.from_list(Shale.glob!("${plants}*.roc"))
 		} else {
 			Set.empty()
 		}
-		Types.gather!({ root, roc, paths, exempt })
+		Types.gather!({ who: "hunt_names", kind: Patterns, root, roc, paths, exempt })
 	} else {
-		{ typing: Types.none, unreached: [] }
+		{ typing: RocTypes.no_types, unreached: [] }
 	}
 	parsed = parse!(paths)
 	read = definitions_of(parsed.files, types.typing)
@@ -159,16 +161,40 @@ Asked : {
 
 ## Every file's definitions, in file order, and the facts their reading
 ## gathers.
-definitions_of : List(Reading.FileRead), Types.Typing -> { definitions : List(Reading.Definition), facts : Facts.Gathered }
+definitions_of : List(Reading.FileRead), RocTypes.Typing -> { definitions : List(Reading.Definition), facts : Facts.Gathered }
 definitions_of = |files, typing|
 	files.fold(
 		{ definitions: [], facts: Facts.none },
 		|so_far, file| {
-			pattern_types = Types.pattern_types(typing, file.path, file.nodes)
+			pattern_types = pattern_types_of(typing, file.path, file.nodes)
 			read = Reading.file_definitions(file, pattern_types)
 			{ definitions: so_far.definitions.concat(read.definitions), facts: Facts.joined(so_far.facts, read.facts) }
 		},
 	)
+
+## The checker's type of each plain-name pattern of the file at `path`, by
+## its node's place: none when no root reached the file.
+pattern_types_of : RocTypes.Typing, Str, List(Tree.Node) -> Dict(U64, Str)
+pattern_types_of = |typing, path, nodes| {
+	if !(typing.real.contains(path)) {
+		return Dict.empty()
+	}
+	var $typed = Dict.empty()
+	$place : U64
+	var $place = 0
+	for node in nodes {
+		$place = $place + 1
+		if node.kind == "p-ident" {
+			match RocTypes.type_at(typing, path, node) {
+				Ok(written) => {
+					$typed = $typed.insert($place, written)
+				}
+				Err(NoType) => {}
+			}
+		}
+	}
+	$typed
+}
 
 ## Every finding, in the Shale original's order: each definition's, each
 ## file's `where` clauses and bindings, each file's docs, the type and

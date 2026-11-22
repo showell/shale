@@ -1,10 +1,13 @@
 ## roc-types' output read: the type Roc's own checker gives each expression
 ## and pattern of an app's modules, by region, in version 1 of the format
-## (https://github.com/showell/roc-types, its FORMAT.md), as
-## cookbook/roc/types.shale reads it, refusals worded alike. Running
-## roc-types, and holding its pin to the tree's Roc, are effects, so they
-## stay in the recipe that asks.
+## (https://github.com/showell/roc-types, its FORMAT.md), refusals worded as
+## the Shale libraries worded them; the types of several apps joined, and a
+## node's type found; and the paths of the Roc and the roc-types a pin names.
+## Running roc-types, and holding its pin to the tree's Roc, are effects, so
+## they stay in the recipe that asks: a small Types.roc in each of
+## check_errors, hunt_names and check_boundaries, the same file in all three.
 import Text
+import Tree
 
 RocTypes := [].{
 
@@ -125,6 +128,143 @@ RocTypes := [].{
 			Err("${who}: types=1 needs root=, an app (or several, `root=a.roc,b.roc`) importing the files of the glob: roc-types reads an app, and a type module only through one")
 		} else {
 			Ok(apps)
+		}
+	}
+
+	## The modules of an output whose pin was read, from a run of roc-types
+	## on the app `root` that ended with `code`, or why they can't be had:
+	## roc-types failed, or a line is not of the format.
+	modules_ran : List(Str), I64, Str -> Try(RocTypes.Modules, Str)
+	modules_ran = |output_lines, code, root|
+		if code == 0 {
+			modules_of(output_lines)
+		} else {
+			ended = if code < 0 {
+				"did not exit"
+			} else {
+				"exited ${code.to_str()}"
+			}
+			Err("`roc_types`: roc-types ${root} ${ended}, what it said:\n${said_on_failure(output_lines)}")
+		}
+
+	## The refusal of a roc-types built from Roc `pin`, run on the app `root`
+	## of a tree built with the Roc at `roc`.
+	another_compiler : Str, Str, Str -> Str
+	another_compiler = |pin, root, roc| {
+		another = "its types would be another compiler's. Install the roc-types of the tree's pin (https://github.com/showell/roc-types), or move the tree to ${pin}"
+		"`roc_types`: roc-types reads Roc ${pin}, and ${root}'s tree is built with ${roc}: ${another}"
+	}
+
+	## The types a run keeps: each file's real path, by the path the run
+	## names it by, for the files some app reached; and the checker's type of
+	## each node of the kind asked for, by its module's real path, then by its
+	## region (RocTypes.span_of).
+	Typing : {
+		real : Dict(Str, Str),
+		by_module : Dict(Str, Dict(Str, Str)),
+	}
+
+	## The nodes whose types a run keeps: the expressions (check_errors'), or
+	## the patterns, whose type is a definition's or a parameter's.
+	Kind : [Expressions, Patterns]
+
+	## No types, for a run without them.
+	no_types : RocTypes.Typing
+	no_types = { real: Dict.empty(), by_module: Dict.empty() }
+
+	## The types of an app's modules added to those of the apps before it: a
+	## module an earlier app reached keeps that app's types, and where nodes
+	## share a region, the outermost's type is kept.
+	joined : Dict(Str, Dict(Str, Str)), RocTypes.Modules, RocTypes.Kind -> Dict(Str, Dict(Str, Str))
+	joined = |by_module, modules, kind| {
+		wanted = match kind {
+			Expressions => "expr"
+			Patterns => "pat"
+		}
+		var $by_module = by_module
+		for path in modules.paths {
+			if !($by_module.contains(path)) {
+				var $by_span = Dict.empty()
+				for record in modules.records.get(path) ?? [] {
+					if record.kind == wanted and !($by_span.contains(record.span)) {
+						$by_span = $by_span.insert(record.span, record.written)
+					}
+				}
+				$by_module = $by_module.insert(path, $by_span)
+			}
+		}
+		$by_module
+	}
+
+	## The typing of the files a run names, each with its real path, from the
+	## types the apps `roots` reached; and a line for each file no app
+	## reached, except those in `exempt`.
+	typing_of : { by_module : Dict(Str, Dict(Str, Str)), named : List({ path : Str, real : Str }), exempt : Set(Str), roots : List(Str) } -> { typing : RocTypes.Typing, unreached : List(Str) }
+	typing_of = |gathered| {
+		var $real = Dict.empty()
+		var $unreached = []
+		for file in gathered.named {
+			if gathered.by_module.contains(file.real) {
+				$real = $real.insert(file.path, file.real)
+			} else if !(gathered.exempt.contains(file.path)) {
+				$unreached = $unreached.append("not reached by ${Str.join_with(gathered.roots, ",")}: ${file.path}")
+			}
+		}
+		{ typing: { real: $real, by_module: gathered.by_module }, unreached: $unreached }
+	}
+
+	## The checker's type of the node `node` of the file the run names
+	## `path`, when an app reached the file and the checker typed that
+	## region.
+	type_at : RocTypes.Typing, Str, Tree.Node -> Try(Str, [NoType])
+	type_at = |typing, path, node| {
+		span = span_of({ line: node.line, column: node.column, end_line: node.end_line, end_column: node.end_column })
+		match typing.real.get(path) {
+			Ok(real) => {
+				by_span = typing.by_module.get(real) ?? Dict.empty()
+				match by_span.get(span) {
+					Ok(written) => Ok(written)
+					Err(_) => Err(NoType)
+				}
+			}
+			Err(_) => Err(NoType)
+		}
+	}
+
+	## The pin every recipe's self-test runs, out of the text of
+	## cookbook/roc/pinned.shale, its `SELF_TEST_PIN` and the one home of it.
+	self_test_pin : Str -> Try(Str, [NoPin])
+	self_test_pin = |pinned| {
+		for after in pinned.split_on("\nconst SELF_TEST_PIN = \"").drop_first(1) {
+			quoted = after.split_on("\"")
+			pin = quoted.first() ?? ""
+			if quoted.len() > 1 and pin != "" {
+				return Ok(pin)
+			}
+		}
+		Err(NoPin)
+	}
+
+	## The Roc a pin names, as installed under the `tools` mount.
+	roc_of_pin : Str -> Str
+	roc_of_pin = |pin| "tools:roc-${pin}/roc"
+
+	## The roc-types run when none is installed for the tree's pin.
+	default_checker : Str
+	default_checker = "tools:roc-types/bin/roc-types"
+
+	## The roc-types installed for the pin of the Roc at the OS path `roc`
+	## (`.../roc-<pin>/roc`), as compilers sit side by side, when that path
+	## names a pin.
+	pinned_checker : Str -> Try(Str, [NoPin])
+	pinned_checker = |roc| {
+		folders = roc.drop_suffix("/roc").split_on("/")
+		folder = folders.last() ?? ""
+		pin = folder.drop_prefix("roc-")
+		if roc.ends_with("/roc") and folders.len() > 1 and folder.starts_with("roc-") and pin != "" {
+			Ok("tools:roc-types-${pin}/bin/roc-types")
+		} else {
+			Err(NoPin)
 		}
 	}
 }
