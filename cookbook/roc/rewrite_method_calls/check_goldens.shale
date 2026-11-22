@@ -1,0 +1,246 @@
+-- cookbook/roc/rewrite_method_calls/check_goldens.shale: rewrite_method_calls
+-- (the Roc script beside this, rewrite_method_calls.roc, through its launcher
+-- cookbook/roc/rewrite_method_calls.shale) held to its goldens, goldens.txt
+-- beside this, line for line and exit code for exit code. From the shale
+-- checkout's root:
+--
+--   shale cookbook/roc/rewrite_method_calls/check_goldens.shale self_test=1
+--   shale cookbook/roc/rewrite_method_calls/check_goldens.shale write=1
+--
+-- Each case but `self_test=1` runs in a fresh copy of the plants
+-- (cookbook/roc/plants/rewrite_method_calls/), with a `roc-version` naming the
+-- self-tests' pin (cookbook/roc/pinned.shale), so the run reads the tree's
+-- Roc as a repository's root gives it, and its paths are the copy's own. The
+-- cases are a run of each plant, `apply=1` and dry, with and without the
+-- types, `trials=0`, `peers=undo`, `types_from=` (roc-types' output on the
+-- root, written into the copy first), several plants at once, `from=`, each
+-- refusal of an argument, the stops (no root, a root that is no app, a tree
+-- pinned to another Roc than its roc-types', no `roc-version`, a root that
+-- fails `roc check` before any rewrite), and `self_test=1`. After a case, each
+-- file of the copy that differs from its plant is held whole (`--- path` and
+-- its lines, a CR shown as `<CR>`): the files a rewrite leaves, and a trial
+-- put back. The goldens were written from the Shale original's output on
+-- them, and the port matched it on copies of other repositories' trees too
+-- (roc-chat, projects of roc-apps, roc-screensaver, dry and with `apply=1`,
+-- every file alike), which are left out because their code moves. `write=1`
+-- writes the goldens again from the launcher, for a change meant to move
+-- them: `git diff` shows what moved.
+--
+-- What is held: the exit code, and the output with each runner's own lines
+-- left out: Shale's `──` report lines (budgets, used, steps, time, the
+-- platform's lock), the `called from` lines, and the launchers' own stops
+-- (run.shale's `run: ...`, this recipe's launcher's). A stop's line is held
+-- by its words, not its place or its steps (`── stop: <words>`). A fresh scratch folder's
+-- name (`scratch:methods.XXXXXX`) and the copy's own path are masked, as
+-- they differ from run to run.
+-- budget: programs=400 reads=100000 steps=400000000 arena_bytes=1000000000 output_bytes=2000000 changes=20000 change_bytes=200000000
+use("cookbook:roc/pinned.shale")
+
+const LAUNCHER = "cookbook/roc/rewrite_method_calls.shale"
+const GOLDENS = "cookbook/roc/rewrite_method_calls/goldens.txt"
+const AT = "cookbook:roc/plants/rewrite_method_calls"
+const SELF_TEST = arg("self_test", "") == "1"
+const WRITE = arg("write", "") == "1"
+if SELF_TEST == WRITE then fail("check_goldens: self_test=1 holds the goldens, write=1 writes them; one of the two") end
+
+-- Each case's values, one a line on the launcher's stdin. A case with
+-- `types_file` writes roc-types' output on that root to `root.types` in the
+-- copy first; one with `pin` gives the copy that `roc-version`, and one with
+-- `no_pin` none.
+const TYPED = "root=TypedApp.roc\n"
+const CASES = {
+  {values = "glob=Rewrite.roc\ntypes=0\napply=1"},
+  {values = "glob=Rewrite.roc\ntypes=0"},
+  {values = "glob=Chained.roc\ntypes=0\napply=1"},
+  {values = "glob=FunctionValue.roc\ntypes=0\napply=1"},
+  {values = "glob=Pipe.roc\ntypes=0\napply=1"},
+  {values = "glob=Own.roc\ntypes=0\napply=1"},
+  {values = "glob=OtherType.roc\ntypes=0\napply=1"},
+  {values = "glob=Decode.roc\nroot=Breaks.roc\ntypes=0\napply=1"},
+  {values = "glob=Breaks.roc\ntypes=0\napply=1"},
+  {values = "glob=Matched.roc\ntypes=0\napply=1"},
+  {values = "glob=Literal.roc\ntypes=0\napply=1"},
+  {values = "glob=Ref.roc\ntypes=0\napply=1"},
+  {values = "glob=Scrutinee.roc\ntypes=0\napply=1"},
+  {values = "glob=Knock.roc\ntypes=0\napply=1"},
+  {values = "glob=Knock.roc\ntypes=0"},
+  {values = "glob=Header.roc\ntypes=0\napply=1"},
+  {values = "glob=MadeUnused.roc\ntypes=0\napply=1"},
+  {values = "glob=KeptImport.roc\ntypes=0\napply=1"},
+  {values = "glob=MadeLong.roc\ntypes=0\napply=1"},
+  {values = "glob=TestChanged.roc\ntypes=0\napply=1"},
+  {values = "glob=TestChanged.roc\ntypes=0"},
+  {values = "glob=Unformatted.roc\ntypes=0\napply=1"},
+  {values = "glob=LastSegment.roc\ntypes=0\napply=1"},
+  {values = "glob=Rewrite.roc,Knock.roc,Pipe.roc,Rewrite.roc\ntypes=0\napply=1"},
+  {values = "glob=Rewrite.roc,Chained.roc,Pipe.roc\ntypes=0\napply=1\nfrom=2"},
+  {values = "glob=nothing_here/*.roc\ntypes=0"},
+  {values = "glob=Typed.roc\n" .. TYPED .. "apply=1"},
+  {values = "glob=Typed.roc\n" .. TYPED},
+  {values = "glob=Proven.roc\n" .. TYPED .. "apply=1"},
+  {values = "glob=NoCalls.roc\n" .. TYPED .. "apply=1"},
+  {values = "glob=ProvenFails.roc\n" .. TYPED .. "apply=1"},
+  {values = "glob=ProvenFails.roc\n" .. TYPED},
+  {values = "glob=LastSegment.roc\n" .. TYPED .. "apply=1"},
+  {values = "glob=Peers.roc\n" .. TYPED .. "apply=1"},
+  {values = "glob=PeerMethods.roc\n" .. TYPED .. "apply=1"},
+  {values = "glob=PeerMethods.roc\n" .. TYPED .. "peers=undo\napply=1"},
+  {values = "glob=PeerMethods.roc\n" .. TYPED .. "peers=undo"},
+  {values = "glob=Packaged.roc\nroot=PkgApp.roc\napply=1"},
+  {values = "glob=Second.roc\nroot=TypedApp.roc,SecondApp.roc\napply=1"},
+  {values = "glob=Proven.roc,NoCalls.roc\n" .. TYPED .. "apply=1"},
+  {values = "glob=Proven.roc,Unreached.roc\nroot=TypedApp.roc,SecondApp.roc\napply=1"},
+  {values = "glob=Typed.roc,Proven.roc,ProvenFails.roc,Peers.roc,LastSegment.roc,NoCalls.roc\n" .. TYPED .. "apply=1"},
+  {values = "glob=Typed.roc,Proven.roc,ProvenFails.roc,Peers.roc,PeerMethods.roc,LastSegment.roc\n" .. TYPED .. "trials=0"},
+  {values = "glob=Packaged.roc\nroot=PkgApp.roc\ntrials=0"},
+  {values = "glob=Proven.roc\n" .. TYPED .. "trials=0\ntypes_from=root.types", types_file = "TypedApp.roc"},
+  {values = "glob=Proven.roc,Typed.roc\n" .. TYPED .. "apply=1\ntypes_from=root.types", types_file = "TypedApp.roc"},
+  {values = "glob=Proven.roc\n" .. TYPED .. "types_from=gone.types"},
+  {values = "glob=Unrooted.roc"},
+  {values = "glob=NotApp.roc\nroot=Proven.roc"},
+  {values = "glob=Pin.roc\n" .. TYPED, pin = "nightly-2026-11-07-ad3a5d2"},
+  {values = "glob=Rewrite.roc\ntypes=0", no_pin = true},
+  {values = "glob=BadBase.roc\ntypes=0\napply=1"},
+  {values = "glob=Rewrite.roc\ntypes=2"},
+  {values = "glob=Rewrite.roc\ntrials=2"},
+  {values = "glob=Rewrite.roc\ntrials=0\napply=1"},
+  {values = "glob=Rewrite.roc\ntrials=0\ntypes=0"},
+  {values = "glob=Rewrite.roc\npeers=all"},
+  {values = "glob=Rewrite.roc\npeers=undo\ntrials=0"},
+  {values = "glob=Rewrite.roc\npeers=undo\ntypes=0"},
+  {values = "glob=Rewrite.roc\nplant=Rewrite"},
+  {values = "glob=Rewrite.roc\nroot=Rewrite.roc,Own.roc\ntypes=0"},
+  {values = "glob=Proven.roc\nroot=TypedApp.roc,SecondApp.roc\ntypes_from=root.types"},
+}
+
+-- A run's output with each runner's own lines left out, a stop's line cut
+-- to its words, and what differs from run to run masked.
+function body(out, copy)
+  local kept = {}
+  for l in lines(out) do
+    if copy ~= nil then l = join(split(l, copy), "<copy>") end
+    l = re_replace(l, "scratch:methods\\.[A-Za-z0-9]{6}", "scratch:methods.XXXXXX")
+    -- A stop's steps end its message, on its last line.
+    l = re_replace(l, " \\([0-9]+ steps\\)$", "")
+    if starts_with(l, "── stopped at ") then
+      local place = "^── stopped at (the [A-Za-z]+ prelude|the prelude|[^ ]+)(:[0-9]+:[0-9]+)?( \\(in `[^`]*`\\))?: "
+      local words_of = re_replace(l, place, "")
+      if not starts_with(words_of, "fail: run: ") and not starts_with(words_of, "fail: rewrite_method_calls: the Roc program stopped") then push(kept, "── stop: " .. words_of) end
+    elseif not starts_with(l, "── ") and not starts_with(l, "   called from") then
+      push(kept, l)
+    end
+  end
+  return kept
+end
+
+-- The plants copied to a fresh folder, with a `roc-version`.
+function copy_plants(c)
+  local dir = fresh_dir("scratch:", "methods-goldens")
+  for f in ls(AT) do replace(dir .. "/" .. f, read(AT .. "/" .. f)) end
+  if not has_key(c, "no_pin") then replace(dir .. "/roc-version", get(c, "pin", SELF_TEST_PIN) .. "\n") end
+  if has_key(c, "types_file") then
+    local roc = real("tools:roc-" .. SELF_TEST_PIN .. "/roc")
+    local exe = "tools:roc-types-" .. SELF_TEST_PIN .. "/bin/roc-types"
+    replace(dir .. "/root.types", must(run({real(exe), real(dir .. "/" .. c.types_file)}, {timeout_ms = 300000, whole = 64000000})).out)
+  end
+  return dir
+end
+
+-- The copy's files that differ from their plants, each `--- path` and its
+-- lines.
+function changed_lines(dir)
+  local said = {}
+  for f in ls(dir) do
+    if ends_with(f, ".roc") and read(dir .. "/" .. f) ~= read(AT .. "/" .. f) then
+      push(said, "--- " .. f)
+      for l in lines(join(split(read(dir .. "/" .. f), "\r"), "<CR>")) do push(said, l) end
+    end
+  end
+  return said
+end
+
+-- One case's run, as its golden section: `=== <name> (exit N)` and its body.
+function section(c)
+  local name = trim(join(split(c.values, "\n"), " "))
+  if has_key(c, "pin") then name = name .. " (roc-version " .. c.pin .. ")" end
+  if has_key(c, "no_pin") then name = name .. " (no roc-version)" end
+  local opts = {stdin = c.values .. "\n", timeout_ms = 900000, whole = 8000000}
+  local dir = nil
+  if c.values ~= "self_test=1" then
+    dir = copy_plants(c)
+    opts.cwd = dir
+  end
+  local r = run({"shale", real(LAUNCHER), "--args-stdin"}, opts)
+  local ls = {"=== " .. name .. " (exit " .. r.code .. ")"}
+  for l in body(r.out, dir and real(dir) or nil) do push(ls, l) end
+  if dir ~= nil then
+    for l in changed_lines(dir) do push(ls, l) end
+    remove_tree(dir)
+  end
+  return {text = join(ls, "\n"), ms = r.ms}
+end
+
+function cases()
+  local out = {}
+  for c in CASES do push(out, c) end
+  push(out, {values = "self_test=1"})
+  return out
+end
+
+-- The goldens' sections by their first line.
+function golden_sections()
+  local by = {}
+  local head = nil
+  local ls = {}
+  for l in lines(read(GOLDENS)) do
+    if starts_with(l, "=== ") then
+      if head ~= nil then by[head] = join(ls, "\n") end
+      head = l
+      ls = {l}
+    else
+      push(ls, l)
+    end
+  end
+  if head ~= nil then by[head] = join(ls, "\n") end
+  return by
+end
+
+if WRITE then
+  local all = {}
+  for c in cases() do push(all, section(c).text) end
+  replace(GOLDENS, join(all, "\n") .. "\n")
+  print("check_goldens: wrote " .. #all .. " cases to " .. GOLDENS)
+else
+  local golden = golden_sections()
+  local wrong = 0
+  local n = 0
+  for c in cases() do
+    n = n + 1
+    local got = section(c)
+    local head = lines(got.text)[1]
+    local want = get(golden, head, nil)
+    if want == nil then
+      -- The head holds the exit code, so a changed code is a missing head.
+      print("FAIL " .. head .. ": no golden of that name and exit code")
+      wrong = wrong + 1
+    elseif want ~= got.text then
+      local a = lines(want)
+      local b = lines(got.text)
+      local shown = 0
+      print("FAIL " .. head)
+      for k = 1, max(#a, #b) do
+        local x = get(a, k, "<none>")
+        local y = get(b, k, "<none>")
+        if x ~= y and shown < 5 then
+          print("  line " .. k .. ":\n    golden: " .. x .. "\n    got:    " .. y)
+          shown = shown + 1
+        end
+      end
+      wrong = wrong + 1
+    else
+      print("ok   " .. head .. " (" .. got.ms .. " ms)")
+    end
+  end
+  if wrong > 0 then fail("check_goldens: " .. wrong .. " of " .. n .. " cases differ from " .. GOLDENS) end
+  print("check_goldens: all " .. n .. " cases match " .. GOLDENS)
+end
