@@ -1,8 +1,8 @@
 ## Every expression's type in an app, from roc-types (Roc's own checker,
 ## https://github.com/showell/roc-types) run on the root with its pin held
 ## to the tree's Roc, or read from a file a gate kept, and read by
-## cookbook/roc/lib/'s RocTypes, as cookbook/roc/types.shale's `roc_types`
-## and `roc_types_from_file` read it. Each refusal is worded as theirs.
+## cookbook/roc/lib/'s RocTypes. Each refusal is worded as the Shale
+## original's.
 import pf.Shale
 import Compiler
 import lib.RocTypes

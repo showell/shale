@@ -88,8 +88,7 @@ Tree := [].{
 	last_part : Str -> Str
 	last_part = |name| Text.after_last(name, ".")
 
-	## The type at `at`, as Roc writes it (cookbook/roc/declared.shale's
-	## `render_type`): `List(U8)`, `{ id : U8 }`, `[A, B]`, `(U8 -> Bool)`. The
+	## The type at `at`, as Roc writes it: `List(U8)`, `{ id : U8 }`, `[A, B]`, `(U8 -> Bool)`. The
 	## tree does not say which arrow a function type has, so both come out as
 	## `->`.
 	written_type : List(Tree.Node), U64 -> Str
@@ -102,7 +101,7 @@ Tree := [].{
 	shape = |nodes, at| type_text(nodes, at, AsShape)
 
 	## The module a .roc file holds, by its file name: the name without its
-	## last four bytes, as Shale's `module_name` cuts `.roc`.
+	## last four bytes, `.roc`.
 	module_name : Str -> Str
 	module_name = |path| {
 		bytes = Text.basename(path).to_utf8()

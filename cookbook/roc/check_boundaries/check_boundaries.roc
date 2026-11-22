@@ -236,8 +236,8 @@ read_files! = |paths| {
 }
 
 ## The modules each checked file's folder's main.roc exposes, when it is a
-## package's or a platform's (cookbook/roc/headers.shale's
-## `exposed_by_folder`), by folder.
+## package's or a platform's (cookbook/roc/lib/'s `Headers.exposed_by`), by
+## folder.
 exposed_modules! : List(Str) => Dict(Str, List(Str))
 exposed_modules! = |paths| {
 	var $by_folder = Dict.empty()

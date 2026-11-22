@@ -1,5 +1,5 @@
-## What hunt_names' `phrase_name` passes as a maker
-## (cookbook/roc/declared.shale's `reads_as_maker`): a constructor that gives its own module's type, a
+## What hunt_names' `phrase_name` passes as a maker: a constructor that gives
+## its own module's type, a
 ## conversion (`to_*`, `into_*`, and a `from_*` that takes or gives its
 ## module's type, or sits in a module with no type of its own), and a
 ## changed copy (`with_*`, `without_*` giving its first argument's type).

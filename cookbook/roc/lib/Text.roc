@@ -1,7 +1,7 @@
 ## Text cut, trimmed, lowered and ordered as Shale's builtins and preludes do
 ## it (`lines`, `words`, `trim`, `lower`, `sub`, `split`, `between`,
-## `basename`, `dirname`, `path_under`, `sort`), and a name's words as
-## cookbook/roc/declared.shale splits them, so a recipe's output is its
+## `basename`, `dirname`, `path_under`, `sort`), and a name's words, so a
+## recipe's output is its
 ## Shale original's, byte for byte.
 Text := [].{
 

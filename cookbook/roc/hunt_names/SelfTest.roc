@@ -134,8 +134,7 @@ plant_name = |path| {
 	}
 }
 
-## A CamelCase file name in snake case, as cookbook/roc/types.shale's
-## `snake_case_plant_name` writes it: `_` before each capital but a first,
+## A CamelCase file name in snake case: `_` before each capital but a first,
 ## and the capital made small.
 snake_case : Str -> Str
 snake_case = |name| {

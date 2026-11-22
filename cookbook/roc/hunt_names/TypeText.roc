@@ -1,6 +1,5 @@
 ## What hunt_names reads of a type, in the tree or written as text
-## (cookbook/roc/declared.shale's readers, and types.shale's
-## `roc_type_parts`): a tag union's tags, an argument's shape, the types an
+## a tag union's tags, an argument's shape, the types an
 ## annotation mentions, a function type's parts, a `Try`'s success and a
 ## list's element, a tag's first word and words joined as a type's name; and
 ## where a node sits: its source text, the sibling before it, and whether a

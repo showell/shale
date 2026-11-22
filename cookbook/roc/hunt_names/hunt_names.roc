@@ -235,8 +235,8 @@ judged! = |asked| {
 	by_definition.concat(by_file).concat(by_doc).concat(by_name).concat(splits)
 }
 
-## Whether `house=0` leaves the house style out (cookbook/roc/house.shale's
-## `house_is_off`): `house` is read as an integer, 1 unless given.
+## Whether `house=0` leaves the house style out (cookbook/roc/house.shale):
+## `house` is read as an integer, 1 unless given.
 read_house! : {} => [Kept, LeftOut]
 read_house! = |{}| {
 	given = Shale.arg!("house", "1")

@@ -1,7 +1,6 @@
 ## The recipe's self-test: each plant under
 ## cookbook/roc/plants/find_unused_imports/ run through the launcher, held to
-## its findings, its exit and what it says (cookbook/roc/gate_recipe.shale's
-## `check_plants`).
+## its findings, its exit and what it says.
 import pf.Shale
 
 SelfTest := [].{
@@ -124,8 +123,7 @@ last_said = |out|
 			},
 	)
 
-## What is wrong with one row's run (cookbook/roc/gate_recipe.shale's
-## `row_faults`).
+## What is wrong with one row's run.
 find_faults! : Row, { code : I64, out : Str } => List(Str)
 find_faults! = |row, result| {
 	must_fail = row.stops or row.findings > 0

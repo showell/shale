@@ -1,6 +1,6 @@
 ## A finding of one of a recipe's checks: the file, the line, the check and
 ## what is wrong there, ordered as the Shale originals sorted their reports
-## (cookbook/roc/gate_recipe.shale's `verdict_of`) and printed as their lines.
+## and printed as their lines.
 import Text
 
 Finding := {

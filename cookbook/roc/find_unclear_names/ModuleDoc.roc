@@ -112,7 +112,7 @@ opening_comment = |src| {
 }
 
 ## What a folder's `main.roc` exposes, when it is a package's or a
-## platform's (cookbook/roc/headers.shale's `exposed_by_folder`).
+## platform's (cookbook/roc/lib/'s `Headers.exposed_by`).
 exposed_by_folder! : Str => { is_package : Bool, modules : List(Str) }
 exposed_by_folder! = |dir| {
 	main = if dir == "" or dir == "." {

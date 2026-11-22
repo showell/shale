@@ -71,7 +71,7 @@
 --   - The annotation of a name its file's header dictates is no finding for
 --     its arguments, as the platform chose them: what an app's header
 --     provides, and what a platform's header requires and provides
---     (cookbook/roc/headers.shale). Nor are that name's lambda arguments.
+--     (cookbook/roc/lib/Headers.roc). Nor are that name's lambda arguments.
 --   - The items of a `where` clause are its method constraints, so
 --     `k.is_eq : k, k -> Bool` is one item, and a record or list pattern's
 --     rest (`..`) is no item.

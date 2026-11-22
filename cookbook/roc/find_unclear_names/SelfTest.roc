@@ -1,7 +1,6 @@
 ## The recipe's self-test: each plant under
 ## cookbook/roc/plants/find_unclear_names/ run through the launcher, held to
-## its findings, its exit and what it says (cookbook/roc/gate_recipe.shale's
-## `check_plants`).
+## its findings, its exit and what it says.
 import pf.Shale
 import lib.Text
 
@@ -100,8 +99,7 @@ last_said = |out| List.fold(
 	},
 )
 
-## What is wrong with one row's run (cookbook/roc/gate_recipe.shale's
-## `row_faults`).
+## What is wrong with one row's run.
 row_faults! : Row, { code : I64, out : Str }, List(Str) => List(Str)
 row_faults! = |row, r, checks| {
 	must_fail = row.stops or !(List.is_empty(row.counts))

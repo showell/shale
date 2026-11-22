@@ -1,6 +1,5 @@
 ## What a file declares at its top level or as a module type's member, read
-## from its tree in file order (cookbook/roc/declared.shale's
-## `declarations_of`): its types, its values and the record fields of its
+## from its tree in file order: its types, its values and the record fields of its
 ## types and annotations, never a local's. Each carries `place`, its node's
 ## place in the tree, so the three kinds can be put back in file order.
 import Text

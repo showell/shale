@@ -290,7 +290,7 @@
 -- `on_err!`: an argument's type holds a `=>`, or a lambda argument's name
 -- ends in `!`) has its `!` from that callback, so it is judged as the name
 -- without the `!`. Names chosen elsewhere are skipped: the methods Roc calls
--- by name (cookbook/roc/headers.shale), and the top-level names a platform
+-- by name (cookbook/roc/lib/Headers.roc), and the top-level names a platform
 -- dictates, which are what an app's header provides (`app [loaded, step]`)
 -- and what a platform's header requires and provides.
 --

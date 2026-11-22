@@ -1,5 +1,4 @@
-## What hunt_names reads of each file (cookbook/roc/declared.shale's
-## `file_definitions`): a record for every top-level and module-member
+## What hunt_names reads of each file: a record for every top-level and module-member
 ## annotation and definition, leaving out the names the file's header
 ## dictates, and along the way the facts (Facts) the checks judged over the
 ## whole tree need.

@@ -1,20 +1,9 @@
--- Each repository names its Roc version in a `roc-version` file. This
--- library finds that version's `roc` for the Roc recipes that run the
--- compiler. The version matters because `roc fmt`'s layout and the
--- compiler's method lookup change from one nightly to the next.
+-- Each repository names its Roc version in a `roc-version` file, and a Roc
+-- recipe that runs the compiler finds that version's `roc` (its `roc_bin!`).
+-- The version matters because `roc fmt`'s layout and the compiler's method
+-- lookup change from one nightly to the next. This library names the one a
+-- self-test runs: the goldens' scripts load it, and the Roc recipes read
+-- `SELF_TEST_PIN` from this file's text.
 
 -- Every recipe's self-test runs this Roc. CI installs it from roc-apps's release.
 const SELF_TEST_PIN = "nightly-2026-11-03-34bd006"
-
--- The pin comes from the `roc-version` file where the run starts, or is
--- `SELF_TEST_PIN` in a self-test. `who` names the recipe when it stops.
-function roc_bin(who, self_test)
-  local pin = SELF_TEST_PIN
-  if not self_test then
-    if not exists("roc-version") then fail(who .. ": no roc-version where the run starts: run it from the repository's root, whose roc-version pins its Roc") end
-    pin = trim(read("roc-version"))
-  end
-  local roc = "tools:roc-" .. pin .. "/roc"
-  if not exists(roc) then fail(who .. ": no " .. roc .. ": install Roc " .. pin .. " into ~/tools/roc-" .. pin .. "/ (roc-apps's toolchain release carries it)") end
-  return real(roc)
-end

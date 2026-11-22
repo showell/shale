@@ -1,5 +1,5 @@
 ## The facts the reading of the files gathers for the checks judged over the
-## whole tree (cookbook/roc/declared.shale's `facts`): each file's declared
+## whole tree: each file's declared
 ## keywords, the tag unions types name, the aliases of `Bool`, the kinds of
 ## types a file declares, each type name a file declares, and the type and
 ## field names `container` reads.

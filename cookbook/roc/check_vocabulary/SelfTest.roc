@@ -1,9 +1,9 @@
 ## The recipe's self-test: each plant under
 ## cookbook/roc/plants/check_vocabulary/ run through the launcher, held to
-## its findings, its exit and what it says (cookbook/roc/gate_recipe.shale's
-## `check_plants`). It copies cookbook/roc/check_families/SelfTest.roc's
-## running and judging of a row, on purpose: a row is run through
-## `Shale.run!`, and cookbook/roc/lib/, a package, reaches no effect.
+## its findings, its exit and what it says. It copies
+## cookbook/roc/check_families/SelfTest.roc's running and judging of a row,
+## on purpose: a row is run through `Shale.run!`, and cookbook/roc/lib/, a
+## package, reaches no effect.
 import pf.Shale
 
 SelfTest := [].{
@@ -166,8 +166,7 @@ wanted_count = |row, check| {
 	$wanted
 }
 
-## What is wrong with one row's run (cookbook/roc/gate_recipe.shale's
-## `row_faults`).
+## What is wrong with one row's run.
 find_faults! : Row, { code : I64, out : Str }, List(Str) => List(Str)
 find_faults! = |row, result, checks| {
 	must_fail = row.stops or !(row.counts.is_empty())

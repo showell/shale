@@ -232,8 +232,7 @@ function load_files(st, paths)
         push(st.refusals, {path = f.path, why = why})
       end
     else
-      -- A library uses no other, so this is declared.shale's module_name,
-      -- the file's name less `.roc`.
+      -- The module's name: the file's name less `.roc`.
       local base = basename(f.path)
       local info = {path = f.path, err = "", module = sub(base, 1, #base - 4), nodes = f.nodes, src = split(read(f.path), "\n"), types = {}, imports = {}}
       local tree = f.nodes

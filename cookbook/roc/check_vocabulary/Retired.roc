@@ -73,8 +73,7 @@ line_of = |syntax_nodes, place| {
 
 ## The bytes after the `#` that starts the line's comment, or `NoComment`.
 ## A `#` inside a string or a character starts none, and a line of a `\\`
-## multiline string has no comment at all (declared.shale's
-## `comment_on_line`).
+## multiline string has no comment at all.
 comment_on_line : Str -> [Comment(List(U8)), NoComment]
 comment_on_line = |line| {
 	bytes = line.to_utf8()

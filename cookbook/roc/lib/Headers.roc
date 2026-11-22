@@ -1,5 +1,4 @@
-## What a Roc file's header says about who chooses its names, as
-## cookbook/roc/headers.shale reads it: a name an app's platform asks for, a
+## What a Roc file's header says about who chooses its names: a name an app's platform asks for, a
 ## hook a platform hands its host and a method Roc calls by name were chosen
 ## somewhere else, so the recipes judge them differently from the names a
 ## program picks for itself; and which modules a package keeps to itself.
@@ -10,9 +9,8 @@ import Tree
 Headers := [].{
 
 	## The methods Roc calls by name, from Roc's docs/langref/static-dispatch.md
-	## and operators.md, with the encoders' `encode` and `decode`
-	## (headers.shale's LANGUAGE_FIXED_NAMES): a module that declares one has
-	## it because Roc asks, not as a name of its own.
+	## and operators.md, with the encoders' `encode` and `decode`: a module
+	## that declares one has it because Roc asks, not as a name of its own.
 	language_fixed_names : Set(Str)
 	language_fixed_names = Set.from_list([
 		"to_inspect",
@@ -50,9 +48,8 @@ Headers := [].{
 		"decode",
 	])
 
-	## What a folder's `main.roc` exposes, from the file's text
-	## (headers.shale's `exposed_by_folder`; reading the file is the
-	## recipe's): `is_package` when its header is `package` or `platform`, and
+	## What a folder's `main.roc` exposes, from the file's text (reading the
+	## file is the recipe's): `is_package` when its header is `package` or `platform`, and
 	## the modules it exposes.
 	exposed_by : Str -> { is_package : Bool, modules : List(Str) }
 	exposed_by = |text| {
@@ -70,7 +67,7 @@ Headers := [].{
 
 	## The first word of a file's code, its comment lines left out: `app`,
 	## `package`, `platform`, `module`, `hosted`, or for a type module the
-	## type's name; `""` when it has none (headers.shale's `header_word`).
+	## type's name; `""` when it has none.
 	header_word : Str -> Str
 	header_word = |text| {
 		bytes = code_of(text).to_utf8()
@@ -85,8 +82,8 @@ Headers := [].{
 		}
 	}
 
-	## The value names a file's tree's header speaks for, in the tree's order
-	## (headers.shale's `header_names`): `dictated`, what an app provides,
+	## The value names a file's tree's header speaks for, in the tree's order:
+	## `dictated`, what an app provides,
 	## what a platform requires of its app and what it provides to its host;
 	## `exposed`, what a `module` or `hosted` header exposes.
 	header_names : List(Tree.Node) -> { dictated : List(Str), exposed : List(Str) }
@@ -123,7 +120,7 @@ Headers := [].{
 	}
 }
 
-## A file's text with its comment lines left out (headers.shale's `code_of`).
+## A file's text with its comment lines left out.
 code_of : Str -> Str
 code_of = |text| Str.join_with(Text.lines(text).drop_if(|line| Text.trim(line).starts_with("#")), "\n")
 

@@ -3,9 +3,10 @@
 ## prepositions, namespaces, Roc's own words and the numbers, list names,
 ## world verbs, cited sources), a project's `terms=` file, the house style's
 ## checks from cookbook/roc/house.shale and the methods Roc calls by name
-## from cookbook/roc/headers.shale. Each refusal is worded as
-## cookbook/roc/declared.shale's readers word it.
+## from cookbook/roc/lib/'s Headers. Each refusal is worded as the Shale
+## original's readers worded it.
 import pf.Shale
+import lib.Headers
 import lib.Text
 
 Words := [].{
@@ -53,7 +54,7 @@ Words := [].{
 				Shale.fail!("hunt_names: `${word}` is in cookbook/words/verbs.txt and reads as a participle, which would make its effects states")
 			}
 		}
-		fixed_names = language_fixed_names!({})
+		fixed_names = Headers.language_fixed_names
 		{ verbs, participles, ed_verbs, vague, containers, prepositions, world_verbs, namespaces, taken, list_names, terms, fixed_names }
 	}
 
@@ -204,19 +205,3 @@ project_terms! = |path| {
 	$terms
 }
 
-## The methods Roc calls by name, from their one home,
-## cookbook/roc/headers.shale's LANGUAGE_FIXED_NAMES.
-language_fixed_names! : {} => Set(Str)
-language_fixed_names! = |{}| {
-	text = read_text!("cookbook:roc/headers.shale")
-	match Shale.re_find!(text, "\nconst LANGUAGE_FIXED_NAMES = \\{([^\n]*)\\}\n") {
-		Found(matched) => {
-			entries = Shale.re_find_all!(matched.groups.first() ?? "", "([a-z_!]+)\"?\\]? = true")
-			Set.from_list(entries.map(|entry| entry.groups.first() ?? ""))
-		}
-		NoMatch => {
-			Shale.fail!("hunt_names: cookbook/roc/headers.shale names no LANGUAGE_FIXED_NAMES")
-			Set.empty()
-		}
-	}
-}

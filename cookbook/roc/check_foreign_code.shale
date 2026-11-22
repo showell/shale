@@ -29,13 +29,21 @@ const OUT = arg("out", "scratch:foreign")
 const ROLES = arg("roles", "")
 const TERMS = arg("terms", "")
 const ABBREVIATIONS = arg("abbreviations", "")
-use("./gate_recipe.shale")
 use("./house.shale")
 
 const RECIPES = {"check_boundaries", "check_errors", "check_families", "hunt_names", "find_deep_calls", "find_extra_parens", "find_unclear_names", "check_stacking"}
 const READ_FIRST = {"dead", "same_branches", "number_fallback", "placeholder", "set_fallback", "twin_name", "family", "unused_api"}
 const GUIDES = {"docs/roc-style.md", "AGENTS.md", "CLAUDE.md", "CONTRIBUTING.md"}
 const PLANTS = "cookbook:roc/plants/check_foreign_code"
+
+-- The last line of `out` that isn't one of Shale's `──` lines.
+function last_said(out)
+  local last = ""
+  for l in lines(trim(out)) do
+    if not starts_with(l, "──") and trim(l) ~= "" then last = l end
+  end
+  return last
+end
 
 function recipe_argv(recipe, glob, more)
   local argv = {"shale", real("cookbook:roc/" .. recipe .. ".shale"), "glob=" .. glob}

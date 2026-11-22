@@ -43,7 +43,8 @@
 -- `??` checks read every expression.
 --
 -- With `types=1 root=app/main.roc` (or `root=a.roc,b.roc` for several apps)
--- the recipe also asks Roc's type checker (cookbook/roc/types.shale). A
+-- the recipe also asks Roc's type checker (roc-types, read by
+-- cookbook/roc/lib/RocTypes.roc). A
 -- placeholder finding then names the fallback's type and the tags the lookup
 -- fails with, and `number_fallback` goes by the lookup's type instead of its
 -- name: any lookup that fails only with `[OutOfBounds]`. A lookup that can

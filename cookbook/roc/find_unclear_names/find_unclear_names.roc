@@ -100,8 +100,7 @@ house_is_off! = |{}| {
 checks : List(Str)
 checks = ["pure_mutator", "abbreviation", "module_doc"]
 
-## The summary and the finding lines, sorted (cookbook/roc/gate_recipe.shale's
-## `verdict_of`).
+## The summary and the finding lines, sorted.
 verdict_of : List(Finding), U64 -> { summary : Str, found : List(Str) }
 verdict_of = |report, file_count| {
 	sorted = List.sort_with(report, Finding.order)

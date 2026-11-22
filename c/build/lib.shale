@@ -235,12 +235,6 @@ function compile_to(t, phase, build, src, include, bin, extra?, mode?)
   return nil
 end
 
--- `compile_to`, then the binary run, as {code, out}.
-function compile_and_run(t, phase, build, src, include, bin, extra?)
-  compile_to(t, phase, build, src, include, bin, extra)
-  return run_binary(t, phase, bin)
-end
-
 -- The names of a test file's `TEST(`s, in order: the count its run must
 -- print, and what `TEST_ONLY` may name.
 function case_names(src)

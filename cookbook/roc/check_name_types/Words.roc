@@ -115,9 +115,8 @@ promise_of = |said|
 		OneOf(said.split_on(",").map(Text.trim))
 	}
 
-## A list of one word a line, any note after `--` cut off, as a set
-## (cookbook/roc/declared.shale's `word_set`). A missing file, a word listed
-## twice, or a line of two words stops the run.
+## A list of one word a line, any note after `--` cut off, as a set. A
+## missing file, a word listed twice, or a line of two words stops the run.
 read_word_set! : Str => Set(Str)
 read_word_set! = |path| {
 	text = match Shale.read!(path) {

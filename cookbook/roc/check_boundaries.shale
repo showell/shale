@@ -18,7 +18,8 @@
 --   house  with `house=0`, leave out what is only our house style
 --          (cookbook/roc/house.shale), for another project's code;
 --   types  with `types=1`, Roc's checker gives the types
---          (cookbook/roc/types.shale), which `bool_param` needs. It is off
+--          (roc-types, read by cookbook/roc/lib/RocTypes.roc), which
+--          `bool_param` needs. It is off
 --          by default, and needs the tree's `roc-version` file;
 --   root   with `types=1`, the app that imports the files read, or several
 --          apps separated by commas (`root=a.roc,b.roc`);

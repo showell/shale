@@ -1,5 +1,5 @@
-## What hunt_names' `singular_list` reads of a name whose type says many
-## (cookbook/roc/declared.shale's `list_name_finding`): the word that counts,
+## What hunt_names' `singular_list` reads of a name whose type says many:
+## the word that counts,
 ## whether it reads as a plural, and the names a finding offers instead. A
 ## list that is no function and is named from a preposition is
 ## `phrase_name`'s instead, as the launcher's header says.

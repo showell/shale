@@ -1,6 +1,6 @@
 ## The tree's own Roc, which judges each rewrite: `roc check` and its errors,
 ## `roc test`'s summary, and `roc fmt`. The Roc is the one the tree pins
-## (cookbook/roc/pinned.shale's `roc_bin`), since method lookup has changed
+## (its `roc-version`), since method lookup has changed
 ## between nightlies. Each refusal is worded as the Shale original's.
 import pf.Shale
 import Candidates

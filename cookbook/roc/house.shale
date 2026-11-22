@@ -6,8 +6,10 @@
 -- recipe that way.
 --
 --   use("cookbook:roc/house.shale")
---   house_leaves_out("check_stacking", kind)    whether `house=0` leaves this check out
---   house_note("check_stacking")                what the summary says when it does
+--   HOUSE_CHECKS                  each recipe's house checks, by the recipe
+--
+-- check_foreign_code.shale loads it, and hunt_names' Roc reads its row from
+-- this file's text. Each Roc recipe reads its own `house=` argument.
 --
 -- A check belongs here when a careful project could fairly do the opposite, so
 -- a finding says more about our habits than about their code. A check that
@@ -22,25 +24,3 @@ const HOUSE_CHECKS = {
   find_unclear_names = {"abbreviation"},
   check_stacking = {"stack", "unstack", "long", "wide string"},
 }
-
-function house_is_off()
-  local house = arg("house", 1)
-  if house ~= 0 and house ~= 1 then fail("house must be 1 (the default) or 0, not " .. house) end
-  return house == 0
-end
-
-function house_leaves_out(recipe, check)
-  return house_is_off() and has_item(HOUSE_CHECKS[recipe], check)
-end
-
--- The end of a summary line, saying what `house=0` left out.
-function house_note(recipe)
-  if not house_is_off() then return "" end
-  return "; left out as house style: " .. join(HOUSE_CHECKS[recipe], ", ")
-end
-
--- Stops a rewrite under `house=0`, which would apply the rules it leaves out.
-function refuse_house_rewrite(recipe)
-  if house_is_off() then fail(recipe .. ": write=1 applies our house style, so it refuses house=0") end
-  return nil
-end

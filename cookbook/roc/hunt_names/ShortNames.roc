@@ -1,5 +1,5 @@
-## hunt_names' `short_name` for what a file binds inside its definitions
-## (cookbook/roc/declared.shale's `short_binding_findings`): each local,
+## hunt_names' `short_name` for what a file binds inside its definitions:
+## each local,
 ## parameter, match binding, record destructuring and `var` whose name, past
 ## a `$` or `_` and before a `!`, is one letter. A loop's variable, a
 ## coordinate, a colour's channels and a triangle's corners pass, as the
@@ -170,7 +170,7 @@ binder_of = |nodes, start| {
 bound_name : List(Tree.Node), U64 -> Str
 bound_name = |nodes, at| name_bound_by(nodes, Tree.node_at(nodes, at))
 
-## The name the node `node` binds, as `bound_name` gives it.
+## The name the node `node` binds.
 name_bound_by : List(Tree.Node), Tree.Node -> Str
 name_bound_by = |nodes, node| {
 	if node.kind == "p-ident" {
@@ -229,8 +229,7 @@ is_outer_definition = |nodes, at| {
 }
 
 ## The list methods whose one-line lambda is a loop's body, so its
-## parameters are loop variables (cookbook/roc/declared.shale's
-## LOOP_METHODS).
+## parameters are loop variables.
 loop_methods : List(Str)
 loop_methods = [
 	"map",
