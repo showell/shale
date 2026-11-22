@@ -66,6 +66,11 @@ question):
 - [check_boundaries.shale](check_boundaries.shale): whether each function
   earns its boundary and each parameter is really one. Give it the whole
   tree, tests included, since it counts callers only in the files it reads.
+  It is written in Roc, a root,
+  [check_boundaries/check_boundaries.roc](check_boundaries/check_boundaries.roc),
+  with its passes and checks in the modules beside it;
+  [check_goldens.shale](check_boundaries/check_goldens.shale) holds it to
+  its goldens.
 - [find_deep_calls.shale](find_deep_calls.shale): calls nested three or
   more deep, like `f(g(h(x)))`, which read inside out. It is written in
   Roc, a root,

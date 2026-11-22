@@ -114,7 +114,9 @@ checkouts, and `<lanes>` the one that holds your lanes.
 ## roc/: Roc code ([README](roc/README.md))
 
 - `roc/check_boundaries.shale`: asks whether each function earns its boundary
-  and each parameter is really one. `shale cookbook:roc/check_boundaries.shale`
+  and each parameter is really one; the launcher of a Roc script
+  (`roc/check_boundaries/`, on `roc_platform/`, held to its goldens by that
+  folder's `check_goldens.shale`). `shale cookbook:roc/check_boundaries.shale`
 - `roc/check_errors.shale`: checks how Roc code reports failure.
   `shale cookbook:roc/check_errors.shale`
 - `roc/check_families.shale`: checks that look-alike modules are spelled
