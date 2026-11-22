@@ -181,12 +181,19 @@ imports is checked without types, listed at the end, and fails the run.
 - [rewrite_method_calls.shale](rewrite_method_calls.shale): rewrites calls
   like `List.map(xs, f)` as method calls, `xs.map(f)`. Roc's type checker
   and compiler decide which rewrites are safe; each call it leaves is
-  listed with the reason. It reports until given `apply=1`. Run it with
-  `--undo-on-stop`, so a run that stops in the middle puts back the file it
-  was trying. A symmetric function's call (`U64.max(a, b)`, from
+  listed with the reason. It reports until given `apply=1`. Run it in a git
+  checkout: a run stopped in the middle can leave the file it was trying
+  rewritten, and `git checkout --` puts it back. A symmetric function's
+  call (`U64.max(a, b)`, from
   [symmetric_functions.txt](symmetric_functions.txt)) stays a module call.
+  It is written in Roc, a root,
+  [rewrite_method_calls/rewrite_method_calls.roc](rewrite_method_calls/rewrite_method_calls.roc),
+  with the run in the modules beside it and the unused-import rule in the
+  Roc library's `Imports.roc`;
+  [check_goldens.shale](rewrite_method_calls/check_goldens.shale) holds it,
+  and the files it rewrites, to its goldens.
 
-      cd <repo> && shale --undo-on-stop <shale>/cookbook/roc/rewrite_method_calls.shale glob='app/*.roc' root=app/main.roc,app/Specs.roc
+      cd <repo> && shale <shale>/cookbook/roc/rewrite_method_calls.shale glob='app/*.roc' root=app/main.roc,app/Specs.roc
       cd <repo> && shale <shale>/cookbook/roc/rewrite_method_calls.shale glob='app/*.roc' root=app/main.roc trials=0
 
 - [compare_machine_code.shale](compare_machine_code.shale): says whether
@@ -242,12 +249,6 @@ beside them). Each header lists its functions.
 - [member_uses.shale](member_uses.shale) and
   [module_family.shale](module_family.shale): `print_module_types`'s name
   resolution, use counts and family printing.
-- [peer_calls.shale](peer_calls.shale),
-  [number_literals.shale](number_literals.shale) and
-  [method_text.shale](method_text.shale): parts of `rewrite_method_calls`.
-- [imports.shale](imports.shale): a file's imports that it leaves unused,
-  for `rewrite_method_calls`; the Roc library's `Imports.roc` holds the same
-  rule for `find_unused_imports`.
 - [gate_recipe.shale](gate_recipe.shale): what the gating recipes share,
   their verdict and their plants' self-test.
 
@@ -270,4 +271,4 @@ file node starts after the leading comments, and a `|>` is an
 error at the line of the definition around it, so match its errors to an
 edit by span. A Shale run starts at most its `programs` budget of
 programs, so a recipe that compiles once per file stops and resumes past
-it, as `rewrite_method_calls.shale`'s `from=` does.
+it, as `rewrite_method_calls`' `from=` does.

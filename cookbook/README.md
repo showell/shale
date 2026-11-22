@@ -176,12 +176,8 @@ checkouts, and `<lanes>` the one that holds your lanes.
   script of several modules (its root `roc/hunt_names/hunt_names.roc`, on
   `roc_platform/`, held to its goldens by that folder's
   `check_goldens.shale`). `shale cookbook:roc/hunt_names.shale`
-- `roc/imports.shale` (library): a file's imports and the ones it leaves
-  unused. `use("cookbook:roc/imports.shale")`
 - `roc/member_uses.shale` (library): how the type printer resolves names and
   counts each member's uses. `use("cookbook:roc/member_uses.shale")`
-- `roc/method_text.shale` (library): rewrite_method_calls' reading and
-  writing of a file's tree. `use("./method_text.shale")`
 - `roc/module_family.shale` (library): how the type printer walks sibling
   modules as one family. `use("cookbook:roc/module_family.shale")`
 - `roc/parsed.shale` (library): parses a tree's .roc files and fails on any
@@ -195,10 +191,10 @@ checkouts, and `<lanes>` the one that holds your lanes.
 - `roc/rename.shale`: renames one identifier across a tree of Roc code.
   `shale cookbook:roc/rename.shale from=portion to=share module=Pie`
 - `roc/rewrite_method_calls.shale`: rewrites `List.map(xs, f)` calls as method
-  calls, judged by the compiler. `shale --undo-on-stop cookbook:roc/rewrite_method_calls.shale apply=1`
-- `roc/peer_calls.shale` and `roc/number_literals.shale` (libraries):
-  rewrite_method_calls' peer calls and its number literals whose type defaults.
-  `use("./peer_calls.shale")`
+  calls, judged by the compiler; the launcher of a Roc script of several
+  modules (its root `roc/rewrite_method_calls/rewrite_method_calls.roc`, on
+  `roc_platform/`, held to its goldens by that folder's
+  `check_goldens.shale`). `shale cookbook:roc/rewrite_method_calls.shale apply=1`
 - `roc/types.shale` (library): every expression's type, from Roc's own type
   checker. `use("cookbook:roc/types.shale")`
 - `roc/wrap_long_lines.shale`: shortens long Roc lines by letting `roc fmt`

@@ -55,8 +55,8 @@
 -- real path of each file the program is built from, one a line (run.shale's
 -- header), for a caller's cache key. Its goldens, the Shale original's output
 -- on the plants, are held by cookbook/roc/find_unused_imports/check_goldens.shale.
--- The rules live twice: in the Roc library's Imports, and in
--- cookbook/roc/imports.shale, which rewrite_method_calls.shale still reads.
+-- The rule's one home is the Roc library's Imports, which
+-- rewrite_method_calls asks too.
 -- budget: programs=10 output_bytes=8000000
 
 const SCRIPT = "cookbook/roc/find_unused_imports/find_unused_imports.roc"

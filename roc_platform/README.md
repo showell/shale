@@ -172,7 +172,8 @@ path), **`cookbook/zig/list_long_files/`**, **`cookbook/zig/count_comments/`**,
 **`cookbook/roc/hunt_names/`** (roc-types too),
 **`cookbook/roc/check_boundaries/`** (roc-types too),
 **`cookbook/count_shale_stops/`**, **`cookbook/roc/find_extra_parens/`**,
-**`cookbook/roc/check_stacking/`** and **`cookbook/roc/wrap_long_lines/`**
+**`cookbook/roc/check_stacking/`**, **`cookbook/roc/wrap_long_lines/`** and
+**`cookbook/roc/rewrite_method_calls/`** (roc-types too)
 are ported the same way: the launcher keeps the recipe's name and arguments, the goldens were written
 from the Shale original on plants, and `check_goldens.shale` holds them.
 count_comments' launcher builds with `opt=speed`, since its byte-by-byte
@@ -199,6 +200,11 @@ one home and groups.shale is gone; its goldens run on copies of the plants
 with a `roc-version`, which Shale's checkout has none of. Its dev build
 took 0.8 times the original's CPU (`roc fmt`'s runs included) over copies
 of roc-chat, roc-screensaver and roc-apps' projects.
+rewrite_method_calls rewrites by the compiler's judgement: each trial is
+written in place and `roc check` and `roc test` run on it, and its goldens
+hold the files each case leaves. A trial is the Roc program's own write, so
+the launcher's `--undo-on-stop` does not reach it: a run stopped mid-trial
+can leave that file rewritten, for git to put back.
 **`cookbook/roc/EXAMPLES.txt`** lists every port, a line each: its Roc, its
 Shale original's path and the commit that replaced it, so a page can show
 the two side by side. Its sections (the checks on Roc code first) are the
@@ -216,6 +222,8 @@ page's; its header says the format.
 - Shale's `run_new_table` makes a table of no kind, which Shale reads as
   empty. A host-made list must set `TABLE_LIST`.
 - TCC can't read glue's header (`__int128`), so the host is built by GCC.
+- `module` and `with` are reserved words in Roc: neither names a record's
+  field, and the parser's error points past them.
 
 ## Open edges
 
