@@ -15,10 +15,10 @@ Tree := [].{
 		parent : U64,
 		kids : List(U64),
 		line : U64,
-		col : U64,
+		column : U64,
 		end_line : U64,
-		end_col : U64,
-		attrs : List({ name : Str, value : Str }),
+		end_column : U64,
+		attributes : List({ name : Str, value : Str }),
 	}
 
 	## The node at a place counted from 1, which the tree's own `parent` and
@@ -37,7 +37,7 @@ Tree := [].{
 	## A node's attribute, by its name, when the tree gives it one.
 	find_attribute : Tree.Node, Str -> Try(Str, [NoSuchAttribute])
 	find_attribute = |node, name|
-		match node.attrs.find_first(|attribute_entry| attribute_entry.name == name) {
+		match node.attributes.find_first(|attribute_entry| attribute_entry.name == name) {
 			Ok(attribute_entry) => Ok(attribute_entry.value)
 			Err(_) => Err(NoSuchAttribute)
 		}

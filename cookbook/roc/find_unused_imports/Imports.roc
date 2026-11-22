@@ -164,7 +164,7 @@ pattern_tag_use = |node, source_lines| {
 			Ok(text) => text
 			Err(_) => crash "find_unused_imports: a pattern's tag past the file's end"
 		}
-		written_name(source_line.to_utf8().drop_first(node.col - 1))
+		written_name(source_line.to_utf8().drop_first(node.column - 1))
 	} else {
 		raw
 	}

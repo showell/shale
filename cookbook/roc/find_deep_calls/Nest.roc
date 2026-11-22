@@ -54,7 +54,7 @@ nest_at = |reading, place| {
 	node = Tree.node_at(reading.syntax_nodes, place)
 	{
 		line: node.line,
-		column: node.col,
+		column: node.column,
 		depth: depth_at(reading, place),
 		outermost: call_name(reading.syntax_nodes, place),
 		deepest: call_name(reading.syntax_nodes, deepest_call(reading, place)),

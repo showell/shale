@@ -199,11 +199,11 @@ TypeText := [].{
 		if node.line == 0 {
 			""
 		} else if node.line == node.end_line {
-			columns(Text.line_at(source_lines, node.line), node.col, node.end_col)
+			columns(Text.line_at(source_lines, node.line), node.column, node.end_column)
 		} else {
-			first = columns(Text.line_at(source_lines, node.line), node.col, Text.line_at(source_lines, node.line).count_utf8_bytes() + 1)
+			first = columns(Text.line_at(source_lines, node.line), node.column, Text.line_at(source_lines, node.line).count_utf8_bytes() + 1)
 			middle = source_lines.sublist({ start: node.line, len: node.end_line - node.line - 1 })
-			last = columns(Text.line_at(source_lines, node.end_line), 1, node.end_col)
+			last = columns(Text.line_at(source_lines, node.end_line), 1, node.end_column)
 			Str.join_with([first].concat(middle).append(last), "\n")
 		}
 

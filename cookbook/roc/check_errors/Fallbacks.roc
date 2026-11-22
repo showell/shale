@@ -114,7 +114,7 @@ type_at : Forest, Fallbacks.Typing, { path : Str, at : U64 } -> Try(Str, [NoType
 type_at = |forest, typing, spot| {
 	node = Forest.node(forest, spot.at)
 	real = typing.real.get(spot.path) ?? ""
-	span = RocTypes.span_of({ line: node.line, col: node.col, end_line: node.end_line, end_col: node.end_col })
+	span = RocTypes.span_of({ line: node.line, column: node.column, end_line: node.end_line, end_column: node.end_column })
 	by_span = typing.exprs.get(real) ?? Dict.empty()
 	match by_span.get(span) {
 		Ok(written) => Ok(written)

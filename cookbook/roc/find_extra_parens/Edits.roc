@@ -138,12 +138,12 @@ line_starts = |text| {
 
 ## The place of a line's column, both counted from 1.
 offset_of : Src, U64, U64 -> U64
-offset_of = |src, line, col| {
+offset_of = |src, line, column| {
 	start = match src.starts.get(line - 1) {
 		Ok(found) => found
 		Err(_) => crash "find_extra_parens: ${src.path} has no line ${line.to_str()}"
 	}
-	start + col - 1
+	start + column - 1
 }
 
 ## The byte at a place counted from 1, 0 past either end.
@@ -235,8 +235,8 @@ past_comments = |text, at| {
 bracket_removal : Src, Tree.Node, Bool -> List(Edits.Edit)
 bracket_removal = |src, node, keep_break| {
 	text = src.text
-	opening = offset_of(src, node.line, node.col)
-	closing = offset_of(src, node.end_line, node.end_col) - 1
+	opening = offset_of(src, node.line, node.column)
+	closing = offset_of(src, node.end_line, node.end_column) - 1
 	past_opening = past_space(text, opening + 1)
 	cut_to = if keep_break or byte_at(text, past_opening) == '#' {
 		opening + 1
@@ -271,7 +271,7 @@ start_of : Src, U64 -> Try(U64, Str)
 start_of = |src, at| {
 	node = Tree.node_at(src.nodes, at)
 	if node.line != 0 {
-		Ok(offset_of(src, node.line, node.col))
+		Ok(offset_of(src, node.line, node.column))
 	} else if node.kind != "unary" and node.kind != "e-match" {
 		no_span(src, node)
 	} else {
@@ -291,7 +291,7 @@ end_of : Src, U64 -> Try(U64, Str)
 end_of = |src, at| {
 	node = Tree.node_at(src.nodes, at)
 	if node.line != 0 {
-		Ok(offset_of(src, node.end_line, node.end_col))
+		Ok(offset_of(src, node.end_line, node.end_column))
 	} else if node.kind == "unary" {
 		end_of(src, Tree.first_kid(node))
 	} else if node.kind != "e-match" {

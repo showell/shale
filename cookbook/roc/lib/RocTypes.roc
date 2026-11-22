@@ -110,10 +110,10 @@ RocTypes := [].{
 
 	## A region as the records' `span` writes it, `line:col:end_line:end_col`,
 	## for finding a node's type by the node's own region.
-	span_of : { line : U64, col : U64, end_line : U64, end_col : U64 } -> Str
+	span_of : { line : U64, column : U64, end_line : U64, end_column : U64 } -> Str
 	span_of = |region| {
-		starts = "${region.line.to_str()}:${region.col.to_str()}"
-		"${starts}:${region.end_line.to_str()}:${region.end_col.to_str()}"
+		starts = "${region.line.to_str()}:${region.column.to_str()}"
+		"${starts}:${region.end_line.to_str()}:${region.end_column.to_str()}"
 	}
 
 	## The app paths of a recipe's `root=`, which may name several

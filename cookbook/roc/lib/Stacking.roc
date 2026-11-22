@@ -240,10 +240,10 @@ Stacking := [].{
 					return Err(CrossesLine(node.line))
 				}
 				bytes = Bytes.line_of(source_lines, node.line)
-				text = if node.end_col == 0 {
-					Bytes.rest_from(bytes, node.col)
+				text = if node.end_column == 0 {
+					Bytes.rest_from(bytes, node.column)
 				} else {
-					Bytes.span(bytes, node.col, node.end_col - 1)
+					Bytes.span(bytes, node.column, node.end_column - 1)
 				}
 				so_far = $by_line.get(node.line) ?? 0
 				$by_line = $by_line.insert(node.line, so_far + Bytes.width_of(text))

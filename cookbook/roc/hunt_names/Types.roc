@@ -103,7 +103,7 @@ Types := [].{
 		for node in nodes {
 			$place = $place + 1
 			if node.kind == "p-ident" {
-				match by_span.get(RocTypes.span_of({ line: node.line, col: node.col, end_line: node.end_line, end_col: node.end_col })) {
+				match by_span.get(RocTypes.span_of({ line: node.line, column: node.column, end_line: node.end_line, end_column: node.end_column })) {
 					Ok(written) => {
 						$typed = $typed.insert($place, written)
 					}

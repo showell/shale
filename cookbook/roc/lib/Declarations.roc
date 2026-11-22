@@ -230,7 +230,7 @@ is_text = |nodes, node|
 	match node.kids.get(1) {
 		Ok(at) => {
 			given = Tree.node_at(nodes, at)
-			is_wide = given.end_line > given.line or given.end_col > given.col + 2
+			is_wide = given.end_line > given.line or given.end_column > given.column + 2
 			given.kind == "e-string" and is_wide
 		}
 		Err(_) => Bool.False
@@ -326,7 +326,7 @@ type_declared = |file, at| {
 				Ok(declared)
 			} else {
 				name_line = Text.line_at(file.source_lines, name_node.end_line)
-				after_name = Text.bytes_of(name_line, { start: name_node.end_col - 1, count: 4 })
+				after_name = Text.bytes_of(name_line, { start: name_node.end_column - 1, count: 4 })
 				Ok({
 					..declared,
 					underlying: Tree.written_type(nodes, built_at),

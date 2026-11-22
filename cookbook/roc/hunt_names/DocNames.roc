@@ -177,7 +177,7 @@ names_in_tree : List(Tree.Node) -> Set(Str)
 names_in_tree = |nodes| {
 	var $names = Set.empty()
 	for node in nodes {
-		for attribute in node.attrs {
+		for attribute in node.attributes {
 			if ["raw", "name", "field", "method", "symbol"].contains(attribute.name) {
 				value = attribute.value.drop_prefix(".")
 				if value != "" {

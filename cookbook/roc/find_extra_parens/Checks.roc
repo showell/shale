@@ -139,7 +139,7 @@ is_lambda_if = |nodes, at, source_lines| {
 		Bool.False
 	} else {
 		line = Text.line_at(source_lines, node.line)
-		before = Text.bytes_of(line, { start: 0, count: node.col - 1 })
+		before = Text.bytes_of(line, { start: 0, count: node.column - 1 })
 		Text.trim(before) != ""
 	}
 }
