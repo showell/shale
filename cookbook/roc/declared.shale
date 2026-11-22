@@ -1,5 +1,5 @@
 -- A Roc file's parse tree (from `roc_tree`) is a list of nodes, each
--- `{kind, parent, kids, line, col, end_line, end_col, depth}` plus attributes
+-- `{kind, parent, kids, line, column, end_line, end_column, depth}` plus attributes
 -- such as `name` and `raw`, and a node's index is its place in the list. This
 -- library reads the things the naming recipes share out of that tree: a
 -- type written as Roc writes it, a name's words, and the list of what a file
@@ -265,7 +265,7 @@ end
 
 -- Whether the node is a string with something in it: `""` spans two columns.
 function is_text(node)
-  return node.kind == "e-string" and (node.end_line > node.line or node.end_col - node.col > 2)
+  return node.kind == "e-string" and (node.end_line > node.line or node.end_column - node.column > 2)
 end
 
 -- The record for the annotation at `i`, or nil when it is only a `where`
@@ -297,7 +297,7 @@ function declared_type(path, src, tree, i)
   local record = {path = path, line = tree[i].line, kind = "type", name = name, owner = owner_of(tree, i), underlying = "", shape = "", is_nominal = false, is_tags = false, is_fn = false}
   if #kids > 1 and tree[kids[2]].kind ~= "associated" then
     record.is_fn = tree[kids[2]].kind == "ty-fn"
-    local between = sub(src[tree[kids[1]].end_line], tree[kids[1]].end_col, tree[kids[1]].end_col + 3)
+    local between = sub(src[tree[kids[1]].end_line], tree[kids[1]].end_column, tree[kids[1]].end_column + 3)
     record.is_nominal = contains(between, ":=") or contains(between, "::")
     record.underlying = render_type(tree, kids[2])
     record.shape = render_type(tree, kids[2], true)
@@ -365,10 +365,10 @@ end
 function span_text(src, tree, at)
   local node = tree[at]
   if node.line == 0 then return "" end
-  if node.line == node.end_line then return sub(src[node.line], node.col, node.end_col - 1) end
-  local parts = {sub(src[node.line], node.col)}
+  if node.line == node.end_line then return sub(src[node.line], node.column, node.end_column - 1) end
+  local parts = {sub(src[node.line], node.column)}
   for l = node.line + 1, node.end_line - 1 do push(parts, src[l]) end
-  push(parts, sub(src[node.end_line], 1, node.end_col - 1))
+  push(parts, sub(src[node.end_line], 1, node.end_column - 1))
   return join(parts, "\n")
 end
 

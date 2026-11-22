@@ -220,10 +220,10 @@ function source_text(path, g)
   local n = NODES[g]
   if n.line == 0 then return "?" end
   local src = SOURCE_LINES[path]
-  if n.line == n.end_line then return sub(src[n.line], n.col, n.end_col - 1) end
-  local parts = {trim(sub(src[n.line], n.col))}
+  if n.line == n.end_line then return sub(src[n.line], n.column, n.end_column - 1) end
+  local parts = {trim(sub(src[n.line], n.column))}
   for l = n.line + 1, n.end_line - 1 do push(parts, trim(src[l])) end
-  push(parts, trim(sub(src[n.end_line], 1, n.end_col - 1)))
+  push(parts, trim(sub(src[n.end_line], 1, n.end_column - 1)))
   return join(parts, " ")
 end
 

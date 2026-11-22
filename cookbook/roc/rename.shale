@@ -193,13 +193,13 @@ function is_wanted(line, at, stop, in_module, next)
 end
 
 -- `line` with each character literal on it blanked to spaces, so it is no
--- name and its quote opens no string. `spans` are the literals' `{col,
--- end_col}` on this line, from roc-ast; the length is kept, so a byte of the
+-- name and its quote opens no string. `spans` are the literals'
+-- `{column, end_column}` on this line, from roc-ast; the length is kept, so a byte of the
 -- blanked line is the same byte of `line`.
 function blank_literals(line, spans)
   local out = line
   for s in spans do
-    out = sub(out, 1, s.col - 1) .. rep(" ", s.end_col - s.col) .. sub(out, s.end_col)
+    out = sub(out, 1, s.column - 1) .. rep(" ", s.end_column - s.column) .. sub(out, s.end_column)
   end
   return out
 end
@@ -348,7 +348,7 @@ function literal_spans_of_chunk(chunk, out)
     else
       local by_line = {}
       for n in t.nodes do
-        if n.kind == "e-single-quote" then push_at(by_line, "" .. n.line, {col = n.col, end_col = n.end_col}) end
+        if n.kind == "e-single-quote" then push_at(by_line, "" .. n.line, {column = n.column, end_column = n.end_column}) end
       end
       out.spans[t.path] = by_line
     end
@@ -357,8 +357,8 @@ function literal_spans_of_chunk(chunk, out)
 end
 
 -- The character literals of the Roc files among `paths` that hold `FROM`
--- and a `'`, as `{spans, refused}`: `spans[path]["<line>"]` is a list of `{col,
--- end_col}`, and `refused[path]` is roc-ast's refusal of a file it can't
+-- and a `'`, as `{spans, refused}`: `spans[path]["<line>"]` is a list of
+-- `{column, end_column}`, and `refused[path]` is roc-ast's refusal of a file it can't
 -- parse. The files are parsed a chunk at a time, so only the spans are held.
 function literal_spans(paths)
   local out = {spans = {}, refused = {}}

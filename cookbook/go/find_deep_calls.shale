@@ -149,7 +149,7 @@ for f in parsed.files do
       local line = nodes[i].line
       local depth = call_depth(nodes, memo, i, LOOSE)
       local span = call_name(nodes, i) .. " to " .. call_name(nodes, deepest_call(nodes, memo, i, LOOSE))
-      push(finding_lines, f.path .. ":" .. line .. ":" .. nodes[i].col .. ": nested: depth " .. depth .. ", " .. span .. ": " .. trim(source_lines[line]))
+      push(finding_lines, f.path .. ":" .. line .. ":" .. nodes[i].column .. ": nested: depth " .. depth .. ", " .. span .. ": " .. trim(source_lines[line]))
       incr(count_by_depth, tostring(depth))
       push_at(found_at, f.path .. ":" .. line, "nested " .. depth)
     end

@@ -9,8 +9,8 @@
 --   fail_if_go_refused("hunt_names", parsed.refused)
 --   check_want_marks("hunt_names", paths, found_at, CHECKS)
 --
--- A node is go_tree's: `{kind, depth, parent, kids, line, col, end_line,
--- end_col}`, `role` (the parent's field that holds it, `Fun`, `Args`,
+-- A node is go_tree's: `{kind, depth, parent, kids, line, column, end_line,
+-- end_column}`, `role` (the parent's field that holds it, `Fun`, `Args`,
 -- `Body`) and its scalars (`name`, `value`, `op`, `tok`).
 
 -- The files that parse, and a `path: reason` line for each that doesn't.
@@ -67,8 +67,8 @@ end
 function source_of(source_lines, n)
   if n.line == 0 then return "" end
   local l = source_lines[n.line]
-  if n.end_line == n.line then return sub(l, n.col, n.end_col - 1) end
-  return sub(l, n.col, #l) .. "..."
+  if n.end_line == n.line then return sub(l, n.column, n.end_column - 1) end
+  return sub(l, n.column, #l) .. "..."
 end
 
 -- A Go name's words, lower case: `serveHTTP` is {serve, http},

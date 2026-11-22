@@ -48,13 +48,13 @@
 -- The source between two places, a end column being one past the last
 -- character, with each line after the first losing the first line's
 -- indentation.
-function source_text(src, line, col, end_line, end_col)
+function source_text(src, line, column, end_line, end_column)
   local first = src[line]
   local indent = #first - #re_find(first, "^[ \t]*(.*)$").group
-  if line == end_line then return {sub(first, col, end_col - 1)} end
-  local out = {sub(first, col)}
+  if line == end_line then return {sub(first, column, end_column - 1)} end
+  local out = {sub(first, column)}
   for l = line + 1, end_line do
-    local text = l == end_line and sub(src[l], 1, end_col - 1) or src[l]
+    local text = l == end_line and sub(src[l], 1, end_column - 1) or src[l]
     local k = 1
     while k <= indent and k <= #text and (sub(text, k, k) == "\t" or sub(text, k, k) == " ") do k = k + 1 end
     push(out, sub(text, k))
@@ -600,7 +600,7 @@ function test_only_imports(st, info)
     -- roc-ast keeps only `.Red` of a pattern's `Color.Red`, so the source says.
     if n.kind == "p-tag" then
       name = get(n, "raw", "")
-      local m = starts_with(name, ".") and re_find(sub(info.src[n.line], n.col), "^([A-Za-z_][A-Za-z0-9_.]*)") or nil
+      local m = starts_with(name, ".") and re_find(sub(info.src[n.line], n.column), "^([A-Za-z_][A-Za-z0-9_.]*)") or nil
       if m ~= nil then name = m.group end
     end
     local head = split(name, ".")[1]
@@ -664,7 +664,7 @@ function resolve_alias(st, info, name)
     local kids = file.nodes[t.at].kids
     if #kids < 2 or file.nodes[kids[2]].kind ~= "ty" then return r.id end
     local head = file.nodes[kids[1]]
-    if contains(sub(file.src[head.end_line], head.end_col, head.end_col + 3), "::") then return r.id end
+    if contains(sub(file.src[head.end_line], head.end_column, head.end_column + 3), "::") then return r.id end
     here = file
     want = get(file.nodes[kids[2]], "name", "")
   end
@@ -752,14 +752,14 @@ end
 function backing_type(st, info, at)
   local n = info.nodes[at]
   local raw = get(n, "raw", "")
-  if #n.kids ~= 1 or sub(info.src[n.line], n.col + #raw, n.col + #raw + 1) ~= ".(" then return nil end
+  if #n.kids ~= 1 or sub(info.src[n.line], n.column + #raw, n.column + #raw + 1) ~= ".(" then return nil end
   local id = resolve_type(st, info, raw)
   if id == nil or id == "leaf" then return nil end
   local t = st.types[id]
   local file = st.files[t.path]
   local kids = file.nodes[t.at].kids
   local head = file.nodes[kids[1]]
-  if #kids < 2 or not contains(sub(file.src[head.end_line], head.end_col, head.end_col + 3), "::") then return nil end
+  if #kids < 2 or not contains(sub(file.src[head.end_line], head.end_column, head.end_column + 3), "::") then return nil end
   return anno_type(st, file, kids[2])
 end
 
@@ -1067,7 +1067,7 @@ function private_signatures(st, start)
       count = count + 1
       push(out, "")
       for l in doc_lines_above(info.src, n.line) do push(out, l) end
-      local anno = source_text(info.src, n.line, n.col, n.end_line, n.end_col)
+      local anno = source_text(info.src, n.line, n.column, n.end_line, n.end_column)
       local test = fc.gates or has_key(fc.test_values, get(n, "name", ""))
       anno[#anno] = anno[#anno] .. (test and "   # private; tests only" or "   # private")
       for l in anno do push(out, l) end
@@ -1086,7 +1086,7 @@ function error_tags(info, anno)
   local r = tree[result]
   if r.kind ~= "ty-apply" or #r.kids < 3 or get(tree[r.kids[1]], "name", "") ~= "Try" then return "" end
   local u = tree[r.kids[3]]
-  if u.kind ~= "ty-tag-union" then return join(source_text(info.src, u.line, u.col, u.end_line, u.end_col), " ") end
+  if u.kind ~= "ty-tag-union" then return join(source_text(info.src, u.line, u.column, u.end_line, u.end_column), " ") end
   local names = {}
   for k in u.kids do
     if tree[k].kind == "tags" then

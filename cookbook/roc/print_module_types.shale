@@ -277,7 +277,7 @@ function is_unit(st, t)
   local kids = tree[t.at].kids
   if #kids < 2 or tree[kids[2]].kind ~= "ty" or not has_item(WALK_NUMBERS, get(tree[kids[2]], "name", "")) then return false end
   local name_node = tree[kids[1]]
-  local between = sub(info.src[name_node.end_line], name_node.end_col, name_node.end_col + 3)
+  local between = sub(info.src[name_node.end_line], name_node.end_column, name_node.end_column + 3)
   if not contains(between, "::") then return false end
   for k in kids do
     if tree[k].kind == "associated" then
@@ -376,7 +376,7 @@ function type_lines(st, id)
   for l in doc do push(out, l) end
   local kids = decl.kids
   local last = (#kids > 1 and tree[kids[2]].kind ~= "associated") and tree[kids[2]] or tree[kids[1]]
-  local definition = source_text(src, decl.line, decl.col, last.end_line, last.end_col)
+  local definition = source_text(src, decl.line, decl.column, last.end_line, last.end_column)
   local members = members_of(tree, t.at)
   if #members == 0 then
     for l in definition do push(out, l) end
@@ -398,7 +398,7 @@ function type_lines(st, id)
     local f = tree[members[i].at]
     if i > 1 then push(out, "") end
     for l in doc_lines_above(src, f.line) do push(out, "\t" .. l) end
-    local anno = source_text(src, f.line, f.col, f.end_line, f.end_col)
+    local anno = source_text(src, f.line, f.column, f.end_line, f.end_column)
     local notes = {}
     if members[i].constant then
       push(notes, "constant")
@@ -463,7 +463,7 @@ function named_by_items(st, info, start)
         local name = get(tree[n.kids[1]], "name", "")
         if name ~= "" and names_asked(st, info, mentions_in(tree, n.kids[2], {}), start) then
           local last = tree[n.kids[2]]
-          local text = source_text(info.src, n.line, n.col, last.end_line, last.end_col)
+          local text = source_text(info.src, n.line, n.column, last.end_line, last.end_column)
           text[1] = qualified_name(tree, i) .. sub(text[1], #name + 1)
           push(out, {lines = text, line = n.line, is_type = true, tag = fc.gates and "test" or ""})
         end
@@ -472,7 +472,7 @@ function named_by_items(st, info, start)
         local found = {}
         for k in n.kids do mentions_in(tree, k, found) end
         if names_asked(st, info, found, start) then
-          local text = source_text(info.src, n.line, n.col, n.end_line, n.end_col)
+          local text = source_text(info.src, n.line, n.column, n.end_line, n.end_column)
           local owner = owner_prefix(tree, i)
           text[1] = owner .. text[1]
           local tag = ""

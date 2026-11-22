@@ -412,7 +412,7 @@ function types_by_region(ctx, root)
   for path in got.paths do
     for rec in got.modules[path] do
       if rec.kind == "expr" then
-        local key = path .. "|" .. rec.line .. ":" .. rec.col .. ":" .. rec.end_line .. ":" .. rec.end_col
+        local key = path .. "|" .. rec.line .. ":" .. rec.column .. ":" .. rec.end_line .. ":" .. rec.end_column
         if not has_key(by_region, key) then by_region[key] = rec.type end
       end
     end

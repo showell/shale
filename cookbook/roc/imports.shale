@@ -15,9 +15,9 @@ function head_of(name)
 end
 
 -- The name a pattern's tag is written with, read from the source line `text`
--- at byte `col`, since the tree keeps only `.Red` of `Color.Red`.
-function written_tag(text, col)
-  local m = re_find(sub(text, col), "^([A-Za-z_][A-Za-z0-9_.]*)")
+-- at byte `column`, since the tree keeps only `.Red` of `Color.Red`.
+function written_tag(text, column)
+  local m = re_find(sub(text, column), "^([A-Za-z_][A-Za-z0-9_.]*)")
   if m == nil then return "" end
   return m.group
 end
@@ -82,7 +82,7 @@ function heads_used(tree, src)
     -- A platform header's `hosted { "sym": Host.f! }` entry uses its module.
     if node.kind == "symbol-map-entry" then name = get(node, "module", "") end
     if node.kind == "p-tag" then
-      local written = starts_with(node.raw, ".") and written_tag(src[node.line], node.col) or node.raw
+      local written = starts_with(node.raw, ".") and written_tag(src[node.line], node.column) or node.raw
       if contains(written, ".") then name = written end
     end
     if name ~= "" then used[head_of(name)] = true end

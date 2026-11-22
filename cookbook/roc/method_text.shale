@@ -21,7 +21,7 @@ const BARE_RECEIVER_KINDS = {["e-ident"] = true, ["e-apply"] = true, ["e-method-
 -- byte (1-based) and `to` one past its last. nil for a node with no position.
 function span_of(n, starts)
   if n.line == 0 then return nil end
-  return {from = starts[n.line] + n.col - 1, to = starts[n.end_line] + n.end_col - 1}
+  return {from = starts[n.line] + n.column - 1, to = starts[n.end_line] + n.end_column - 1}
 end
 
 -- The byte offset at which each line starts.
@@ -48,7 +48,7 @@ function parse_trees(paths)
     local t = {nodes = {}, text = text, starts = line_starts(text)}
     for n in f.nodes do
       local span = span_of(n, t.starts)
-      push(t.nodes, {kind = n.kind, raw = get(n, "raw", ""), name = get(n, "name", ""), field = get(n, "field", ""), method = get(n, "method", ""), span = span or {from = 0, to = 0}, has_span = span ~= nil, kids = n.kids, parent = n.parent, region = n.line .. ":" .. n.col .. ":" .. n.end_line .. ":" .. n.end_col})
+      push(t.nodes, {kind = n.kind, raw = get(n, "raw", ""), name = get(n, "name", ""), field = get(n, "field", ""), method = get(n, "method", ""), span = span or {from = 0, to = 0}, has_span = span ~= nil, kids = n.kids, parent = n.parent, region = n.line .. ":" .. n.column .. ":" .. n.end_line .. ":" .. n.end_column})
     end
     out[f.path] = t
   end

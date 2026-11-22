@@ -339,7 +339,7 @@ function string_columns_on_lines(nodes, ls, who)
   for n in nodes do
     if has_key(STRING_TEXT, n.kind) then
       if n.line ~= n.end_line then fail(who .. ": line " .. n.line .. ": a run of string text crosses a line") end
-      incr(by_line, "" .. n.line, line_width(sub(ls[n.line], n.col, n.end_col - 1)))
+      incr(by_line, "" .. n.line, line_width(sub(ls[n.line], n.column, n.end_column - 1)))
     end
   end
   return by_line

@@ -98,7 +98,7 @@ function parse_roc_types_output(r, root, roc)
         if n == nil then fail("`roc_types`: line " .. k .. ", a span's number `" .. x .. "`") end
         push(span, n)
       end
-      push(out.modules[path], {kind = f[2], tag = f[3], line = span[1], col = span[2], end_line = span[3], end_col = span[4], type = ty})
+      push(out.modules[path], {kind = f[2], tag = f[3], line = span[1], column = span[2], end_line = span[3], end_column = span[4], type = ty})
     else
       fail("`roc_types`: line " .. k .. " is no record of roc-types' format: " .. l)
     end
@@ -110,8 +110,8 @@ end
 -- reports them. `roc` is the OS path of the tree's Roc compiler, as
 -- `roc_bin` in cookbook/roc/pinned.shale gives it. The result is a record:
 --   paths: each module's real, absolute path, in roc-types' order;
---   modules: for each path, a list of `{kind, tag, line, col, end_line,
---     end_col, type}`, where `kind` is "expr" or "pat". The list is in the
+--   modules: for each path, a list of `{kind, tag, line, column,
+--     end_line, end_column, type}`, where `kind` is "expr" or "pat". The list is in the
 --     checker's pre-order, so when several nodes share a region, the
 --     outermost comes first;
 --   warnings: the lines roc-types printed before the first module;
@@ -191,9 +191,9 @@ end
 
 -- The key under which `roc_types_for_files` stores the type at a region of a
 -- file, given the file's real path and anything with the region's
--- `line, col, end_line, end_col`.
+-- `line, column, end_line, end_column`.
 function roc_types_region_key(real_path, region)
-  return real_path .. "|" .. region.line .. ":" .. region.col .. ":" .. region.end_line .. ":" .. region.end_col
+  return real_path .. "|" .. region.line .. ":" .. region.column .. ":" .. region.end_line .. ":" .. region.end_column
 end
 
 -- The types a recipe needs for the files `paths`, gathered by running
