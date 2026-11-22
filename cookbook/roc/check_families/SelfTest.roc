@@ -150,6 +150,13 @@ rows = [
 		counts: [("twin_name", 1)],
 		says: ["`Lamp` is also declared at"],
 	}),
+	fires({
+		plant: "conversion/*.roc",
+		arguments: [],
+		counts: [("unpaired_conversion", 1)],
+		says: ["Span.roc:4: unpaired_conversion: `Span.metres` gives a `Span` beside `Span.to_metres`"],
+	}),
+	quiet("conversion_paired/*.roc", []),
 	stops({ plant: "broken/*.roc", arguments: [], says: ["refused: "] }),
 ]
 

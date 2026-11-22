@@ -116,10 +116,11 @@ are passed in):
   holds it to its goldens.
 - [check_families.shale](check_families.shale): a module spelled unlike
   the others that share its last word, and one type name declared in two
-  modules with different shapes. Give it the whole tree, since twins often
+  modules with different shapes, and a type's `<noun>` that gives the type
+  beside its `to_<noun>`, which is `from_<noun>`. Give it the whole tree, since twins often
   sit in two folders. It is written in Roc, a root,
   [check_families/check_families.roc](check_families/check_families.roc),
-  with its checks in `Family.roc` and `Twin.roc` beside it;
+  with its checks in `Family.roc`, `Twin.roc` and `Conversion.roc` beside it;
   [check_goldens.shale](check_families/check_goldens.shale) holds it to its
   goldens.
 - [find_bare_floats.shale](find_bare_floats.shale): a bare `F64` in a

@@ -1,7 +1,8 @@
--- This recipe checks that modules which look alike are spelled alike, and
--- that one type name means one thing. It is written in Roc, the app
+-- This recipe checks that modules which look alike are spelled alike, that
+-- one type name means one thing, and that a conversion pair is named both
+-- ways. It is written in Roc, the app
 -- cookbook/roc/check_families/check_families.roc, the modules beside it
--- (Family and Twin, the checks; SelfTest) and the cookbook's Roc library
+-- (Family, Twin and Conversion, the checks; SelfTest) and the cookbook's Roc library
 -- (cookbook/roc/lib/: Declarations, Tree, Text and Finding), on Shale's Roc
 -- platform (roc_platform/README.md);
 -- this file is its launcher, so it is launched as every Shale recipe is:
@@ -36,6 +37,12 @@
 --              (`Collider := [].{ ... }`) builds a type and declares none, and
 --              so does an alias of the twin (`Pose : Geom.Pose`). App files are
 --              left out, because every app declares what its platform asks for.
+--   unpaired_conversion
+--              Inside a type's braces, a function named for a noun that
+--              gives the type (`Distance.metres : F64 -> Distance`) when the
+--              same type has `to_<noun>` (`Distance.to_metres`): it is the
+--              way back, so it is `from_<noun>` (`Distance.from_metres`). A
+--              constructor with no `to_` partner (`Clock.at_step`) passes.
 --
 -- `twin_name` sees only the files read, so give it the whole tree: run by
 -- folder, it misses twins in two folders.

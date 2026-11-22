@@ -44,6 +44,8 @@ const ROWS = {
   {glob = "twin_copy/*.roc"},
   {glob = "twin_namespace/*.roc"},
   {glob = "twin_namespace_clash/*.roc"},
+  {glob = "conversion/*.roc"},
+  {glob = "conversion_paired/*.roc"},
   {glob = "broken/*.roc"},
   {glob = "*/*.roc"},
   {glob = "*/*.roc", args = "roles=" .. AT .. "roles.txt"},

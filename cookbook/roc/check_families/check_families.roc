@@ -5,7 +5,7 @@
 ## `Geom.Pose` as the same thing, so a family spelled unlike or a twin of
 ## another shape costs every reader a wrong guess. Its launcher,
 ## cookbook/roc/check_families.shale, is how it is run, and its header says
-## the rules, `family` and `twin_name`. check_goldens.shale, beside this,
+## the rules, `family`, `twin_name` and `unpaired_conversion`. check_goldens.shale, beside this,
 ## holds its output on the plants to its goldens, line for line.
 ##
 ##   cd <repo> && shale cookbook:roc/check_families.shale roles=tools/type_roles.txt
@@ -18,7 +18,7 @@
 ## This root globs the files (`Shale.glob!`), has Roc's parser read them
 ## (`Shale.roc_tree!`) and each one's text (`Shale.read!`), reads the roles
 ## file, and prints the verdict (`Shale.print!`, `Shale.fail!`). Its modules
-## are beside it, a module a check (Family, Twin) and SelfTest; what they read
+## are beside it, a module a check (Family, Twin, Conversion) and SelfTest; what they read
 ## (Tree, Declarations, Text) and Finding are the cookbook's Roc library,
 ## cookbook/roc/lib/.
 ## budget: steps=800000000 arena_bytes=2000000000 output_bytes=4000000 programs=100
@@ -29,6 +29,7 @@ import lib.Declarations
 import lib.Finding
 import lib.Text
 import lib.Tree
+import Conversion
 import Family
 import SelfTest
 import Twin
@@ -85,7 +86,7 @@ run_check! = |{}| {
 	}
 }
 
-## Both checks over the files that parsed, the roles file read for
+## The checks over the files that parsed, the roles file read for
 ## `twin_name`.
 run_checks! : List(ParsedFile) => List(Finding)
 run_checks! = |files| {
@@ -99,7 +100,8 @@ run_checks! = |files| {
 	twin_files = files
 		.keep_if(|file| !(file.is_app))
 		.map(|file| { path: file.read.path, types: file.read.declared.types })
-	family_findings.concat(Twin.findings(twin_files, roles))
+	conversion_findings = Conversion.findings(files.map(|file| file.read.declared.values).join())
+	family_findings.concat(Twin.findings(twin_files, roles)).concat(conversion_findings)
 }
 
 ## The modules among the files read, in their order.
@@ -155,9 +157,10 @@ read_word_set! = |path| {
 
 ## The checks, in the order the summary counts them.
 checks : List(Str)
-checks = ["family", "twin_name"]
+checks = ["family", "twin_name", "unpaired_conversion"]
 
-## The counts, `check_families (Roc): N files; family N, twin_name N`.
+## The counts, `check_families (Roc): N files; family N, twin_name N,
+## unpaired_conversion N`.
 summary_of : List(Finding), U64 -> Str
 summary_of = |findings, file_count| {
 	"check_families (Roc): ${file_count.to_str()} files; ${Finding.counts_of(findings, checks)}"
