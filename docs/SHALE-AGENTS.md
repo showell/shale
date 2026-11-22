@@ -917,8 +917,8 @@ the first two can give a quiet wrong answer, an empty list:
   read-only, and no script reads, lists, `stat`s or `real`s its files, by
   its name or by a root or mount path that reaches its folder; no program
   starts there or is handed its folder in an argument (with or without
-  `want`). Only `run`'s `secrets = {NAME = "keys:file"}` takes one, the
-  value in the program's environment and scrubbed from its output as
+  `want`). Only `run`'s `secrets = {NAME = "keys:file"}` (and
+  `secret_args`, below) takes one, the value in the program's environment and scrubbed from its output as
   `<secret NAME>`; `http_get`'s `bearer` and `cookbook:fetch_page.shale`'s
   `bearer=keys:file` use it. **`run`'s `secret_args = {NAME = "keys:file"}`
   puts one in an argument**, for a program that takes it there (ssh's
@@ -936,8 +936,8 @@ the first two can give a quiet wrong answer, an empty list:
   `connect to host <address>` for a `user@address`) shows that part:
   quiet the program (`-o LogLevel=QUIET`). An argument is not an
   environment: any process on the machine can read a program's argv in
-  `/proc`, so an argument suits an address, not a token. **The one write path is `run`'s
-  `stdout_secret = "keys:NAME"`:** the program's stdout goes straight to
+  `/proc`, so an argument suits an address, not a token. **The one write
+  path is `run`'s `stdout_secret = "keys:NAME"`:** the program's stdout goes straight to
   that file, never to the script, so a secret received is stored without
   passing through a variable. The file is directly in a `secrets` mount
   (no folder in it, no `..`, no link), made 0600 beside it and renamed
