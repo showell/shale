@@ -31,8 +31,8 @@
 -- platform's lock), the `called from` lines, and the launchers' own stops
 -- (run.shale's `run: ...`, this recipe's launcher's). A stop's line is held
 -- by its words, not its place or its steps (`── stop: <words>`). A fresh scratch folder's
--- name (`scratch:methods.XXXXXX`) and the copy's own path are masked, as
--- they differ from run to run.
+-- name (`scratch:methods.XXXXXX`) the copy's own path and the `tools`
+-- mount's are masked, as they differ from run to run and box to runner.
 -- budget: programs=400 reads=100000 steps=400000000 arena_bytes=1000000000 output_bytes=2000000 changes=20000 change_bytes=200000000
 use("cookbook:roc/pinned.shale")
 use("cookbook:roc/types.shale")
@@ -120,6 +120,7 @@ function body(out, copy)
   local kept = {}
   for l in lines(out) do
     if copy ~= nil then l = join(split(l, copy), "<copy>") end
+    l = join(split(l, real("tools:") .. "/"), "<tools>/")
     l = re_replace(l, "scratch:methods\\.[A-Za-z0-9]{6}", "scratch:methods.XXXXXX")
     -- A stop's steps end its message, on its last line.
     l = re_replace(l, " \\([0-9]+ steps\\)$", "")
