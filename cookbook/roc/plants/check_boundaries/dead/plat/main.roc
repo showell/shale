@@ -15,4 +15,5 @@ platform ""
 
 import UnusedApi
 
+start_for_host : U64 -> U64
 start_for_host = |x| x
