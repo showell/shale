@@ -1254,7 +1254,7 @@ git_push(repo: Path, opts?: Opts) -> Nil
   impl: prelude git
   kind: effect
   stops: fail (no upstream, or one of another name; over ssh, `run`'s refusals: a force but a lease to a lane, a deletion of main or master, a remote not the remotes file's)
-  opts: remote: Str, branch: Str, tag: Str, to: Str, delete: Str, lease: Bool, timeout_ms: Int
+  opts: remote: Str, branch: Str, tag: Str, to: Str, from: Str, delete: Str, lease: Bool, timeout_ms: Int
   doc: the branch pushed to its namesake upstream, HEAD to `to`, a tag alone, or a branch deleted; unconfined over ssh
   anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
 

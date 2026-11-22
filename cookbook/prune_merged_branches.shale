@@ -11,8 +11,9 @@
 -- branch's (`git merge-base --is-ancestor`), never by its name, so a branch
 -- with even one commit the default lacks is kept, with the count. The
 -- default branch is always kept. Only `delete=1` deletes: the plain run is
--- a report, and with `delete=1` each `delete` line is a `git push origin
--- --delete`, said as it is done. Run it yourself, or let an agent
+-- a report, and with `delete=1` each `delete` line is a
+-- `git_push(repo, {delete = branch})` (`git push origin --delete`, unconfined
+-- over ssh), said as it is done. Run it yourself, or let an agent
 -- run the report and hand you the `delete=1` line.
 --
 --   shale cookbook:prune_merged_branches.shale
@@ -111,11 +112,11 @@ if SELF_TEST then
   run({"git", "clone", "-q", root .. "/origin.git", root .. "/work"}, {timeout_ms = 30000, whole = 10000})
   local w = root .. "/work"
   git(w, {"-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "base"})
-  git(w, {"push", "-q", "origin", "HEAD:main"})
-  git(w, {"push", "-q", "origin", "HEAD:refs/heads/claude/merged"})
+  git_push(T .. "/work", {to = "main"})
+  git_push(T .. "/work", {to = "claude/merged"})
   git(w, {"-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "more"})
-  git(w, {"push", "-q", "origin", "HEAD:refs/heads/claude/ahead"})
-  git(w, {"push", "-q", "origin", "HEAD:refs/heads/other/ignored"})
+  git_push(T .. "/work", {to = "claude/ahead"})
+  git_push(T .. "/work", {to = "other/ignored"})
   git(w, {"remote", "set-head", "origin", "main"})
   local got = {}
   for v in judge(w, "t", {"claude/", "box/"}) do got[v.branch] = v.act; say(v) end
@@ -123,7 +124,7 @@ if SELF_TEST then
   if got["claude/ahead"] ~= "keep" then fail("self_test: claude/ahead (one commit more) should be keep") end
   if has_key(got, "other/ignored") then fail("self_test: a branch outside the prefixes was judged") end
   -- The default branch itself, under a work prefix, is kept.
-  git(w, {"push", "-q", "origin", "HEAD:refs/heads/box/default"})
+  git_push(T .. "/work", {to = "box/default"})
   run({"git", "--git-dir", root .. "/origin.git", "symbolic-ref", "HEAD", "refs/heads/box/default"}, {timeout_ms = 30000, whole = 10000})
   git(w, {"remote", "set-head", "origin", "--auto"})
   got = {}
@@ -147,15 +148,13 @@ else
         if v.act == "delete" then doomed[#doomed + 1] = v.branch elseif v.act == "keep" then kept = kept + 1 end
       end
       if DELETE and #doomed > 0 then
-        local argv = {"push", "origin", "--delete"}
-        for d in doomed do argv[#argv + 1] = d end
-        local pushed = git_may_fail(dir, argv, "nonzero: said below")
-        if pushed.code == 0 then
-          print("  deleted on origin: " .. join(doomed, ", "))
-        else
-          print("  NOT deleted (" .. label .. "): " .. trim(pushed.out))
-          doomed = {}
+        local gone = {}
+        for d in doomed do
+          local pushed = attempt(git_push, "repos:" .. label, {delete = d})
+          if pushed.ok then push(gone, d) else print("  NOT deleted (" .. label .. " " .. d .. "): " .. pushed.error) end
         end
+        if #gone > 0 then print("  deleted on origin: " .. join(gone, ", ")) end
+        doomed = gone
       end
       deleted = deleted + #doomed
     end

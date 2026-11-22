@@ -37,8 +37,10 @@
 --    `retire_checkout` has already said each of them is on a remote. The
 --    default branch itself is never deleted, nor a detached HEAD's commit,
 --    which has no branch.
--- 5. **Delete its remote branch** (`git push origin --delete`) when one is
---    left on origin and is merged, by the same rule; else it is kept, said.
+-- 5. **Delete its remote branch** (`git_push(lane, {delete = branch})`,
+--    from the lane before it goes, so a push over ssh runs unconfined) when
+--    one is left on origin and is merged, by the same rule; else it is
+--    kept, said.
 --
 -- Each step prints one line, and the last line is the outcome: `removed:
 -- <lane> (...)` naming what was deleted and what was kept.
@@ -136,16 +138,17 @@ function require_clear(root, dir, env)
 end
 
 -- What happens to a branch: deleted when merged, else kept. `where` is
--- "local" (the branch in `dir_os`) or "remote" (its branch on origin).
--- Gives the line said.
-function settle_branch(dir_os, branch, main, where)
+-- "local" (the branch in `dir_os`) or "remote" (its branch on origin,
+-- deleted by `git_push` from `push_from`, the lane's Shale path, so a push
+-- over ssh runs unconfined). Gives the line said.
+function settle_branch(dir_os, branch, main, where, push_from?)
   if main == nil then return "kept " .. where .. " " .. branch .. ": origin's default branch is not known here" end
   if branch == main then return "kept " .. where .. " " .. branch .. ": origin's default branch" end
   local ref = branch
   if where == "remote" then ref = "origin/" .. branch end
   local m = merged_into(dir_os, ref, main)
   if not m.merged then return "kept " .. where .. " " .. branch .. ": " .. m.why end
-  if where == "remote" then git_ok(dir_os, {"push", "-q", "origin", "--delete", branch}) else git_ok(dir_os, {"branch", "-D", branch}) end
+  if where == "remote" then git_push(push_from, {delete = branch}) else git_ok(dir_os, {"branch", "-D", branch}) end
   return "deleted " .. where .. " " .. branch .. ": " .. m.why
 end
 
@@ -186,19 +189,23 @@ function remove_lane(cfg)
   local main = default_branch(repo_os)
   local said = {}
   if is_worktree then
+    -- The remote branch is settled while the lane is there to push from,
+    -- and said after the removal, in the outcome's order.
+    local remote_said = "no remote branch " .. branch .. " on origin"
+    if branch ~= "" and has_remote_branch(repo_os, branch) then remote_said = settle_branch(repo_os, branch, main, "remote", path) end
     git_ok(repo_os, {"worktree", "remove", lane_os})
     say(said, "removed the worktree " .. lane_os .. " of " .. repo_os)
     if branch == "" then
       say(said, "no branch: its HEAD was detached")
     else
       say(said, settle_branch(repo_os, branch, main, "local"))
-      if has_remote_branch(repo_os, branch) then say(said, settle_branch(repo_os, branch, main, "remote")) else say(said, "no remote branch " .. branch .. " on origin") end
+      say(said, remote_said)
     end
   else
     if branch == "" then
       say(said, "no branch: its HEAD was detached")
     elseif has_remote_branch(lane_os, branch) then
-      say(said, settle_branch(lane_os, branch, main, "remote"))
+      say(said, settle_branch(lane_os, branch, main, "remote", path))
     else
       say(said, "no remote branch " .. branch .. " on origin")
     end
@@ -244,7 +251,7 @@ function self_test()
   must(run({"git", "clone", "-q", Tos .. "/origin.git", Tos .. "/main"}, {timeout_ms = 30000, whole = 10000}))
   local M = Tos .. "/main"
   commit_file(M, "README.md", "first")
-  git_ok(M, {"push", "-q", "origin", "HEAD:main"})
+  git_push(T .. "/main", {to = "main"})
   git_ok(M, {"remote", "set-head", "origin", "--auto"})
   -- A lane with a commit on no remote.
   git_ok(M, {"worktree", "add", "-q", "-b", "unpushed", Los .. "/unpushed"})
@@ -252,35 +259,35 @@ function self_test()
   -- A lane pushed and merged into main.
   git_ok(M, {"worktree", "add", "-q", "-b", "merged", Los .. "/merged"})
   commit_file(Los .. "/merged", "b.txt", "merged")
-  git_ok(Los .. "/merged", {"push", "-q", "-u", "origin", "merged"})
+  git_push(L .. "/merged", {branch = "merged"})
   git_ok(M, {"merge", "-q", "--ff-only", "merged"})
-  git_ok(M, {"push", "-q", "origin", "main"})
+  git_push(T .. "/main", {to = "main"})
   -- A lane pushed and not merged.
   git_ok(M, {"worktree", "add", "-q", "-b", "pushed", Los .. "/pushed"})
   commit_file(Los .. "/pushed", "c.txt", "pushed")
-  git_ok(Los .. "/pushed", {"push", "-q", "-u", "origin", "pushed"})
+  git_push(L .. "/pushed", {branch = "pushed"})
   -- A lane pushed, then rebased onto main: both its commits picked there.
   git_ok(M, {"worktree", "add", "-q", "-b", "rebased", Los .. "/rebased"})
   commit_file(Los .. "/rebased", "e.txt", "rebased, first")
   commit_file(Los .. "/rebased", "f.txt", "rebased, second")
-  git_ok(Los .. "/rebased", {"push", "-q", "-u", "origin", "rebased"})
+  git_push(L .. "/rebased", {branch = "rebased"})
   -- A lane pushed, one of its two commits picked onto main.
   git_ok(M, {"worktree", "add", "-q", "-b", "partly", Los .. "/partly"})
   commit_file(Los .. "/partly", "g.txt", "partly, picked")
   commit_file(Los .. "/partly", "h.txt", "partly, not picked")
-  git_ok(Los .. "/partly", {"push", "-q", "-u", "origin", "partly"})
+  git_push(L .. "/partly", {branch = "partly"})
   -- main moves on first, so each commit picked onto it gets a new hash
   -- (picked onto its own parent within the second, it would keep its own).
   commit_file(M, "x.txt", "main moves on")
   git_ok(M, {"cherry-pick", "rebased~1", "rebased", "partly~1"})
-  git_ok(M, {"push", "-q", "origin", "main"})
+  git_push(T .. "/main", {to = "main"})
   expect("rebased: its tip not an ancestor of main", git(M, {"merge-base", "--is-ancestor", "rebased", "main"}).code == 0, false)
   -- A clone on a branch pushed and merged.
   must(run({"git", "clone", "-q", Tos .. "/origin.git", Los .. "/clone"}, {timeout_ms = 30000, whole = 10000}))
   git_ok(Los .. "/clone", {"checkout", "-q", "-b", "cloned"})
   commit_file(Los .. "/clone", "d.txt", "cloned")
-  git_ok(Los .. "/clone", {"push", "-q", "-u", "origin", "cloned"})
-  git_ok(Los .. "/clone", {"push", "-q", "origin", "cloned:main"})
+  git_push(L .. "/clone", {branch = "cloned"})
+  git_push(L .. "/clone", {to = "main"})
 
   local a = attempt(remove_lane, {root = L, dir = "unpushed", env = env})
   expect("unpushed: refused", a.ok, false)

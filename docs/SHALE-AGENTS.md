@@ -161,6 +161,7 @@ Each has a Shale form, most of them one launch:
 | `git show origin/master:QUEUE.md \| sed -n 40,80p`, `git grep` at a revision | `shale cookbook:look.shale rev=origin/master at=QUEUE.md:40-80` (or `find=` `in=`): `at` and `in` read as the revision holds them (`repo=` another checkout) |
 | `git log`, `git diff --stat`, `git show rev:path`, `git status` | the git prelude: `git_log`, `git_diff`, `git_show`, `git_status`, `git_is_clean` (below) |
 | `git commit -m ... && git push` | `git_commit(repo, msg, {add})`, `git_push(repo)`; `git_worktree_add`, `git_merge_ff` |
+| `git push origin HEAD:main`, `git push origin --delete lane`, `git push --force-with-lease` | `git_push(repo, {to = "main"})`, `git_push(repo, {delete = "lane"})`, `git_push(repo, {lease = true})`: a plain `run` of `git push` over ssh cannot read the key |
 | a script you would write in python | a heredoc, `shale <<'TAG'`: `edit`'s list form, `walk_all`, `grep`, `re_lines`, `run` |
 
 A script is named through a mount too (`shale cookbook:look.shale`, once
@@ -250,14 +251,35 @@ has none of it):
   outside it, so every program gets `XDG_CACHE_HOME` and
   `ZIG_GLOBAL_CACHE_DIR` set to `build:cache` (the `build` mount's `cache`
   folder, or the run's temporary folder's when no writable mount is named
-  `build`), and each of the three unless the script's `env` sets it. ssh
+  `build`) and `PLAYWRIGHT_BROWSERS_PATH` to `build:cache/ms-playwright`,
+  each of the four unless the script's `env` sets it. **Playwright's
+  browsers are installed there once**, from a shell outside Shale:
+  `PLAYWRIGHT_BROWSERS_PATH=<the build mount's folder>/cache/ms-playwright
+  npx playwright install chromium`, or an old `~/.cache/ms-playwright`
+  moved there whole; a screenshot tool finds its Chromium by
+  `PLAYWRIGHT_BROWSERS_PATH`, as roc-apps' do. ssh
   reads `~/.ssh/known_hosts` and `~/.ssh/config`, and no key file: a
   confined ssh authenticates only through an agent (`SSH_AUTH_SOCK` is
   passed on). **`run`'s `unconfined = "tag: why"`** runs four shapes past
   the rules, each recorded as `(unconfined: ...)`
-  (`c/host/host_unconfined.c`): a `git push` (no `-c` but `color.ui=never`,
-  no `--receive-pack` or `--exec`, its hooks, fsmonitor and credential
-  helpers off), and a deploy's `ssh`, `scp` and `rsync` to a host of the
+  (`c/host/host_unconfined.c`): a `git push`, and a deploy's `ssh`, `scp`
+  and `rsync` to a host of the hosts file. **The push** is `git [-C dir]
+  [-c color.ui=never] push [options] <remote> <refspec>...`, its options
+  HOST_UNCONFINED_PUSH_FLAGS' alone (`-q`, `-u`, `--delete`,
+  `--force-with-lease`, ...; no `--receive-pack` or `--exec`), a remote
+  by its name and at least one refspec. It never forces (`--force`, `-f`,
+  a bundle with an `f`, a `+refspec`, `--mirror`, `--prune` and `--all`
+  are refused) but by `--force-with-lease`, and that never to main or
+  master; it never deletes main or master. Every push URL of the remote,
+  as git reads it (`git remote get-url --push --all`, run confined, so an
+  `insteadOf` and a `pushurl` count), is `<line><repo>.git` for a line of
+  the **remotes file**: `~/.config/shale/remotes`, beside the hosts file
+  (or the file `SHALE_REMOTES` names), one owner a line,
+  `git@github.com:showell/`; Shale ships none, so no file is no remote.
+  It runs with its hooks, fsmonitor, credential helpers, submodule pushes
+  and signing off, over ssh alone (`GIT_ALLOW_PROTOCOL=ssh`), ssh's
+  `HostName` that line's host. The git prelude's `git_push` runs every
+  push over ssh so (below). **The deploy's** `ssh`, `scp` and `rsync` go to a host of the
   **hosts file** alone: `~/.config/shale/hosts`, beside the mounts file (or
   the file `SHALE_HOSTS` names), one `user@host` a line, `#` lines and blank
   ones skipped (`deploy@example.com`). Shale ships no host: no file, or no
@@ -273,9 +295,14 @@ has none of it):
   the argv the program is handed, the value in place, against the hosts
   file, and a refusal names the marker, never the value, which the scrubber
   takes out of the output as for any run; so the hosts file holds the prod
-  host's `user@address` as the secret does. gh's configuration is closed too: hand it
-  `GH_TOKEN` through `secrets` and an empty `GH_CONFIG_DIR`, as
-  `cookbook/build_on_github.shale` does. A `want` never widens it. A program it
+  host's `user@address` as the secret does. **gh's configuration is closed
+  too:** every program gets `GH_CONFIG_DIR`, an empty folder of the run's
+  own, which no script's `env` sets, and gh's token goes in by `secrets =
+  {GH_TOKEN = "keys:github-token"}` alone (an `env` that sets GH_TOKEN,
+  GITHUB_TOKEN or an enterprise one is refused), as
+  `cookbook/build_on_github.shale` does; `gh auth` (`status` prints the
+  token's first characters, `token` and `git-credential` all of it) and
+  `gh alias` are refused, want or not. A `want` never widens it. A program it
   refuses gets EACCES from the call it made, so a script sees the
   program's own words, `Permission denied`, and its exit code: a refusal
   is a gap to name in host_confine.c on purpose. A kernel without Landlock
@@ -539,7 +566,16 @@ or `"."` for the root and `repos:roc-chat` for a mount.
     (a branch made from origin/master by hand tracks master), naming the
     call that pushes it: a bare push never lands on master unasked.
     `git_push(repo, {branch, remote})` pushes to that branch of `remote`
-    (`origin` unless named) and makes it the upstream, as `push -u` does.
+    (`origin` unless named) and makes it the upstream, as `push -u` does;
+    `{to = "main"}` pushes HEAD (or `{from}`, a local ref) to that branch,
+    the upstream left as it is; `{delete = "lane"}` deletes that branch
+    on the remote; `{lease = true}`, beside a bare push, `branch` or `to`,
+    forces it with `--force-with-lease`, as a lane pushes its own branch
+    after a rebase. **A push over ssh runs unconfined** (ssh reads the
+    user's key, which no confined program may), so `run` holds it to the
+    remotes file's remotes, and refuses any force but a lease to a branch
+    other than main and master, and a deletion of either (`unconfined`,
+    above); a push to a local path runs confined.
   - `git_fetch(repo, {all})`, `git_pull_ff(repo)` and `git_merge_ff(repo,
     ref)`.
   - `git_merge(repo, ref)` makes a merge commit when one is needed and
@@ -979,10 +1015,12 @@ the first two can give a quiet wrong answer, an empty list:
   `secrets`, a name no argument uses, a `<secret ` no name of it gives and
   a marker in argv[0] (the guards read the program's name as the script
   wrote it) each stop the run; the file is read as `secrets` reads one,
-  and `job_start` refuses it as it refuses `secrets`. Only the value
-  whole is scrubbed, so a program that prints a part of it (ssh's
-  `connect to host <address>` for a `user@address`) shows that part:
-  quiet the program (`-o LogLevel=QUIET`). An argument is not an
+  and `job_start` refuses it as it refuses `secrets`. **The scrubber takes
+  out the value whole and any 12 bytes of it or more**, so a program
+  that prints a token's first characters (`gh auth status`) or a fragment
+  shows none of it; a part shorter than 12 bytes passes (ssh's `connect to
+  host <address>` for a `user@address` with a short address): quiet the
+  program (`-o LogLevel=QUIET`). An argument is not an
   environment: any process on the machine can read a program's argv in
   `/proc`, so an argument suits an address, not a token. **The one write
   path is `run`'s `stdout_secret = "keys:NAME"`:** the program's stdout goes straight to

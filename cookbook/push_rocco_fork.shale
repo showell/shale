@@ -4,14 +4,16 @@
 -- permission: it pushes only to the checkout's `fork` remote, and only when
 -- that remote is the fork's address; it never pushes `main` or `master`,
 -- never forces, and never deletes. A push the fork can't fast-forward is
--- refused by git, and the recipe stops with git's words.
+-- refused by git, and the recipe stops with git's words. The push is
+-- `git_push`'s, so over ssh it runs unconfined, held there to the remotes
+-- file (~/.config/shale/remotes).
 --
 --   cd ~/showell_repos && shale cookbook:push_rocco_fork.shale dir=build:lanes/rocco-firefox branch=firefox-fixes
 --
 -- `dir` is the checkout, through a mount; `branch` is a local branch, pushed
 -- to the branch of the same name on the fork.
 --
--- budget: programs=10
+-- budget: programs=12
 
 const FORK = "git@github.com:showell/rocco-engine.git"
 const DIR = arg("dir", "")
@@ -28,8 +30,7 @@ if trim(remote.out) ~= FORK then fail("push_rocco_fork: " .. DIR .. "'s `fork` r
 local ref = "refs/heads/" .. BRANCH
 if run({"git", "-C", checkout, "rev-parse", "-q", "--verify", ref}, {timeout_ms = 10000, whole = 4096, want = "nonzero: said below"}).code ~= 0 then fail("push_rocco_fork: " .. DIR .. " has no local branch " .. BRANCH) end
 
-local pushed = run({"git", "-C", checkout, "push", "fork", ref .. ":" .. ref}, {timeout_ms = 120000, whole = 65536, want = "nonzero: git's refusal, said below"})
-print(trim(pushed.out))
-if pushed.code ~= 0 then fail("push_rocco_fork: git refused the push (exit " .. pushed.code .. ")") end
+local pushed = attempt(git_push, DIR, {remote = "fork", from = ref, to = BRANCH, timeout_ms = 120000})
+if not pushed.ok then fail("push_rocco_fork: git refused the push: " .. pushed.error) end
 local head = trim(run({"git", "-C", checkout, "rev-parse", "--short=8", ref}, {timeout_ms = 10000, whole = 4096}).out)
 print("push_rocco_fork: " .. BRANCH .. " at " .. head .. " is on https://github.com/showell/rocco-engine/tree/" .. BRANCH)

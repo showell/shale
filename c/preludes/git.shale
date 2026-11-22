@@ -251,8 +251,9 @@ function git_push_over_ssh(repo, remote)
 end
 
 -- Push, to `remote` (`origin` unless named): `{branch}`, which becomes its
--- upstream (`push -u`); `{to = "main"}`, HEAD to that branch, its upstream
--- unchanged (`push origin HEAD:main`); `{tag}`, that tag alone; `{delete =
+-- upstream (`push -u`); `{to = "main"}`, HEAD (or `from`, a local ref) to
+-- that branch, its upstream unchanged (`push origin HEAD:main`); `{tag}`,
+-- that tag alone; `{delete =
 -- "lane"}`, that branch deleted (`push origin --delete lane`). Bare, it
 -- pushes the branch HEAD is on to the remote branch of the same name: that
 -- of its upstream's remote, or of `remote`. **A bare push refuses a branch
@@ -265,7 +266,7 @@ end
 -- remotes, refusing a force but `--force-with-lease` to a branch other than
 -- main and master, and deleting either.
 function git_push(repo, opts?)
-  git_opts("git_push", opts, {"remote", "branch", "tag", "to", "delete", "lease", "timeout_ms"})
+  git_opts("git_push", opts, {"remote", "branch", "tag", "to", "from", "delete", "lease", "timeout_ms"})
   local args = {"push", "-q"}
   local named = {}
   if opts ~= nil then
@@ -277,6 +278,7 @@ function git_push(repo, opts?)
   local lease = opts ~= nil and get(opts, "lease", false)
   if lease and (has_key(opts, "tag") or has_key(opts, "delete")) then fail("`git_push`'s `lease` forces a branch: a bare push, `branch` or `to`, not a `tag` or a `delete`") end
   if lease then push(args, "--force-with-lease") end
+  if opts ~= nil and has_key(opts, "from") and not has_key(opts, "to") then fail("`git_push`'s `from` is the local ref a `to` pushes: name the `to`") end
   local remote = "origin"
   if opts ~= nil and has_key(opts, "remote") then remote = git_value("git_push", "remote", opts.remote) end
   if opts ~= nil and has_key(opts, "tag") then
@@ -288,7 +290,7 @@ function git_push(repo, opts?)
     push(args, git_value("git_push", "branch", opts.branch))
   elseif opts ~= nil and has_key(opts, "to") then
     push(args, remote)
-    push(args, "HEAD:refs/heads/" .. git_value("git_push", "to", opts.to))
+    push(args, git_value("git_push", "from", get(opts, "from", "HEAD")) .. ":refs/heads/" .. git_value("git_push", "to", opts.to))
   elseif opts ~= nil and has_key(opts, "delete") then
     push(args, remote)
     push(args, "--delete")

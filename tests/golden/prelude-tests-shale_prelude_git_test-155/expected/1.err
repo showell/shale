@@ -1,4 +1,4 @@
-── stopped at the git prelude:276:22 (in `the git prelude's git_push`): fail: `git_push` takes one of `branch`, `tag`, `to` and `delete`, not `branch` and `tag` (481 steps)
+── stopped at the git prelude:277:22 (in `the git prelude's git_push`): fail: `git_push` takes one of `branch`, `tag`, `to` and `delete`, not `branch` and `tag` (501 steps)
    called from {base}/case/script.shale:1:1
-── used: 481 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
-── steps: 481 in all; the most 466 (96%): git_push, 1 call; 15 (3%): script
+── used: 501 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 501 in all; the most 486 (97%): git_push, 1 call; 15 (2%): script
