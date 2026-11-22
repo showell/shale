@@ -370,14 +370,17 @@ TEST(attack_a_grandchild_that_ignores_term_ends_with_the_group_at_the_deadline) 
     fixture_spec(&s, &a, &argv, "grandchild-stay", "20000", "");
     s.timeout_ms = 300;
     s.grace_ms = 300;
-    EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
+    // The grandchild is looked at, and ended if it is there, before any
+    // EXPECT: a failure jumps out of the test, and would leave it running.
+    SpawnResult st = spawn_run(&a, &s, sink_of(&c), &o);
+    long g = grandchild_pid(buf_view(&c.out));
+    // The group's KILL reached the grandchild too: it runs no more.
+    bool gone = g > 0 && ended_within(g, 2000);
+    if (g > 0 && !gone) kill((pid_t)g, SIGKILL);
+    EXPECT_EQ(st, SPAWN_OK);
     EXPECT_EQ(o.ended, SPAWN_TIMEOUT);
     EXPECT_EQ(o.signal, SIGKILL);
-    long g = grandchild_pid(buf_view(&c.out));
     EXPECT(g > 0);
-    // The group's KILL reached the grandchild too: it runs no more.
-    bool gone = ended_within(g, 2000);
-    if (!gone) kill((pid_t)g, SIGKILL);
     EXPECT(gone);
     arena_deinit(&a);
 }
@@ -396,19 +399,20 @@ TEST(attack_a_grandchild_holding_the_pipe_after_its_leader_exits_is_ended_before
     SpawnOutcome o;
     SpawnSpec s;
     fixture_spec(&s, &a, &argv, "grandchild-exit", "3000", "");
-    EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
-    EXPECT_EQ(o.ended, SPAWN_EXIT);
-    EXPECT_EQ(o.code, 0);
-    EXPECT(o.ms < 1500);
+    SpawnResult st = spawn_run(&a, &s, sink_of(&c), &o);
     long g = grandchild_pid(buf_view(&c.out));
-    EXPECT(g > 0);
     char path[64];
     snprintf(path, sizeof path, "/proc/%ld/stat", g);
-    int fd = open(path, O_RDONLY);
+    int fd = g > 0 ? open(path, O_RDONLY) : -1;
     if (fd >= 0) {
         close(fd);
         kill((pid_t)g, SIGKILL);
     }
+    EXPECT_EQ(st, SPAWN_OK);
+    EXPECT_EQ(o.ended, SPAWN_EXIT);
+    EXPECT_EQ(o.code, 0);
+    EXPECT(o.ms < 1500);
+    EXPECT(g > 0);
     EXPECT(fd < 0);
     arena_deinit(&a);
 }
@@ -427,14 +431,15 @@ TEST(attack_a_process_that_left_the_group_holding_the_pipe_never_holds_run) {
     SpawnOutcome o;
     SpawnSpec s;
     fixture_spec(&s, &a, &argv, "grandchild-escape", "3000", "");
-    EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
+    SpawnResult st = spawn_run(&a, &s, sink_of(&c), &o);
+    long g = grandchild_pid(buf_view(&c.out));
+    bool alive = g > 0 && !ended_within(g, 0);
+    if (g > 0) kill((pid_t)g, SIGKILL);
+    EXPECT_EQ(st, SPAWN_OK);
     EXPECT_EQ(o.ended, SPAWN_EXIT);
     EXPECT_EQ(o.code, 0);
     EXPECT(o.ms >= 200 && o.ms < 1500);
-    long g = grandchild_pid(buf_view(&c.out));
     EXPECT(g > 0);
-    bool alive = g > 0 && !ended_within(g, 0);
-    if (g > 0) kill((pid_t)g, SIGKILL);
     EXPECT(alive);
     arena_deinit(&a);
 }
@@ -454,16 +459,17 @@ TEST(attack_a_term_to_shale_after_its_program_exits_while_the_output_drains_stil
     SpawnOutcome o;
     SpawnSpec s;
     fixture_spec(&s, &a, &argv, "grandchild-exit", "3000", "");
-    EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
+    SpawnResult st = spawn_run(&a, &s, sink_of(&c), &o);
+    long g = grandchild_pid(buf_view(&c.out));
+    bool gone = g > 0 && ended_within(g, 0);
+    if (g > 0 && !gone) kill((pid_t)g, SIGKILL);
+    EXPECT_EQ(st, SPAWN_OK);
     EXPECT(c.raised);
     EXPECT_EQ(o.ended, SPAWN_INTERRUPTED);
     // The leader's own exit is kept beside the word.
     EXPECT_EQ(o.code, 0);
     EXPECT(o.ms < 5000);
-    long g = grandchild_pid(buf_view(&c.out));
     EXPECT(g > 0);
-    bool gone = ended_within(g, 0);
-    if (!gone) kill((pid_t)g, SIGKILL);
     EXPECT(gone);
     EXPECT(!term_blocked());
     arena_deinit(&a);

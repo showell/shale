@@ -158,31 +158,37 @@ TEST(attack_what_a_jobs_leader_leaves_in_its_group_is_gone_once_its_end_is_writt
     Bytes log_room = {log_bytes, sizeof log_bytes};
     // The leader exits 0 at once; its child would sleep 20 s. The TERM at
     // the leader's exit ends it, so the end comes without the grace.
+    // Each grandchild is looked at, and ended if it is there, before any
+    // EXPECT: a failure jumps out of the test, and would leave it running.
     JobsPlace p;
     place_make(&p, "term");
     uint64_t took = 0;
-    EXPECT_EQ(reap_fixture(&p, "grandchild-exit", "20000", &took), 0);
+    int code = reap_fixture(&p, "grandchild-exit", "20000", &took);
+    long g = grandchild_pid(file_text(p.log, log_room));
+    bool gone = g > 0 && gone_or_kill(g);
+    EXPECT_EQ(code, 0);
     EXPECT(took < 1500);
     JobRecord r;
     EXPECT(record_of(&p, room, &r));
     EXPECT(r.has_exit && r.exit == 0 && r.has_ended && !r.has_signal);
-    long g = grandchild_pid(file_text(p.log, log_room));
     EXPECT(g > 0);
-    EXPECT(gone_or_kill(g));
+    EXPECT(gone);
     // A child that ignores TERM is KILLed at the grace's end, still before
     // the end is written; the leader's own exit is the job's.
     JobsPlace q;
     place_make(&q, "late");
-    EXPECT_EQ(reap_fixture(&q, "grandchild-late", "20000", &took), 0);
+    code = reap_fixture(&q, "grandchild-late", "20000", &took);
+    Str log = file_text(q.log, log_room);
+    g = grandchild_pid(log);
+    gone = g > 0 && gone_or_kill(g);
+    EXPECT_EQ(code, 0);
     EXPECT(took >= 2000 && took < 6000);
     EXPECT(record_of(&q, room, &r));
     EXPECT(r.has_exit && r.exit == 0 && r.has_ended && !r.has_signal);
-    Str log = file_text(q.log, log_room);
     // It outlived its leader's exit and the TERM, so it printed `late`.
     EXPECT(log.len >= 5 && str_eq(str_sub(log, log.len - 5, log.len), S("late\n")));
-    g = grandchild_pid(log);
     EXPECT(g > 0);
-    EXPECT(gone_or_kill(g));
+    EXPECT(gone);
     place_free(&p);
     place_free(&q);
 }
@@ -194,15 +200,18 @@ TEST(attack_a_process_that_left_the_jobs_group_is_neither_signalled_nor_waited_f
     JobsPlace p;
     place_make(&p, "away");
     uint64_t took = 0;
-    EXPECT_EQ(reap_fixture(&p, "grandchild-escape", "20000", &took), 0);
+    int code = reap_fixture(&p, "grandchild-escape", "20000", &took);
+    long g = grandchild_pid(file_text(p.log, (Bytes){log_bytes, sizeof log_bytes}));
+    // It outlives the job, out of its reach; the test ends it, before any
+    // EXPECT can jump past.
+    bool outlived = g > 0 && !gone_or_kill(g);
+    EXPECT_EQ(code, 0);
     EXPECT(took < 1500);
     JobRecord r;
     EXPECT(record_of(&p, room, &r));
     EXPECT(r.has_exit && r.exit == 0);
-    long g = grandchild_pid(file_text(p.log, (Bytes){log_bytes, sizeof log_bytes}));
     EXPECT(g > 0);
-    // It outlives the job, out of its reach; the test ends it.
-    EXPECT(!gone_or_kill(g));
+    EXPECT(outlived);
     place_free(&p);
 }
 

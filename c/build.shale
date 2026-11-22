@@ -194,6 +194,62 @@ if exists(OUT .. "/plants_mode") then remove(OUT .. "/plants_mode") end
 if plants ~= "" then create(OUT .. "/plants_mode", plants .. "\n") end
 if plants == "all" and exists(OUT .. "/proofs") then remove_tree(OUT .. "/proofs") end
 
+-- ── What the run left running ───────────────────────────────────────────
+-- Every program the tier ran has ended by now, and so has every process a
+-- test started: a fixture of c/tests/host that outlived its test (a
+-- grandchild that ignores TERM, a job's reaper) once ran for days with init
+-- for a parent. A process whose command line starts with this checkout's
+-- c/out (a fixture, a test's binary, a reaper of c/out's `shale`), or whose
+-- parent's does, is named, stopped and fails the run, at the tier's end or
+-- at a block's failure. Another checkout's run has a c/out of its own, so a
+-- lane's run never fails another's. Each gets LEFT_WAIT_MS first, past
+-- `run`'s 2 s of grace for a group being ended.
+const LEFT_WAIT_MS = 3000
+
+-- The processes of `prefix`'s, and their children.
+function left_of(prefix)
+  local found = {}
+  local pids = {}
+  local all = procs()
+  for p in all do
+    if starts_with(p.args, prefix) then
+      push(found, p)
+      push(pids, p.pid)
+    end
+  end
+  for p in all do
+    if has_item(pids, p.ppid) and not has_item(pids, p.pid) then push(found, p) end
+  end
+  return found
+end
+
+-- Names and stops what this run left running; gives how many.
+function stop_left_running()
+  local prefix = real(OUT) .. "/"
+  local left = left_of(prefix)
+  local waited = 0
+  while #left > 0 and waited < LEFT_WAIT_MS do
+    sleep(250)
+    waited = waited + 250
+    left = left_of(prefix)
+  end
+  if #left == 0 then
+    print("left running: nothing under " .. prefix)
+    return 0
+  end
+  for p in left do
+    print("left running: pid " .. p.pid .. " (parent " .. p.ppid .. "): " .. sub(p.args, 1, 300))
+  end
+  for p in left do attempt(proc_stop, p) end
+  return #left
+end
+
+function check_left_running()
+  local n = stop_left_running()
+  if n > 0 then fail(n .. " processes this run started outlived it (above), now stopped: a test leaves what it started running") end
+  return nil
+end
+
 -- The block `b` run (c/build/<b>.shale) with `args`; its output printed
 -- unless `quiet` and it passed.
 function run_block(b, args, mounts, quiet)
@@ -202,7 +258,11 @@ function run_block(b, args, mounts, quiet)
   local r = run(argv, {timeout_ms = 900000, tail = 2000, env = {SHALE_MOUNTS = real(mounts)}, not_re = "^── (budgets from the script's header|time: )"})
   local failed = get(r, "code", -1) ~= 0
   if trim(r.out) ~= "" and (failed or not quiet) then print(trim(r.out)) end
-  if failed then fail("the " .. b .. " block (c/build/" .. b .. ".shale " .. join(args, " ") .. ") failed: its output is above") end
+  if failed then
+    -- A failing test is the likeliest to leave a process behind.
+    stop_left_running()
+    fail("the " .. b .. " block (c/build/" .. b .. ".shale " .. join(args, " ") .. ") failed: its output is above")
+  end
   return nil
 end
 
@@ -406,6 +466,7 @@ if full then
   if exists(file) then replace(file, text) else create(file, text) end
 end
 
+check_left_running()
 report_phases(full, plants)
 if tcc == nil then
   fail("tcc is not installed, so the inner loop did not run: `sudo apt install tcc` (Ubuntu noble's tcc 0.9.27+git20200814)")

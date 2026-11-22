@@ -31,6 +31,12 @@
 //     --reap RECORD ...      a reaper that says what it was handed: the same
 //                            line, written to RECORD, so a test sees the fds
 //                            the jobs' launch leaves it
+//
+// No process of the fixture's lives past FIXTURE_LIFE_S, whatever a test
+// does: a test that fails before it ends the grandchild it made, or a plant
+// that takes away the KILL meant for it, would otherwise leave a process
+// that ignores TERM with init for a parent. c/build.shale fails a tier that
+// leaves one running all the same, naming it.
 #define _GNU_SOURCE
 #include <fcntl.h>
 #include <signal.h>
@@ -63,6 +69,22 @@ static void ignore_term(void) {
     signal(SIGTERM, SIG_IGN);
 }
 
+// The longest any verb here needs is 20 s, a test's slow sleep.
+enum { FIXTURE_LIFE_S = 60 };
+
+// SIGALRM's default action ends the process, and no verb ignores it. Its
+// default and its unblocking are set here, since an exec keeps a signal
+// ignored or blocked as the parent left it. A fork's child has no alarm
+// pending, so each child sets its own.
+static void bound_life(void) {
+    signal(SIGALRM, SIG_DFL);
+    sigset_t alrm;
+    sigemptyset(&alrm);
+    sigaddset(&alrm, SIGALRM);
+    sigprocmask(SIG_UNBLOCK, &alrm, NULL);
+    alarm(FIXTURE_LIFE_S);
+}
+
 // A grandchild that sleeps `ms` holding the output. This process says its
 // pid, from the fork, so the line is there even when the group's TERM at
 // this one's exit ends the grandchild before it would have run a line.
@@ -73,8 +95,14 @@ static void grandchild(long ms, bool deaf, bool escape, bool late) {
     int room[2];
     Fds ready = {room, 2};
     if (pipe(ready.ptr) != 0) _exit(3);
+    // DRAGON: the late child waits for its parent's exit by watching its
+    // own ppid change. Read in the child, the parent may already be gone,
+    // so the child would wait on init's pid, forever.
+    // REMEDY: the parent's pid is taken here, before the fork.
+    pid_t leader = getpid();
     pid_t pid = fork();
     if (pid == 0) {
+        bound_life();
         close(at(ready, 0));
         if (escape) setsid();
         if (deaf || late) ignore_term();
@@ -82,7 +110,6 @@ static void grandchild(long ms, bool deaf, bool escape, bool late) {
         if (late) {
             // Its parent's exit re-parents it. Raw calls only: the child
             // shares the parent's stdio buffer.
-            pid_t leader = getppid();
             while (getppid() == leader) sleep_ms(1);
             ssize_t w = write(1, "late\n", 5);
             (void)w;
@@ -126,6 +153,7 @@ int main(int argc, char **argv) {
     SLICE_TYPE(Args, char *);
     Args args = {argv, (size_t)argc};
     if (args.len < 2) return 2;
+    bound_life();
     Str verb = {at(args, 1), strlen(at(args, 1))};
     Str arg = args.len > 2 ? (Str){at(args, 2), strlen(at(args, 2))} : S("");
     if (is(verb, "lines")) {
@@ -172,6 +200,7 @@ int main(int argc, char **argv) {
     } else if (is(verb, "burn-child")) {
         pid_t pid = fork();
         if (pid == 0) {
+            bound_life();
             burn(num(arg));
             _exit(0);
         }
