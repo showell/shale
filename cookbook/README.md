@@ -210,20 +210,20 @@ These read Shale's own C with a line reader in place of a C parser.
 c/check_discipline.shale holds Shale's C to a shape a line reader can trust
 (each line at column 0 opens or closes an item, braces end their lines, one
 declaration a line, `//` comments), and the build fails when a file breaks
-it. So the dialect is the parser's contract: `c/items.shale` splits a file
+it. So the dialect is the parser's contract: `c/items/` splits a file
 into its items on it, and stops, naming the file and line, at a line it
-can't account for. The C finders are built on it, or on its port to Roc,
-`c/items/`, a package the Roc ones share: map_file, list_long_functions,
-list_deep_nesting, find_clones, find_dead_code and hunt_names are written
-in Roc on Shale's platform (`roc_platform/`), each its folder's app, held
-to its Shale original's goldens by that folder's `check_goldens.shale`.
+can't account for. It is a Roc package the C finders share: map_file,
+list_long_functions, list_deep_nesting, find_clones, find_dead_code and
+hunt_names are written in Roc on Shale's platform (`roc_platform/`), each
+its folder's app, held to its Shale original's goldens by that folder's
+`check_goldens.shale`. Its Shale original, a second copy of the splitting
+logic, is the fast tier's, `c/build/c_items.shale` beside the cookbook,
+since that tier builds no Roc.
 
-- `c/items.shale` (library): a file's top-level items, each with its kind,
+- `c/items/` (a Roc package): a file's top-level items, each with its kind,
   name, lines, head, body and the names its body uses, and the masker that
-  blanks strings and comments. `use("cookbook:c/items.shale")`
-- `c/items/` (a Roc package): the same splitter in Roc, for the Roc
-  recipes, whose headers name its `main.roc` as `items`, then
-  `import items.Split`
+  blanks strings and comments, for the Roc recipes, whose headers name its
+  `main.roc` as `items`, then `import items.Split`
 - `c/map_file.shale`: prints a file's items, one `first-last kind name` a
   line; `tree=c` splits every file and accounts for each line (in Roc).
   `shale cookbook:c/map_file.shale file=c/script/vm.c`

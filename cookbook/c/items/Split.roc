@@ -13,9 +13,9 @@
 ##
 ## Every line of the file is in exactly one item, or is blank, or is a `//`
 ## comment line between items. A line that is none of these is an error
-## naming the file and its line, never a guess. It is cookbook/c/items.shale's
-## `c_items`, the Shale original, which the C recipes not yet ported still
-## read.
+## naming the file and its line, never a guess. It is c/build/c_items.shale's
+## `c_items`, the Shale original, a second copy of this logic, which the fast
+## tier's discipline block splits every C file with, since it builds no Roc.
 import Guard
 import Head
 import Item

@@ -1,7 +1,9 @@
 ## The words of an item's masked text: its names, the names its body uses,
 ## an enum's constants and a generator macro's own functions, each the
-## regular expression of cookbook/c/items.shale, the Shale original, done by
-## hand.
+## regular expression of the Shale original, done by hand: for the names,
+## c/build/c_items.shale's; for a body's uses, the `c_words_used` of
+## cookbook/c/items.shale, retired (git history), which the fast tier's
+## copy left out, since it wants no uses.
 import Mask
 
 Words := [].{

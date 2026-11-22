@@ -35,8 +35,8 @@
 -- 0.08 s, for about 12 s of build once, then cached. A stop in a speed
 -- build names the platform's driver, not the Roc's line. Its goldens, the
 -- Shale original's output on the plants, are held by
--- cookbook/c/map_file/check_goldens.shale. The Shale splitter,
--- cookbook/c/items.shale, stays for the C recipes not yet ported.
+-- cookbook/c/map_file/check_goldens.shale. The Shale splitter it was
+-- ported from is c/build/c_items.shale now, the fast tier's discipline's.
 -- budget: programs=10 output_bytes=8000000
 
 const SCRIPT = "cookbook/c/map_file/map_file.roc"

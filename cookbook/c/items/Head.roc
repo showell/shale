@@ -1,7 +1,7 @@
 ## The readers of an item's opening line or head, each over masked bytes
-## (Mask.masked), each the regular expression of cookbook/c/items.shale,
-## the Shale original, done by hand: the one match a backtracking search
-## would find, with its groups.
+## (Mask.masked), each the regular expression of the Shale original
+## (c/build/c_items.shale, the fast tier's copy of this splitter), done by
+## hand: the one match a backtracking search would find, with its groups.
 import Mask
 
 Head := [].{

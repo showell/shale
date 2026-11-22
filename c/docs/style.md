@@ -3,11 +3,14 @@
 Shale's C is written by agents, in one domain, in one style. Shale's own
 tools need to read only this C, not arbitrary C, so the style is kept
 regular enough for a small reader to split a file into its items and read
-each one. That reader is `cookbook/c/items.shale`: the fast tier splits
-every file with it (c/build/discipline.shale), so a file it can't read
-fails the build. Its port to Roc, `cookbook/c/items/`, is the splitter the
-Roc recipes over the C share (`cookbook/c/map_file.shale` and the others),
-held to the Shale one's output by their goldens.
+each one. That reader lives twice, as two copies of one logic. In Shale it
+is `c/build/c_items.shale`: the fast tier splits every file with it
+(c/build/discipline.shale), so a file it can't read fails the build, and
+the discipline check reads the C through its masker. Its port to Roc,
+`cookbook/c/items/`, is the splitter the Roc recipes over the C share
+(`cookbook/c/map_file.shale` and the others), held to the Shale one's
+output by their goldens. The fast tier builds no Roc, so it keeps the Shale
+copy.
 
 The foundation in `c/foundation/` follows every rule here.
 `c/check_discipline.shale` holds the rules marked **held** on every build,

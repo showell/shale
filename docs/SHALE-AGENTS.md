@@ -544,8 +544,9 @@ A repo's prelude stays the tool for what every script at that root wants.
 The path is a mount's, or beside the script's own file (`./items.shale`,
 `./<folder>/x.shale`), never the root's or an absolute one: a recipe and its
 library load together wherever they live, lanes included, so a lane's
-`shale build:lanes/x/cookbook/c/map_file.shale` loads the lane's
-`items.shale`, not the mount's. A `./` path is names only (no `..`), and a
+`shale build:lanes/x/c/check_discipline.shale` loads the lane's
+`c/build/c_items.shale` (its `use("./build/c_items.shale")`), not the
+box's. A `./` path is names only (no `..`), and a
 script on stdin or `-e` has no file to be beside, so it names its library
 through a mount. Either way the file is a read of the run's (no link, no
 secrets folder). It holds functions and literal `const`s only, each from

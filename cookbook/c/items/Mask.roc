@@ -1,7 +1,7 @@
 ## The masker the splitter reads Shale's C with, and the byte classes it
 ## reads by. A line is its bytes, as Shale's strings are, so a column is a
 ## byte's place. The classes are the regular expressions' and the builtins'
-## of cookbook/c/items.shale, the Shale original: `\s` is a space, a tab, a
+## of c/build/c_items.shale, the Shale original: `\s` is a space, a tab, a
 ## newline, a carriage return, a vertical tab or a form feed; `\w` an ASCII
 ## letter, a digit or `_`; `trim` takes a space, a tab, a carriage return
 ## and a newline.
