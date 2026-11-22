@@ -430,7 +430,7 @@ has none of it):
   a repo of its own whose FORMAT.md is the format's home (installed by that
   repo's install.shale under the `tools` mount as `roc-ast/bin/roc-ast`), its `--flat`
   lines read in the host, every string whole however it is quoted. A node is
-  `{kind, depth, parent, kids, line, col, end_line, end_col}` and the
+  `{kind, depth, parent, kids, line, column, end_line, end_column}` and the
   attributes Roc's tree gives it, by their names (`raw`, `name`, `method`,
   `op`, `type`, `field`, ...; `module-of` as `module_of`; a positional value,
   `(unary "!"` or a tuple access's `.0`, as `value`): absent where the tree
