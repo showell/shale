@@ -37,3 +37,16 @@ runs:
         mkdir -p ~/tools/roc-nightly-2026-11-03-34bd006
         tar -xzf /tmp/roc.tar.gz -C ~/tools/roc-nightly-2026-11-03-34bd006 --strip-components=1
         test -x ~/tools/roc-nightly-2026-11-03-34bd006/roc
+
+    # A second nightly, which rewrite_method_calls' goldens pin a copy of the
+    # plants to (its Pin case): the tree's Roc is then another than the one
+    # roc-types was built for, and the run must stop saying so. Only its path
+    # is read; it never runs.
+    - name: Install a second Roc, for a pin roc-types refuses
+      shell: bash
+      run: |
+        curl -fsSL -o /tmp/roc-1107.tar.gz https://github.com/roc-lang/nightlies/releases/download/nightly-2026-11-07-ad3a5d2/roc_nightly-linux_x86_64-2026-11-07-ad3a5d2.tar.gz
+        echo "21710f7007403428d96f5927343c60c2b3dbefc298394d62cf066fe6fa966495  /tmp/roc-1107.tar.gz" | sha256sum -c -
+        mkdir -p ~/tools/roc-nightly-2026-11-07-ad3a5d2
+        tar -xzf /tmp/roc-1107.tar.gz -C ~/tools/roc-nightly-2026-11-07-ad3a5d2 --strip-components=1
+        test -x ~/tools/roc-nightly-2026-11-07-ad3a5d2/roc

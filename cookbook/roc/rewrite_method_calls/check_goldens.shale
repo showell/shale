@@ -35,6 +35,7 @@
 -- they differ from run to run.
 -- budget: programs=400 reads=100000 steps=400000000 arena_bytes=1000000000 output_bytes=2000000 changes=20000 change_bytes=200000000
 use("cookbook:roc/pinned.shale")
+use("cookbook:roc/types.shale")
 
 const LAUNCHER = "cookbook/roc/rewrite_method_calls.shale"
 const GOLDENS = "cookbook/roc/rewrite_method_calls/goldens.txt"
@@ -139,8 +140,9 @@ function copy_plants(c)
   for f in ls(AT) do replace(dir .. "/" .. f, read(AT .. "/" .. f)) end
   if not has_key(c, "no_pin") then replace(dir .. "/roc-version", get(c, "pin", SELF_TEST_PIN) .. "\n") end
   if has_key(c, "types_file") then
-    local roc = real("tools:roc-" .. SELF_TEST_PIN .. "/roc")
-    local exe = "tools:roc-types-" .. SELF_TEST_PIN .. "/bin/roc-types"
+    -- The checker the recipe itself runs for the pin: its own folder, else
+    -- the default one (what CI installs).
+    local exe = roc_types_exe(real("tools:roc-" .. SELF_TEST_PIN .. "/roc"))
     replace(dir .. "/root.types", must(run({real(exe), real(dir .. "/" .. c.types_file)}, {timeout_ms = 300000, whole = 64000000})).out)
   end
   return dir
