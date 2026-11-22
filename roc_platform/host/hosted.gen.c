@@ -270,75 +270,75 @@ static union {
 RocStr shale_arg(RocStr arg0, RocStr arg1) {
     hosted_arg_args.name = arg0;
     hosted_arg_args.fallback = arg1;
-    roc_ask(HOSTED_ARG, __builtin_return_address(0));
+    roc_ask(HOSTED_ARG, __builtin_return_address(0), __builtin_frame_address(0));
     return hosted_answer.arg;
 }
 
 bool shale_exists(RocStr arg0) {
     hosted_exists_args.path = arg0;
-    roc_ask(HOSTED_EXISTS, __builtin_return_address(0));
+    roc_ask(HOSTED_EXISTS, __builtin_return_address(0), __builtin_frame_address(0));
     return hosted_answer.exists;
 }
 
 void shale_fail(RocStr arg0) {
     hosted_fail_args.why = arg0;
-    roc_ask(HOSTED_FAIL, __builtin_return_address(0));
+    roc_ask(HOSTED_FAIL, __builtin_return_address(0), __builtin_frame_address(0));
 }
 
 RocList shale_glob(RocStr arg0) {
     hosted_glob_args.pattern = arg0;
-    roc_ask(HOSTED_GLOB, __builtin_return_address(0));
+    roc_ask(HOSTED_GLOB, __builtin_return_address(0), __builtin_frame_address(0));
     return hosted_answer.glob;
 }
 
 RocList shale_grep_all(RocStr arg0, RocStr arg1) {
     hosted_grep_all_args.path = arg0;
     hosted_grep_all_args.literal = arg1;
-    roc_ask(HOSTED_GREP_ALL, __builtin_return_address(0));
+    roc_ask(HOSTED_GREP_ALL, __builtin_return_address(0), __builtin_frame_address(0));
     return hosted_answer.grep_all;
 }
 
 FoundOrMissingType7 shale_list(RocStr arg0) {
     hosted_list_args.path = arg0;
-    roc_ask(HOSTED_LIST, __builtin_return_address(0));
+    roc_ask(HOSTED_LIST, __builtin_return_address(0), __builtin_frame_address(0));
     return hosted_answer.list;
 }
 
 void shale_mkdir(RocStr arg0) {
     hosted_mkdir_args.path = arg0;
-    roc_ask(HOSTED_MKDIR, __builtin_return_address(0));
+    roc_ask(HOSTED_MKDIR, __builtin_return_address(0), __builtin_frame_address(0));
 }
 
 void shale_print(RocStr arg0) {
     hosted_print_args.text = arg0;
-    roc_ask(HOSTED_PRINT, __builtin_return_address(0));
+    roc_ask(HOSTED_PRINT, __builtin_return_address(0), __builtin_frame_address(0));
 }
 
 FoundOrNoMatch shale_re_find(RocStr arg0, RocStr arg1) {
     hosted_re_find_args.text = arg0;
     hosted_re_find_args.pattern = arg1;
-    roc_ask(HOSTED_RE_FIND, __builtin_return_address(0));
+    roc_ask(HOSTED_RE_FIND, __builtin_return_address(0), __builtin_frame_address(0));
     return hosted_answer.re_find;
 }
 
 RocList shale_re_find_all(RocStr arg0, RocStr arg1) {
     hosted_re_find_all_args.text = arg0;
     hosted_re_find_all_args.pattern = arg1;
-    roc_ask(HOSTED_RE_FIND_ALL, __builtin_return_address(0));
+    roc_ask(HOSTED_RE_FIND_ALL, __builtin_return_address(0), __builtin_frame_address(0));
     return hosted_answer.re_find_all;
 }
 
 RocList shale_re_lines(RocStr arg0, RocStr arg1) {
     hosted_re_lines_args.text = arg0;
     hosted_re_lines_args.pattern = arg1;
-    roc_ask(HOSTED_RE_LINES, __builtin_return_address(0));
+    roc_ask(HOSTED_RE_LINES, __builtin_return_address(0), __builtin_frame_address(0));
     return hosted_answer.re_lines;
 }
 
 bool shale_re_match(RocStr arg0, RocStr arg1) {
     hosted_re_match_args.text = arg0;
     hosted_re_match_args.pattern = arg1;
-    roc_ask(HOSTED_RE_MATCH, __builtin_return_address(0));
+    roc_ask(HOSTED_RE_MATCH, __builtin_return_address(0), __builtin_frame_address(0));
     return hosted_answer.re_match;
 }
 
@@ -346,43 +346,43 @@ RocStr shale_re_replace(RocStr arg0, RocStr arg1, RocStr arg2) {
     hosted_re_replace_args.text = arg0;
     hosted_re_replace_args.pattern = arg1;
     hosted_re_replace_args.replacement = arg2;
-    roc_ask(HOSTED_RE_REPLACE, __builtin_return_address(0));
+    roc_ask(HOSTED_RE_REPLACE, __builtin_return_address(0), __builtin_frame_address(0));
     return hosted_answer.re_replace;
 }
 
 FoundOrMissingType11 shale_read(RocStr arg0) {
     hosted_read_args.path = arg0;
-    roc_ask(HOSTED_READ, __builtin_return_address(0));
+    roc_ask(HOSTED_READ, __builtin_return_address(0), __builtin_frame_address(0));
     return hosted_answer.read;
 }
 
 RocStr shale_real(RocStr arg0) {
     hosted_real_args.path = arg0;
-    roc_ask(HOSTED_REAL, __builtin_return_address(0));
+    roc_ask(HOSTED_REAL, __builtin_return_address(0), __builtin_frame_address(0));
     return hosted_answer.real;
 }
 
 void shale_remove_tree(RocStr arg0) {
     hosted_remove_tree_args.path = arg0;
-    roc_ask(HOSTED_REMOVE_TREE, __builtin_return_address(0));
+    roc_ask(HOSTED_REMOVE_TREE, __builtin_return_address(0), __builtin_frame_address(0));
 }
 
 RocList shale_roc_tree(RocList arg0) {
     hosted_roc_tree_args.paths = arg0;
-    roc_ask(HOSTED_ROC_TREE, __builtin_return_address(0));
+    roc_ask(HOSTED_ROC_TREE, __builtin_return_address(0), __builtin_frame_address(0));
     return hosted_answer.roc_tree;
 }
 
 AnonStruct1763995a077e9c1f shale_run(ShaleRunArgs arg0) {
     hosted_run_args.spec = arg0;
-    roc_ask(HOSTED_RUN, __builtin_return_address(0));
+    roc_ask(HOSTED_RUN, __builtin_return_address(0), __builtin_frame_address(0));
     return hosted_answer.run;
 }
 
 void shale_write(RocStr arg0, RocStr arg1) {
     hosted_write_args.path = arg0;
     hosted_write_args.text = arg1;
-    roc_ask(HOSTED_WRITE, __builtin_return_address(0));
+    roc_ask(HOSTED_WRITE, __builtin_return_address(0), __builtin_frame_address(0));
 }
 
 // ── Shale's side ──

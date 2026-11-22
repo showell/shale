@@ -739,7 +739,7 @@ function bt_render_hosted_c(exports, glue)
       out = out .. "    hosted_" .. x.bare .. "_args." .. a.name .. " = arg" .. k .. ";\n"
       k = k + 1
     end
-    out = out .. "    roc_ask(HOSTED_" .. upper(x.bare) .. ", __builtin_return_address(0));\n"
+    out = out .. "    roc_ask(HOSTED_" .. upper(x.bare) .. ", __builtin_return_address(0), __builtin_frame_address(0));\n"
     if p.ret ~= "void" then out = out .. "    return hosted_answer." .. x.bare .. ";\n" end
     out = out .. "}\n"
   end

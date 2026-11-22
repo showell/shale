@@ -86,6 +86,10 @@ static Str req_why;
 // crash's, the allocation's, or where the CPU budget's timer found the Roc.
 // 0 for nowhere known.
 static uintptr_t req_site;
+// The frame of the host's function the Roc called, for a hosted call, a
+// crash or a failed `expect`: where "where in the Roc a stop is" walks up
+// from when `req_site` is no line of the script's. 0 for none.
+static uintptr_t req_frame;
 static ucontext_t shale_side;
 static ucontext_t roc_side;
 static bool roc_started;
@@ -252,15 +256,19 @@ static Str roc_side_copy(Str s, uintptr_t site) {
 
 void roc_crashed(const uint8_t *bytes, size_t len) {
     uintptr_t site = ROC_CALLER();
+    uintptr_t frame = (uintptr_t)__builtin_frame_address(0);
     Str why = roc_side_copy((Str){(const char *)bytes, len}, site);
     req_site = site;
+    req_frame = frame;
     roc_stop_with(REQ_CRASH, why);
 }
 
 void roc_expect_failed(const uint8_t *bytes, size_t len) {
     uintptr_t site = ROC_CALLER();
+    uintptr_t frame = (uintptr_t)__builtin_frame_address(0);
     Str why = roc_side_copy((Str){(const char *)bytes, len}, site);
     req_site = site;
+    req_frame = frame;
     roc_stop_with(REQ_CRASH, why);
 }
 
@@ -329,10 +337,12 @@ static bool roc_list_make(size_t n, size_t size, RocList *out, void **elems) {
 // ── what hosted.gen.c's code calls ──────────────────────────────────────
 
 // On the Roc's side: hands the request to Shale and waits for its answer.
-// `site` is the shim's return address, in the Roc's call of it.
-static void roc_ask(int kind, void *site) {
+// `site` is the shim's return address, in the Roc's call of it, and `frame`
+// the shim's own frame.
+static void roc_ask(int kind, void *site, void *frame) {
     req_kind = kind;
     req_site = (uintptr_t)site - 1;
+    req_frame = (uintptr_t)frame;
     swapcontext(&roc_side, &shale_side);
 }
 
@@ -550,8 +560,9 @@ static void roc_sites_load(const char *path) {
 }
 
 // The file (from 1), line and column of the site, for the call `call` (""
-// for none): false when the site is not in the script's own lines.
-static bool roc_site_place(uintptr_t site, Str call, uint32_t *file, uint32_t *line, uint32_t *column) {
+// for none): false when the site is not in the script's own lines. With
+// `strict`, false too unless that line holds `call`'s own text.
+static bool roc_site_place(uintptr_t site, Str call, bool strict, uint32_t *file, uint32_t *line, uint32_t *column) {
     if (!roc_sites.loaded || site == 0 || roc_sites.rows_len == 0) return false;
     // The table's address of the site: roc_main moved by as much as it.
     uint64_t addr = (uint64_t)site - (uint64_t)(uintptr_t)roc_main + roc_sites.base;
@@ -572,6 +583,7 @@ static bool roc_site_place(uintptr_t site, Str call, uint32_t *file, uint32_t *l
         const RocCall *c = &roc_sites.calls[k];
         if (c->file == at->file && c->line == at->line && c->name[0] != 0 && call.len > 0 && strlen(c->name) == call.len && memcmp(c->name, call.ptr, call.len) == 0) col = c->column;
     }
+    if (strict && col == 0) return false;
     for (size_t k = 0; k < roc_sites.calls_len && col == 0; k++) {
         const RocCall *c = &roc_sites.calls[k];
         if (c->file == at->file && c->line == at->line && c->name[0] == 0) col = c->column;
@@ -581,6 +593,41 @@ static bool roc_site_place(uintptr_t site, Str call, uint32_t *file, uint32_t *l
     *line = at->line;
     *column = col;
     return true;
+}
+
+// **A CALL THE ROC MAKES THROUGH A WRAPPER NAMES THE WRAPPER'S CALLER**.
+// Roc 0.1.0_RC1 calls each hosted function from one wrapper function of its
+// own, and its line table puts that wrapper on a line of the app's root, so
+// the shim's return address names a line that holds no such call. The Roc's
+// code keeps frame pointers (each frame holds its caller's frame, then its
+// return address), so the stop's place is the first return address up the
+// chain from the host's own frame whose line holds the call's text
+// (`Shale.read!(`, `crash`). The walk takes at most ROC_FRAMES frames, each
+// on the Roc's stack and above the one before. A chain that leaves the
+// stack, turns back down or runs past the bound finds no such line, and the
+// stop is put where the site alone says, as the older pins call the shim
+// straight from the call's own line.
+enum { ROC_FRAMES = 8 };
+
+static bool roc_frame_on_stack(uintptr_t fp) {
+    if (roc_stack == NULL || fp % sizeof(uintptr_t) != 0) return false;
+    uintptr_t lo = (uintptr_t)roc_stack + ROC_GUARD;
+    uintptr_t hi = (uintptr_t)roc_stack + ROC_STACK;
+    return fp >= lo && fp <= hi - 2 * sizeof(uintptr_t);
+}
+
+static bool roc_frames_place(uintptr_t frame, Str call, uint32_t *file, uint32_t *line, uint32_t *column) {
+    uintptr_t fp = frame;
+    for (int k = 0; k < ROC_FRAMES; k++) {
+        if (!roc_frame_on_stack(fp)) return false;
+        const uintptr_t *at = (const uintptr_t *)fp;
+        uintptr_t ret = at[1];
+        if (ret != 0 && roc_site_place(ret - 1, call, true, file, line, column)) return true;
+        uintptr_t up = at[0];
+        if (up <= fp) return false;
+        fp = up;
+    }
+    return false;
 }
 
 // The Roc's name of what it was doing when the run stopped: its hosted
@@ -595,7 +642,8 @@ static STATUS_MUST_USE Status roc_run_ended(RunCtx *r, Status s) {
     if (s == STOP && r->stopped && roc_started && req_kind != REQ_DONE) {
         uint32_t file = 0, line = 0, column = 0;
         Str doing = roc_doing();
-        if (roc_site_place(req_site, doing, &file, &line, &column)) {
+        bool walks = (req_kind >= 0 && req_kind < HOSTED_COUNT) || req_kind == REQ_CRASH;
+        if ((walks && roc_frames_place(req_frame, doing, &file, &line, &column)) || roc_site_place(req_site, doing, false, &file, &line, &column)) {
             r->stop.line = line;
             r->stop.column = column;
             // The hosted call it stopped in, as a Shale stop names the

@@ -6,6 +6,7 @@
 ##   shale roc_platform/run.shale script=roc_platform/examples/escape.roc try=bash      a program `run` refuses
 ##   shale roc_platform/run.shale script=roc_platform/examples/escape.roc try=write     a write out of the root
 ##   shale roc_platform/run.shale script=roc_platform/examples/escape.roc try=crash     a Roc `crash`
+##   shale roc_platform/run.shale script=roc_platform/examples/escape.roc try=fail      the script's own stop, `Shale.fail!`
 ##   shale roc_platform/run.shale script=roc_platform/examples/escape.roc try=arena     past the arena's budget
 ##   shale roc_platform/run.shale script=roc_platform/examples/escape.roc try=missing   a missing file, a value
 ##   shale roc_platform/run.shale script=roc_platform/examples/escape.roc try=ok        a run Shale lets through
@@ -51,6 +52,7 @@ main! = |{}| {
 		"crash" => {
 			crash "a promise the script broke"
 		}
+		"fail" => Shale.fail!("the script's own stop")
 		"arena" => {
 			big = Str.repeat("x", 100_000_000)
 			Shale.print!("made ${U64.to_str(Str.count_utf8_bytes(big))} bytes past the arena: the budget did NOT hold")

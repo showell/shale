@@ -13,7 +13,10 @@
 --     `try=spin`, a loop inside the budget, ends;
 --   - a stop names the Roc's line: `try=climb`'s refused read names
 --     escape.roc's line and column of its `Shale.read!` call, found in the
---     file here, so an edit there moves the plant with it; `try=module`'s
+--     file here, so an edit there moves the plant with it; `try=fail`'s
+--     `Shale.fail!` names its own, as Roc 0.1.0_RC1 calls a hosted function
+--     through a wrapper of its own, and the host walks the Roc's frames to
+--     the script's line; `try=module`'s
 --     names Reach.roc's, a module of escape.roc's beside it, and
 --     `try=package` runs a function of kit/, a package it names by a
 --     relative path;
@@ -45,6 +48,7 @@ const TRIES = {
   {try = "bash", stops = true, holds = {"refused: `run` of `bash`: a shell or an interpreter"}},
   {try = "write", stops = true, holds = {"argument: `replace`: \"../escaped.txt\" climbs out of the root"}},
   {try = "crash", stops = true, holds = {"the Roc crashed: a promise the script broke"}},
+  {try = "fail", stops = true, holds = {"── stopped at " .. ESCAPE .. ":" .. place_of(ESCAPE, "Shale.fail!(\"the script's own stop\")") .. " (in `Shale.fail!`): fail: the script's own stop"}},
   {try = "arena", stops = true, holds = {"budget arena: the arena budget ran out"}},
   {try = "loop", stops = true, holds = {"── stopped at " .. ESCAPE .. ":", "budget cpu: the Roc's CPU time is past its budget (400 ms)", "of 400 Roc CPU ms"}},
   {try = "module", stops = true, holds = {"── stopped at " .. REACH .. ":" .. place_of(REACH, "Shale.read!(\"../outside.txt\")") .. " (in `Shale.read!`): argument: `exists`: \"../outside.txt\" climbs out of the root"}},
