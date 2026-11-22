@@ -38,6 +38,7 @@ plan
 post
 print
 prune
+push
 rank
 read
 remove
