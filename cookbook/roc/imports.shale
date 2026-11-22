@@ -2,7 +2,7 @@
 -- which the file never uses, since Roc doesn't warn of one. Its rules are
 -- find_unused_imports.shale's `unused_import` (that recipe's header says
 -- what counts as a use), which is written in Roc
--- (cookbook/roc/find_unused_imports/Imports.roc holds the same rules); this
+-- (cookbook/roc/lib/Imports.roc holds the same rules); this
 -- library stays for rewrite_method_calls.shale, which asks the same of a
 -- file after its rewrite, to name each import the rewrite left unused.
 --

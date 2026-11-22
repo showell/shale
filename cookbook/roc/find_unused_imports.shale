@@ -1,8 +1,8 @@
 -- This recipe finds import lines that the file never uses, since Roc doesn't
 -- warn of one. It is written in Roc, the app
--- cookbook/roc/find_unused_imports/find_unused_imports.roc and the modules
--- beside it (Imports, the rule; SelfTest, the plants' run), on Shale's Roc
--- platform (roc_platform/README.md); this file is its launcher, so it is
+-- cookbook/roc/find_unused_imports/find_unused_imports.roc, SelfTest beside
+-- it (the plants' run) and the cookbook's Roc library's Imports (the rule,
+-- cookbook/roc/lib/Imports.roc), on Shale's Roc platform (roc_platform/README.md); this file is its launcher, so it is
 -- launched as every Shale recipe is:
 --
 --   cd <repo> && shale <shale>/cookbook/roc/find_unused_imports.shale
@@ -55,8 +55,8 @@
 -- real path of each file the program is built from, one a line (run.shale's
 -- header), for a caller's cache key. Its goldens, the Shale original's output
 -- on the plants, are held by cookbook/roc/find_unused_imports/check_goldens.shale.
--- The rules live twice: here, in Roc, and in cookbook/roc/imports.shale,
--- which rewrite_method_calls.shale still reads.
+-- The rules live twice: in the Roc library's Imports, and in
+-- cookbook/roc/imports.shale, which rewrite_method_calls.shale still reads.
 -- budget: programs=10 output_bytes=8000000
 
 const SCRIPT = "cookbook/roc/find_unused_imports/find_unused_imports.roc"

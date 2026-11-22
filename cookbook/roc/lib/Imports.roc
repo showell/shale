@@ -1,9 +1,9 @@
 ## A Roc file's imports, read from Roc's own tree of it, and the ones the file
-## never uses. The rules are the recipe's `unused_import`
+## never uses: find_unused_imports' rule, `unused_import`, in its one home
 ## (cookbook/roc/find_unused_imports.shale's header says what counts as a
-## use); cookbook/roc/imports.shale holds the same rules for the Shale
-## recipes that ask them of a file, rewrite_method_calls.shale among them.
-import lib.Tree
+## use). rewrite_method_calls asks it too, of a file before and after its
+## rewrite, to name each import the rewrite left unused.
+import Tree
 
 Imports := [].{
 

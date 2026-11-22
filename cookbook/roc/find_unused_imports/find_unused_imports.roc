@@ -12,16 +12,16 @@
 ##
 ## This root globs the files, has Roc's parser read them (`Shale.roc_tree!`)
 ## and each one's text (`Shale.read!`), and prints the verdict
-## (`Shale.print!`, `Shale.fail!`). Imports, beside it, is the rule;
-## SelfTest is the plants' run. Tree, Text and Finding are the cookbook's Roc
-## library, cookbook/roc/lib/.
+## (`Shale.print!`, `Shale.fail!`). SelfTest, beside it, is the plants' run.
+## The rule is the cookbook's Roc library's Imports (cookbook/roc/lib/), its
+## one home, with Tree, Text and Finding.
 ## budget: steps=800000000 arena_bytes=2000000000 output_bytes=4000000 programs=100
 app [main!] { lib: "../lib/main.roc", pf: platform "../../../roc_platform/platform/main.roc" }
 
 import pf.Shale
 import lib.Finding
+import lib.Imports
 import lib.Text
-import Imports
 import SelfTest
 
 main! : {} => {}

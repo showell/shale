@@ -140,7 +140,7 @@ are passed in):
   the file leaves unused, which Roc's compiler accepts quietly. It is
   written in Roc too, a root,
   [find_unused_imports/find_unused_imports.roc](find_unused_imports/find_unused_imports.roc),
-  with its rule in `Imports.roc` beside it;
+  with its rule in the Roc library's `Imports.roc` (cookbook/roc/lib/);
   [check_goldens.shale](find_unused_imports/check_goldens.shale) holds it to
   its goldens.
 
@@ -246,7 +246,8 @@ beside them). Each header lists its functions.
   [number_literals.shale](number_literals.shale) and
   [method_text.shale](method_text.shale): parts of `rewrite_method_calls`.
 - [imports.shale](imports.shale): a file's imports that it leaves unused,
-  for `rewrite_method_calls`; `find_unused_imports`' Roc holds the same rule.
+  for `rewrite_method_calls`; the Roc library's `Imports.roc` holds the same
+  rule for `find_unused_imports`.
 - [gate_recipe.shale](gate_recipe.shale): what the gating recipes share,
   their verdict and their plants' self-test.
 
