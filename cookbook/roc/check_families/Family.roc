@@ -7,6 +7,7 @@
 ## finds the others' names without looking.
 import lib.Declarations
 import lib.Finding
+import lib.Headers
 import lib.Text
 import lib.Tree
 
@@ -36,7 +37,7 @@ Family := [].{
 	module_of = |file| {
 		name = Tree.module_name(file.path)
 		line = module_line(file.declared.types, name)
-		is_member = |value| value.owner == name and !(language_fixed_names.contains(value.name))
+		is_member = |value| value.owner == name and !(Headers.language_fixed_names.contains(value.name))
 		members = Set.from_list(file.declared.values.keep_if(is_member).map(|value| value.name))
 		if line == 0 or members.is_empty() {
 			NoModule
@@ -195,44 +196,3 @@ doc_above = |source_lines, line| {
 	}
 	Str.join_with($parts, " ")
 }
-
-## The methods Roc calls by name, from Roc's docs/langref/static-dispatch.md
-## and operators.md, with the encoders' `encode` and `decode`: a module that
-## declares one has it because Roc asks, not as a name of its own. The same
-## list is cookbook/roc/headers.shale's LANGUAGE_FIXED_NAMES.
-language_fixed_names : Set(Str)
-language_fixed_names = Set.from_list([
-	"to_inspect",
-	"is_eq",
-	"to_hash",
-	"plus",
-	"minus",
-	"times",
-	"div_by",
-	"div_trunc_by",
-	"rem_by",
-	"is_lt",
-	"is_lte",
-	"is_gt",
-	"is_gte",
-	"range_exclusive_to",
-	"range_inclusive_to",
-	"range_exclusive_from",
-	"range_inclusive_from",
-	"range_iter",
-	"range_len_if_known",
-	"negate",
-	"not",
-	"from_numeral",
-	"from_quote",
-	"from_interpolation",
-	"iter",
-	"next",
-	"parser_for",
-	"encoder_for",
-	"map",
-	"map!",
-	"subscript",
-	"encode",
-	"decode",
-])

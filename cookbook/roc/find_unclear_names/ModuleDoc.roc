@@ -5,6 +5,7 @@
 import pf.Shale
 import lib.Declarations
 import lib.Finding
+import lib.Headers
 import lib.Text
 import lib.Tree
 
@@ -110,15 +111,6 @@ opening_comment = |src| {
 	$out
 }
 
-## A file's text with its comment lines left out.
-code_of : Str -> Str
-code_of = |text| Str.join_with(Text.lines(text).keep_if(|l| !(Str.starts_with(Str.trim(l), "#"))), "\n")
-
-## The names in the list between `[` and `]` of `text`.
-bracketed_names : Str -> List(Str)
-bracketed_names = |text|
-	Str.split_on(Text.between(text, "[", "]") ?? "", ",").map(Str.trim).keep_if(|m| m != "")
-
 ## What a folder's `main.roc` exposes, when it is a package's or a
 ## platform's (cookbook/roc/headers.shale's `exposed_by_folder`).
 exposed_by_folder! : Str => { is_package : Bool, modules : List(Str) }
@@ -128,23 +120,9 @@ exposed_by_folder! = |dir| {
 	} else {
 		"${dir}/main.roc"
 	}
-	none = { is_package: Bool.False, modules: [] }
 	match Shale.read!(main) {
-		Missing => none
-		Found(whole) => {
-			text = code_of(whole)
-			word = match Shale.re_find!(text, "[A-Za-z_]+") {
-				Found(m) => m.text
-				NoMatch => ""
-			}
-			if word == "package" {
-				{ is_package: Bool.True, modules: bracketed_names(text) }
-			} else if word == "platform" {
-				{ is_package: Bool.True, modules: bracketed_names("${Text.between(text, "exposes", "]") ?? ""}]") }
-			} else {
-				none
-			}
-		}
+		Missing => { is_package: Bool.False, modules: [] }
+		Found(text) => Headers.exposed_by(text)
 	}
 }
 
