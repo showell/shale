@@ -350,7 +350,12 @@ function cookbook_self_tests(bin)
     mkdir(dir .. "/tools")
     tools_path = real(dir .. "/tools")
   end
-  create(dir .. "/mounts", "cookbook = " .. real("cookbook") .. " ro\ntools = " .. tools_path .. " ro tools\nscratch = " .. real(dir .. "/scratch") .. "\n")
+  -- A Roc recipe's launcher runs this checkout's roc_platform/run.shale
+  -- from a case's folder under `scratch`, and it reads the checkout and
+  -- writes its builds (roc_platform/out, c/out/gen): every program runs
+  -- confined to the mounts (c/host/host_confine.c), so the checkout is a
+  -- mount here, as the box's `repos` mount covers it there.
+  create(dir .. "/mounts", "cookbook = " .. real("cookbook") .. " ro\ntools = " .. tools_path .. " ro tools\nscratch = " .. real(dir .. "/scratch") .. "\ncheckout = " .. real(".") .. "\n")
   local recipes = {}
   for p in glob("cookbook/**/*.shale") do
     if contains(read(p), "arg(\"self_test\"") then push(recipes, p) end
