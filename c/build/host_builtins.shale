@@ -3,8 +3,9 @@
 -- host_write_gate.c, host_run_secrets.c, host_run.c, jobs.c, host_jobs.c).
 -- c/build.shale runs it, with the `build` mount that `use` below reads; see
 -- that file for the tiers and the blocks.
--- (steps: 100M since 2026-11-19: its plants, 26 with the Landlock lane's
--- and the unconfined gate's, each copy c/, about 1.75M steps a copy.)
+-- (steps: 100M since 2026-11-19: its plants, 37 with the Landlock lane's,
+-- the unconfined gate's and secret_args', each copy c/, about 1.75M steps a
+-- copy.)
 -- budget: steps=100000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
 
 use("build:lib.shale")
@@ -19,17 +20,29 @@ use("build:lib.shale")
 -- faults below planted in a copy of c/ (`run_plants`), each caught by its
 -- `aim` tests.
 
-const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 14, ["c/tests/host_builtins/test_run_guards.c"] = 18, ["c/tests/host_builtins/test_run_secret_args.c"] = 2}
+const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 14, ["c/tests/host_builtins/test_run_guards.c"] = 19, ["c/tests/host_builtins/test_run_secret_args.c"] = 2}
 const HOST_BUILTINS_PLANTS = {
   {name = "an unconfined run is any program", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
    old = "    bool git = named && str_eq(base, S(\"git\"));", new = "    bool git = true;"},
   {name = "an unconfined ssh reaches any host", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
-   old = "    if (!host_unconfined_host(hosts, first)) return", new = "    if (0) return"},
+   old = "    if (!host_unconfined_host(hosts, host_unconfined_word(a, i))) return", new = "    if (0) return"},
   {name = "an unconfined ssh takes any option", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
-   old = "    if (str_starts_with(first, S(\"-\"))) return", new = "    if (0) return"},
+   old = "        if (!taken) return host_fail(r, pos, CLASS_REFUSED, S(\"`run`'s `unconfined` ssh takes no option", new = "        if (!taken) i++;\n        if (0) return host_fail(r, pos, CLASS_REFUSED, S(\"`run`'s `unconfined` ssh takes no option"},
+  {name = "an unconfined ssh takes any setting", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_deploy_s_host_may_be_a_secret_and_is_never_shown",
+   old = "static bool host_unconfined_ssh_setting(Str s) {\n", new = "static bool host_unconfined_ssh_setting(Str s) {\n    if (s.len > 0) return true;\n"},
+  {name = "an unconfined check reads the script's markers", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_deploy_s_host_may_be_a_secret_and_is_never_shown",
+   old = "    HostUnconfinedArgv a = {filled, argv};", new = "    HostUnconfinedArgv a = {argv, argv};"},
+  {name = "an unconfined refusal names a secret's value", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_deploy_s_host_may_be_a_secret_and_is_never_shown",
+   old = "    return at(a->script, i).s;", new = "    return at(a->filled, i).s;"},
+  {name = "an unconfined program is handed the markers", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_deploy_s_host_may_be_a_secret_and_is_never_shown",
+   old = "    *out = filled;", new = "    *out = argv;"},
   {name = "an unconfined copy reaches any host", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
    old = "            if (!host_unconfined_host(hosts, host)) return", new = "            if (0) return"},
@@ -41,13 +54,13 @@ const HOST_BUILTINS_PLANTS = {
    old = "        if (!host_unconfined_host_line(line)) return", new = "        if (0) return"},
   {name = "an unconfined scp takes any option", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
-   old = "        if (!host_unconfined_named(flags, at(argv, i).s)) return", new = "        if (0) return"},
+   old = "        if (!host_unconfined_named(flags, host_unconfined_word(a, i))) return", new = "        if (0) return"},
   {name = "an unconfined copy writes outside the mounts", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
    old = "    if (mounts_in_folder(resolved, paths_root_of(&h->paths, pr))) return OK;", new = "    return OK;"},
   {name = "an unconfined rsync takes any shell", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
-   old = "            if (i + 1 >= argv.len || !str_eq(at(argv, i + 1).s, S(\"ssh\"))) return", new = "            if (i + 1 >= argv.len) return"},
+   old = "            if (i + 1 >= n || !host_unconfined_rsh_ok(host_unconfined_word(a, i + 1))) return", new = "            if (i + 1 >= n) return"},
   {name = "an unconfined rsync takes any option", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
    old = "        if (!short_ok && !host_unconfined_named(longs, o)) return", new = "        if (0) return"},

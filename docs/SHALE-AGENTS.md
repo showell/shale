@@ -263,11 +263,17 @@ has none of it):
   ones skipped (`deploy@example.com`). Shale ships no host: no file, or no
   line, is no host allowed; a line that is not `user@host` stops the run
   naming it. A host is written as in the file (`user@host:path` in a
-  copy): ssh with no option before its host, scp with `-q`, `-r` and `-p`
-  alone, rsync with its listed options and `-e ssh` alone of a shell, no
-  daemon module, and each local path under the root or a mount (a written
-  one under a writable mount). None takes an `env` (git but
-  GIT_TERMINAL_PROMPT). gh's configuration is closed too: hand it
+  copy): ssh with no option before its host but `-o BatchMode=yes` and `-o
+  LogLevel=QUIET`, scp with `-q`, `-r`, `-p` and those two `-o`s alone,
+  rsync with its listed options and `-e ssh` (those two `-o`s after it)
+  alone of a shell, no daemon module, and each local path under the root or
+  a mount (a written one under a writable mount). None takes an `env` (git
+  but GIT_TERMINAL_PROMPT). **The host may be a secret**, `secret_args`'
+  `<secret PROD>`, as the prod deploys hand it: the shapes are checked on
+  the argv the program is handed, the value in place, against the hosts
+  file, and a refusal names the marker, never the value, which the scrubber
+  takes out of the output as for any run; so the hosts file holds the prod
+  host's `user@address` as the secret does. gh's configuration is closed too: hand it
   `GH_TOKEN` through `secrets` and an empty `GH_CONFIG_DIR`, as
   `cookbook/build_on_github.shale` does. A `want` never widens it. A program it
   refuses gets EACCES from the call it made, so a script sees the

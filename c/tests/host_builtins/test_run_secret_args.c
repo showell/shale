@@ -7,7 +7,9 @@
 // A part of ran_tests.c (`TEST_PART`, test.h), which defines _GNU_SOURCE and
 // includes test.h and ran.c before it.
 
-static const char *const SECRET_ARGS_MOUNT = "k = D/root/keys secrets\n";
+// Outside the root, as a secrets mount must be for a program to run beside it
+// (host_confine.c).
+static const char *const SECRET_ARGS_MOUNT = "k = D/keys secrets\n";
 
 // The planted secret's value, which nothing the script or the report sees
 // may hold.
@@ -22,7 +24,7 @@ TEST(a_secret_fills_an_argument_and_only_its_marker_is_ever_shown) {
     static Ran x;
     RanOpts o = {SECRET_ARGS_MOUNT, false, false};
     ran_init(&x, o);
-    ran_put(&x, "root/keys/host", "  deploy@192.0.2.7\n");
+    ran_put(&x, "keys/host", "  deploy@192.0.2.7\n");
     // printf proves the value reached the program: the length of each
     // argument it was handed, then the arguments themselves, which the
     // scrubber gives back as the marker. The marker inside an argument
@@ -66,11 +68,14 @@ TEST(each_secret_args_mistake_is_refused_before_a_secret_is_read) {
     static Ran x;
     RanOpts o = {SECRET_ARGS_MOUNT, false, false};
     ran_init(&x, o);
-    ran_put(&x, "root/keys/host", "deploy@192.0.2.7\n");
-    ran_put(&x, "root/keys/empty", " \n");
+    ran_put(&x, "keys/host", "deploy@192.0.2.7\n");
+    ran_put(&x, "keys/empty", " \n");
+    // The secrets folder's OS path, for the guard that reads the argv: the
+    // source holds capital Ds.
+    ran_write(&x, "root/keys.txt", ran_at(&x, "keys/host"));
     FileSystemCPath link_cp;
     const char *link_c = NULL;
-    EXPECT_EQ(file_system_cstr(&link_cp, os_str_own(ran_at(&x, "root/keys/link")), &link_c), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_cstr(&link_cp, os_str_own(ran_at(&x, "keys/link")), &link_c), FILE_SYSTEM_OK);
     EXPECT_EQ(symlink("host", link_c), 0);
     ran_run(&x, S("function f(a, o) return host(\"run\", a, o) end\nfunction j(a, o) return host(\"job_start\", a, o) end\n"
                   "print(attempt(f, {\"echo\", \"<secret a-b>\"}, {timeout_ms = 5000, tail = 1, secret_args = {[\"a-b\"] = \"k:host\"}}).error)\n"
@@ -85,7 +90,7 @@ TEST(each_secret_args_mistake_is_refused_before_a_secret_is_read) {
                   "print(attempt(f, {\"echo\", \"<secret H>\"}, {timeout_ms = 5000, tail = 1, secret_args = {H = \"k:empty\"}}).error)\n"
                   "print(attempt(f, {\"echo\", \"<secret H>\"}, {timeout_ms = 5000, tail = 1, secret_args = {H = \"k:link\"}}).error)\n"
                   // The guards still read the script's own argv.
-                  "print(attempt(f, {\"echo\", \"<secret H>\", \"keys/host\"}, {timeout_ms = 5000, tail = 1, secret_args = {H = \"k:host\"}}).error)\n"
+                  "print(attempt(f, {\"echo\", \"<secret H>\", read(\"keys.txt\")}, {timeout_ms = 5000, tail = 1, secret_args = {H = \"k:host\"}}).error)\n"
                   "print(attempt(f, {\"bash\", \"<secret H>\"}, {timeout_ms = 5000, tail = 1, secret_args = {H = \"k:host\"}}).error)\n"
                   "print(attempt(j, {\"echo\", \"<secret H>\"}, {log = \"j.log\", secret_args = {H = \"k:host\"}}).error)\n"),
            ran_budgets());

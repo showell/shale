@@ -23,6 +23,12 @@ static Str guards_decoy(Ran *x, const char *rel) { // cstr: a test's literal
     return ran_file(x, rel, &got) ? got : S("absent");
 }
 
+// Whether `s` holds the literal `lit`.
+static bool guards_holds(Str s, const char *lit) { // cstr: a test's literal
+    Str l = ran_cs(lit);
+    return mem_find(s.ptr, s.len, l.ptr, l.len) != SIZE_MAX;
+}
+
 static const char *const GUARDS_SECRETS_MOUNT = "k = D/root/keys secrets\n";
 
 // A secrets mount outside the root, as one must be for a program to run
@@ -361,12 +367,12 @@ TEST(an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone) {
                                      "`run`'s `unconfined` (t: past the mounts) is for a `git push`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts\n"
                                      "`run`'s `unconfined` (t: past the mounts) is for a `git push`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts\n"
                                      "`run`'s `unconfined` ssh goes only to a host of the hosts file (~/.config/shale/hosts, or SHALE_HOSTS's), not `steve@example.org`\n"
-                                     "`run`'s `unconfined` ssh takes no option, not -o: an option could name a program, a config or a hop\n"
-                                     "`run`'s `unconfined` ssh takes no option, not -F: an option could name a program, a config or a hop\n"
-                                     "`run`'s `unconfined` scp takes -q, -r and -p, not -S: another option could name a program, a config or a hop\n"
+                                     "`run`'s `unconfined` ssh takes `-o` for BatchMode=yes and LogLevel=QUIET alone, not `ProxyCommand=x`: another setting could name a program, a file or a hop\n"
+                                     "`run`'s `unconfined` ssh takes no option but `-o`, not -F: an option could name a program, a config or a hop\n"
+                                     "`run`'s `unconfined` scp takes -q, -r, -p and `-o`, not -S: another option could name a program, a config or a hop\n"
                                      "`run`'s `unconfined` scp goes only to a host of the hosts file (~/.config/shale/hosts, or SHALE_HOSTS's), not `other@example.com`\n"
                                      "`run`'s `unconfined` scp: its local path ../x.txt is under neither the root nor a mount\n"
-                                     "`run`'s `unconfined` rsync takes `-e ssh` alone of a remote shell: any other is a program it would start\n"
+                                     "`run`'s `unconfined` rsync takes `-e ssh` alone of a remote shell, with `-o BatchMode=yes` and `-o LogLevel=QUIET` after it: any other is a program it would start\n"
                                      "`run`'s `unconfined` rsync does not take --rsync-path=x: its options are HOST_UNCONFINED_RSYNC_LETTERS' and HOST_UNCONFINED_RSYNC_LONG's (c/host/host_unconfined.c)\n"
                                      "`run`'s `unconfined` rsync takes no rsync daemon's module (`host::module`), not deploy@example.com::mod\n"
                                      "`run`'s `unconfined` ssh takes no `env` (git: but GIT_TERMINAL_PROMPT), not SSH_AUTH_SOCK: a variable could name a program it starts\n"
@@ -459,6 +465,83 @@ TEST(an_unconfined_copy_s_hosts_are_the_hosts_file_s_and_none_without_one) {
     EXPECT(str_starts_with(z.r.ctx.stop.message, S("`run`'s `unconfined`: the hosts file ")));
     EXPECT_EQ(unsetenv("SHALE_HOSTS"), 0);
     ran_free(&z);
+}
+
+// A deploy's host may be a secret, `secret_args`' `<secret PROD>`, as
+// roc-apps' and roc-chat's deploys hand it, with ssh's `-o BatchMode=yes -o
+// LogLevel=QUIET`: the unconfined shapes are checked on the value the
+// program is handed, against the hosts file, and every refusal names the
+// marker, never the value. The prod host by its secret runs unconfined (its
+// fakes read a decoy outside every mount, and are handed the value, by its
+// length); another host by a secret, a secret that is an ssh setting, an ssh
+// setting not taken, and any other program are refused; the same ssh without
+// `unconfined`, and another program handed a secret, stay confined. No
+// record, refusal or output holds a value. `ssh`, `scp` and `rsync` are fakes
+// in a read-only mount first on PATH, so nothing is reached.
+TEST(an_unconfined_deploy_s_host_may_be_a_secret_and_is_never_shown) {
+    static Ran x;
+    guards_ran_with(&x, "k = D/keys secrets\nfake = D/fakebin ro\n", false);
+    const char *fake = "#!/bin/sh\necho \"fake $(basename \"$0\") $*\"\nprintf '%s' \"$*\" | wc -c\ncat ../decoy.txt 2>/dev/null || echo sealed\n";
+    guards_zig_fake(&x, "fakebin/ssh", fake);
+    guards_zig_fake(&x, "fakebin/scp", fake);
+    guards_zig_fake(&x, "fakebin/rsync", fake);
+    static OsStr path_env[1];
+    SLICE_TYPE(EnvRoom, OsStr);
+    EnvRoom room = {path_env, 1};
+    Buf pb = buf_make(&x.host);
+    EXPECT_EQ(buf_lit(&pb, "PATH="), OK);
+    EXPECT_EQ(buf_str(&pb, ran_at(&x, "fakebin")), OK);
+    EXPECT_EQ(buf_lit(&pb, ":/usr/bin:/bin"), OK);
+    at(room, 0) = os_str_own(buf_view(&pb));
+    x.lh.env = (SpawnStrs){path_env, 1};
+    ran_put(&x, "keys/prod", "deploy@192.0.2.7\n");
+    ran_put(&x, "keys/other", "other@192.0.2.8\n");
+    ran_put(&x, "keys/opt", "-oProxyCommand=x\n");
+    ran_put(&x, "decoy.txt", "outside\n");
+    ran_write(&x, "keys/src", ran_at(&x, "decoy.txt"));
+    ran_put(&x, "root/where.txt", "w\n");
+    ran_put(&x, "hosts", "deploy@192.0.2.7\n");
+    FileSystemCPath hosts_cp;
+    const char *hosts_c = NULL;
+    EXPECT_EQ(file_system_cstr(&hosts_cp, os_str_own(ran_at(&x, "hosts")), &hosts_c), FILE_SYSTEM_OK);
+    EXPECT_EQ(setenv("SHALE_HOSTS", hosts_c, 1), 0);
+    ran_run(&x, S("function c(a, o) return host(\"run\", a, o) end\n"
+                  "function u(name, file)\n  local o = {timeout_ms = 10000, tail = 5, unconfined = \"t: deploy\", secret_args = {}}\n  o.secret_args[name] = file\n  return o\nend\n"
+                  "function confined(name, file)\n  local o = {timeout_ms = 10000, tail = 5, secret_args = {}}\n  o.secret_args[name] = file\n  return o\nend\n"
+                  "print(c({\"ssh\", \"-o\", \"BatchMode=yes\", \"-o\", \"LogLevel=QUIET\", \"<secret PROD>\", \"true\"}, u(\"PROD\", \"k:prod\")).out)\n"
+                  "print(c({\"scp\", \"-q\", \"-oBatchMode=yes\", \"-o\", \"LogLevel=QUIET\", \"where.txt\", \"<secret PROD>:/tmp/x\"}, u(\"PROD\", \"k:prod\")).out)\n"
+                  "print(c({\"rsync\", \"-rlt\", \"--delete\", \"-e\", \"ssh -o BatchMode=yes -o LogLevel=QUIET\", \"where.txt\", \"<secret PROD>:/srv/x/\"}, u(\"PROD\", \"k:prod\")).out)\n"
+                  "print(attempt(c, {\"ssh\", \"<secret OTHER>\", \"true\"}, u(\"OTHER\", \"k:other\")).error)\n"
+                  "print(attempt(c, {\"scp\", \"where.txt\", \"<secret OTHER>:/tmp/x\"}, u(\"OTHER\", \"k:other\")).error)\n"
+                  "print(attempt(c, {\"ssh\", \"<secret OPT>\", \"deploy@192.0.2.7\", \"true\"}, u(\"OPT\", \"k:opt\")).error)\n"
+                  "print(attempt(c, {\"ssh\", \"-o\", \"LogLevel=DEBUG\", \"<secret PROD>\", \"true\"}, u(\"PROD\", \"k:prod\")).error)\n"
+                  "print(attempt(c, {\"rsync\", \"-e\", \"ssh -o ProxyCommand=x\", \"where.txt\", \"<secret PROD>:/srv/x/\"}, u(\"PROD\", \"k:prod\")).error)\n"
+                  "print(attempt(c, {\"expr\", \"<secret PROD>\", \":\", \"x\"}, u(\"PROD\", \"k:prod\")).error)\n"
+                  "print(c({\"ssh\", \"<secret PROD>\", \"true\"}, confined(\"PROD\", \"k:prod\")).out)\n"
+                  "print(c({\"cp\", \"<secret SRC>\", \"got\"}, confined(\"SRC\", \"k:src\")).code ~= 0, exists(\"got\"))\n"),
+           ran_budgets());
+    EXPECT_EQ(unsetenv("SHALE_HOSTS"), 0);
+    EXPECT(x.parsed);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    // `deploy@192.0.2.7` is 16 bytes: the fakes' counts are of the value's
+    // words, "<secret PROD>" being 13.
+    EXPECT_STR(buf_view(&x.r.out), S("fake ssh -o BatchMode=yes -o LogLevel=QUIET <secret PROD> true\n56\noutside\n\n"
+                                     "fake scp -q -oBatchMode=yes -o LogLevel=QUIET where.txt <secret PROD>:/tmp/x\n70\noutside\n\n"
+                                     "fake rsync -rlt --delete -e ssh -o BatchMode=yes -o LogLevel=QUIET where.txt <secret PROD>:/srv/x/\n90\noutside\n\n"
+                                     "`run`'s `unconfined` ssh goes only to a host of the hosts file (~/.config/shale/hosts, or SHALE_HOSTS's), not `<secret OTHER>`\n"
+                                     "`run`'s `unconfined` scp goes only to a host of the hosts file (~/.config/shale/hosts, or SHALE_HOSTS's), not `<secret OTHER>`\n"
+                                     "`run`'s `unconfined` ssh takes `-o` for BatchMode=yes and LogLevel=QUIET alone, not `<secret OPT>`: another setting could name a program, a file or a hop\n"
+                                     "`run`'s `unconfined` ssh takes `-o` for BatchMode=yes and LogLevel=QUIET alone, not `LogLevel=DEBUG`: another setting could name a program, a file or a hop\n"
+                                     "`run`'s `unconfined` rsync takes `-e ssh` alone of a remote shell, with `-o BatchMode=yes` and `-o LogLevel=QUIET` after it: any other is a program it would start\n"
+                                     "`run`'s `unconfined` (t: deploy) is for a `git push`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts\n"
+                                     "fake ssh <secret PROD> true\n21\nsealed\n\n"
+                                     "true\tfalse\n"));
+    EXPECT(!guards_holds(buf_view(&x.r.out), "192.0.2"));
+    EXPECT(x.lh.records.len >= 5);
+    for (size_t i = 0; i < x.lh.records.len; i++) EXPECT(!guards_holds(at(x.lh.records, i), "192.0.2"));
+    EXPECT(str_starts_with(at(x.lh.records, 0), S("run ssh -o BatchMode=yes -o LogLevel=QUIET <secret PROD> true argv PROD=<secret k:prod> (unconfined: t: deploy) -> exit 0")));
+    EXPECT_STR(guards_decoy(&x, "root/got"), S("absent"));
+    ran_free(&x);
 }
 
 // The permission bits of the file at `rel`.
@@ -660,4 +743,5 @@ TEST_PART(run_guards, TEST_CASE(a_program_writes_and_reads_only_where_the_mounts
           TEST_CASE(stdout_secret_s_file_is_held_to_one_byte_past_its_cap_while_the_program_runs),
           TEST_CASE(job_wait_names_the_script_s_path_never_the_os_path),
           TEST_CASE(zig_ast_s_stderr_is_drained_while_it_answers_and_a_hung_one_stops_at_the_deadline), TEST_CASE(zig_ast_runs_confined_to_the_mounts),
-          TEST_CASE(ssh_reads_its_known_hosts_and_no_key_and_the_caches_are_the_build_mount_s), TEST_CASE(an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone), TEST_CASE(an_unconfined_copy_s_hosts_are_the_hosts_file_s_and_none_without_one));
+          TEST_CASE(ssh_reads_its_known_hosts_and_no_key_and_the_caches_are_the_build_mount_s), TEST_CASE(an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone), TEST_CASE(an_unconfined_copy_s_hosts_are_the_hosts_file_s_and_none_without_one),
+          TEST_CASE(an_unconfined_deploy_s_host_may_be_a_secret_and_is_never_shown));

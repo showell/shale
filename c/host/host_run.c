@@ -616,9 +616,11 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     if (o->nice != HOST_UNSET) spec.nice = (int)o->nice;
     // The confinement is the mounts' alone: a `want` lets a refused program
     // run, and never widens what it may touch. Only `unconfined`, for a git
-    // push alone, runs a program outside it.
+    // push and a deploy's ssh, scp and rsync to a host of the hosts file,
+    // runs a program outside it, its shape checked on the filled argv
+    // (`secret_args`' values in place) and named by the script's.
     if (host_given(&o->unconfined)) {
-        TRY(host_run_unconfined(h, r, pos, argv, &o->env, o->unconfined.as.string, cwd, &spec.argv));
+        TRY(host_run_unconfined(h, r, pos, argv, filled, &o->env, o->unconfined.as.string, cwd, &spec.argv));
     } else {
         TRY(host_confine_open(h, r, pos, S("run"), &held->confine_fd));
     }
