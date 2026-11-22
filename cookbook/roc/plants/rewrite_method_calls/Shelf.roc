@@ -4,7 +4,7 @@
 Shelf :: [].{
 	Book := { title : Str }.{
 		named : Str -> Book
-		named = |title| { title: title }
+		named = |book_title| { title: book_title }
 
 		title : Book -> Str
 		title = |b| b.title

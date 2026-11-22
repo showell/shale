@@ -18,13 +18,13 @@ Forest := {
 		var $paths = []
 		for file in files {
 			offset = $nodes.len()
-			for node in file.nodes {
-				moved_parent = if node.parent > 0 {
-					node.parent + offset
+			for file_node in file.nodes {
+				moved_parent = if file_node.parent > 0 {
+					file_node.parent + offset
 				} else {
 					0
 				}
-				moved = { ..node, kids: node.kids.map(|kid| kid + offset), parent: moved_parent }
+				moved = { ..file_node, kids: file_node.kids.map(|kid_at| kid_at + offset), parent: moved_parent }
 				$nodes = $nodes.append(moved)
 				$paths = $paths.append(file.path)
 			}
@@ -59,7 +59,7 @@ Forest := {
 
 	## A node's attribute, `""` where it has none.
 	attribute : Forest, U64, Str -> Str
-	attribute = |forest, at, name| Tree.attribute(Forest.node(forest, at), name)
+	attribute = |forest, at, attribute_name| Tree.attribute(Forest.node(forest, at), attribute_name)
 
 	name : Forest, U64 -> Str
 	name = |forest, at| Forest.attribute(forest, at, "name")

@@ -85,8 +85,8 @@ Mask := [].{
 
 	## Whether the bytes hold the text at `at`.
 	holds_at : List(U8), U64, Str -> Bool
-	holds_at = |bytes, at, text| {
-		wanted = text.to_utf8()
+	holds_at = |bytes, at, wanted_text| {
+		wanted = wanted_text.to_utf8()
 		bytes.sublist({ start: at, len: wanted.len() }) == wanted
 	}
 
