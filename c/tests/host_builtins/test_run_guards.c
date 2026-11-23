@@ -267,21 +267,16 @@ static void guards_git_bare(Ran *x, Str path) {
 }
 
 // The host's unconfined programs (Host's `unconfined_bin`) are the fakes in
-// the folder `rel`, with a git beside them when they hold none: a script
-// that leaves a line in D/unconfined-git.log, then runs the system's own.
-// A test's stand-in for /usr/bin, which says it was the one that ran.
-static void guards_unconfined_bin(Ran *x, const char *rel) { // cstr: a test's literal
-    Str dir = ran_at(x, rel);
-    Buf g = buf_make(&x->host);
-    if (buf_str(&g, ran_cs(rel)) != OK || buf_lit(&g, "/git") != OK) abort();
-    Str git_rel = buf_view(&g);
+// the folder `fakebin`, with a git beside them when it holds none: a script
+// that leaves a line in D/unconfined-git.log, then runs the system's own. A
+// test's stand-in for /usr/bin, which says it was the one that ran.
+static void guards_unconfined_bin(Ran *x) {
     Str got = S("");
-    if (!ran_file(x, arena_cstr(&x->host, os_str_own(git_rel)), &got)) {
-        const char *rel_c = arena_cstr(&x->host, os_str_own(git_rel)); // cstr: the arena's copy
-        guards_zig_fake(x, rel_c, "");
-        ran_write(x, rel_c, ran_d(x, "#!/bin/sh\necho ran >> D/unconfined-git.log 2>/dev/null\nexec /usr/bin/git \"$@\"\n"));
+    if (!ran_file(x, "fakebin/git", &got)) {
+        guards_zig_fake(x, "fakebin/git", "");
+        ran_write(x, "fakebin/git", ran_d(x, "#!/bin/sh\necho ran >> D/unconfined-git.log 2>/dev/null\nexec /usr/bin/git \"$@\"\n"));
     }
-    x->lh.unconfined_bin = dir;
+    x->lh.unconfined_bin = ran_at(x, "fakebin");
 }
 
 // ssh reads its known hosts and its configuration from a decoy home, and no
@@ -344,7 +339,7 @@ TEST(an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone) {
     EXPECT_EQ(buf_lit(&pb, ":/usr/bin:/bin"), OK);
     at(room, 0) = os_str_own(buf_view(&pb));
     x.lh.env = (SpawnStrs){path_env, 1};
-    guards_unconfined_bin(&x, "fakebin");
+    guards_unconfined_bin(&x);
     ran_put(&x, "hosts", "# the deploys' hosts\n\ndeploy@example.com\n");
     FileSystemCPath hosts_cp;
     const char *hosts_c = NULL;
@@ -439,7 +434,7 @@ TEST(an_unconfined_push_reaches_the_remotes_file_s_remotes_alone) {
     EXPECT_EQ(buf_lit(&pb, ":/usr/bin:/bin"), OK);
     at(room, 0) = os_str_own(buf_view(&pb));
     x.lh.env = (SpawnStrs){path_env, 1};
-    guards_unconfined_bin(&x, "fakebin");
+    guards_unconfined_bin(&x);
     ran_put(&x, "remotes", "# the box's\n\ngit@github.com:showell/\n");
     FileSystemCPath remotes_cp;
     const char *remotes_c = NULL;
@@ -542,7 +537,7 @@ TEST(an_unconfined_fetch_comes_from_the_remotes_file_s_remotes_alone) {
     EXPECT_EQ(buf_lit(&pb, ":/usr/bin:/bin"), OK);
     at(room, 0) = os_str_own(buf_view(&pb));
     x.lh.env = (SpawnStrs){path_env, 1};
-    guards_unconfined_bin(&x, "fakebin");
+    guards_unconfined_bin(&x);
     ran_put(&x, "remotes", "git@github.com:showell/\n");
     FileSystemCPath remotes_cp;
     const char *remotes_c = NULL;
@@ -623,7 +618,7 @@ TEST(an_unconfined_ls_remote_asks_the_remotes_file_s_remotes_for_their_head_alon
     EXPECT_EQ(buf_lit(&pb, ":/usr/bin:/bin"), OK);
     at(room, 0) = os_str_own(buf_view(&pb));
     x.lh.env = (SpawnStrs){path_env, 1};
-    guards_unconfined_bin(&x, "fakebin");
+    guards_unconfined_bin(&x);
     ran_put(&x, "remotes", "git@github.com:showell/\n");
     FileSystemCPath remotes_cp;
     const char *remotes_c = NULL;
@@ -734,7 +729,7 @@ TEST(an_unconfined_copy_s_hosts_are_the_hosts_file_s_and_none_without_one) {
     EXPECT_EQ(buf_lit(&pb, ":/usr/bin:/bin"), OK);
     at(room, 0) = os_str_own(buf_view(&pb));
     x.lh.env = (SpawnStrs){path_env, 1};
-    guards_unconfined_bin(&x, "fakebin");
+    guards_unconfined_bin(&x);
     ran_put(&x, "home/.keep", "");
     const char *old_home = getenv("HOME"); // cstr: the environment's
     char home_room[PATH_MAX];
@@ -763,7 +758,7 @@ TEST(an_unconfined_copy_s_hosts_are_the_hosts_file_s_and_none_without_one) {
     at(room, 0) = os_str_own(buf_view(&pyb));
     y.lh.env = (SpawnStrs){path_env, 1};
     guards_zig_fake(&y, "fakebin/ssh", "#!/bin/sh\necho \"fake $*\"\n");
-    guards_unconfined_bin(&y, "fakebin");
+    guards_unconfined_bin(&y);
     ran_put(&y, "bad", "deploy@example.com\ndeploy at example.com\n");
     FileSystemCPath bad_cp;
     FileSystemCPath none_cp;
@@ -818,7 +813,7 @@ TEST(an_unconfined_deploy_s_host_may_be_a_secret_and_is_never_shown) {
     EXPECT_EQ(buf_lit(&pb, ":/usr/bin:/bin"), OK);
     at(room, 0) = os_str_own(buf_view(&pb));
     x.lh.env = (SpawnStrs){path_env, 1};
-    guards_unconfined_bin(&x, "fakebin");
+    guards_unconfined_bin(&x);
     ran_put(&x, "keys/prod", "deploy@192.0.2.7\n");
     ran_put(&x, "keys/other", "other@192.0.2.8\n");
     ran_put(&x, "keys/opt", "-oProxyCommand=x\n");
@@ -995,7 +990,7 @@ TEST(a_program_gets_no_session_socket_and_no_env_sets_one) {
     x.lh.env = env;
     x.lh.agent = agent;
     guards_zig_fake(&x, "fakebin/ssh", "#!/bin/sh\necho \"agent=$SSH_AUTH_SOCK $PATH\"\n");
-    guards_unconfined_bin(&x, "fakebin");
+    guards_unconfined_bin(&x);
     ran_put(&x, "hosts", "deploy@example.com\n");
     FileSystemCPath hosts_cp;
     const char *hosts_c = NULL;
@@ -1041,7 +1036,7 @@ TEST(an_unconfined_program_is_the_system_s_never_one_planted_on_path) {
     EXPECT_EQ(buf_lit(&pb, ":/usr/bin:/bin"), OK);
     at(room, 0) = os_str_own(buf_view(&pb));
     x.lh.env = (SpawnStrs){path_env, 1};
-    guards_unconfined_bin(&x, "fakebin");
+    guards_unconfined_bin(&x);
     ran_put(&x, "hosts", "deploy@example.com\n");
     FileSystemCPath hosts_cp;
     const char *hosts_c = NULL;
