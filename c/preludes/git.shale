@@ -358,6 +358,29 @@ function git_fetch(repo, opts?)
   return nil
 end
 
+-- The branch `remote`'s HEAD names, asked of the remote (`git ls-remote
+-- --symref <remote> HEAD`) and set here as `<remote>/HEAD` (`symbolic-ref
+-- refs/remotes/<remote>/HEAD refs/remotes/<remote>/<branch>`), as `git
+-- remote set-head --auto` does; nil when the remote's HEAD names no branch
+-- (an empty repository). The question over ssh runs unconfined, held to the
+-- remotes file's remotes as a fetch is; fetch first, so the branch is there.
+function git_remote_head(repo, remote)
+  local name = git_value("git_remote_head", "remote", remote)
+  local unconfined = nil
+  if git_remote_over_ssh(repo, name, false) then unconfined = "git_remote_head: ssh reads the user's key, outside the mounts" end
+  -- Not a reading call: `--no-optional-locks` before `ls-remote` is no
+  -- shape `run`'s `unconfined` takes, and its two lines fit the ends kept.
+  local said = git_call(repo, {"ls-remote", "--symref", name, "HEAD"}, nil, false, nil, unconfined).out
+  for l in lines(said) do
+    local m = re_find(l, "^ref: refs/heads/([^\t]+)\tHEAD$")
+    if m ~= nil then
+      git_call(repo, {"symbolic-ref", "refs/remotes/" .. name .. "/HEAD", "refs/remotes/" .. name .. "/" .. m.group}, nil, false, nil)
+      return m.group
+    end
+  end
+  return nil
+end
+
 -- A tag `name` on HEAD or `rev`: annotated with `msg` (given on stdin, so
 -- any text), or light without one. `git_push(repo, {tag = name})` sends
 -- it.

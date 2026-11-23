@@ -362,8 +362,8 @@ TEST(an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone) {
     EXPECT_EQ(unsetenv("SHALE_HOSTS"), 0);
     EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("0\t0\t0\ntrue\n"
-                                     "`run`'s `unconfined` (t: past the mounts) is for a `git push` or `git fetch`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts\n"
-                                     "`run`'s `unconfined` (t: past the mounts) is for a `git push` or `git fetch`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts\n"
+                                     "`run`'s `unconfined` (t: past the mounts) is for a `git push`, a `git fetch` or a `git ls-remote --symref`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts\n"
+                                     "`run`'s `unconfined` (t: past the mounts) is for a `git push`, a `git fetch` or a `git ls-remote --symref`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts\n"
                                      "`run`'s `unconfined` ssh goes only to a host of the hosts file (~/.config/shale/hosts, or SHALE_HOSTS's), not `steve@example.org`\n"
                                      "`run`'s `unconfined` ssh takes `-o` for BatchMode=yes and LogLevel=QUIET alone, not `ProxyCommand=x`: another setting could name a program, a file or a hop\n"
                                      "`run`'s `unconfined` ssh takes no option but `-o`, not -F: an option could name a program, a config or a hop\n"
@@ -548,7 +548,7 @@ TEST(an_unconfined_fetch_comes_from_the_remotes_file_s_remotes_alone) {
                                      "`run`'s `unconfined` fetch names each ref whole and forces none, not +main:refs/heads/x\n"
                                      "`run`'s `unconfined` fetch comes only from a remote of the remotes file (~/.config/shale/remotes, or SHALE_REMOTES's), `<user@host:owner/><repo>.git`: `other` fetches from git@github.com:someone/t.git\n"
                                      "`run`'s `unconfined` fetch comes only from a remote of the remotes file (~/.config/shale/remotes, or SHALE_REMOTES's), `<user@host:owner/><repo>.git`: `split` fetches from git@github.com:someone/t.git\n"
-                                     "`run`'s `unconfined` (t: fetch) is for a `git push` or `git fetch`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts\n"
+                                     "`run`'s `unconfined` (t: fetch) is for a `git push`, a `git fetch` or a `git ls-remote --symref`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts\n"
                                      "0\t0\n"));
     Str ref = S("");
     EXPECT(ran_file(&x, "root/.git/refs/remotes/origin/main", &ref));
@@ -561,6 +561,73 @@ TEST(an_unconfined_fetch_comes_from_the_remotes_file_s_remotes_alone) {
     EXPECT(!guards_holds(said, "evil-pack"));
     EXPECT(x.lh.records.len > 0);
     EXPECT(str_starts_with(at(x.lh.records, x.lh.records.len - 1), S("run git fetch -q short (unconfined: t: fetch) -> exit 0")));
+    ran_free(&x);
+}
+// An unconfined ls-remote is `git ls-remote --symref <remote> HEAD` alone, the
+// question which branch the remote's HEAD names (git_remote_head), held as a
+// fetch is: a remote of the remotes file by every fetch URL, over ssh to the
+// file's host, git's own upload-pack asked for whatever the remote's
+// `uploadpack` says. Another form (no `--symref`, no `HEAD`, a pattern, an
+// `--upload-pack`), a URL for a remote, another remote and a remote whose
+// `pushurl` alone is in the file are each refused. `ssh` is a fake first on
+// PATH that hands the push that fills the remote, then the ls-remote, to a
+// bare repository outside every mount, whose HEAD names main.
+TEST(an_unconfined_ls_remote_asks_the_remotes_file_s_remotes_for_their_head_alone) {
+    static Ran x;
+    guards_ran_with(&x, "", false);
+    guards_zig_fake(&x, "fakebin/ssh", "");
+    ran_write(&x, "fakebin/ssh", ran_d(&x, "#!/bin/sh\necho \"$* allow=$GIT_ALLOW_PROTOCOL\" >> D/ssh.log\ncase \"$*\" in *git-receive-pack*) exec git receive-pack D/github.git;; esac\nexec git upload-pack D/github.git\n"));
+    static OsStr path_env[1];
+    SLICE_TYPE(EnvRoom, OsStr);
+    EnvRoom room = {path_env, 1};
+    Buf pb = buf_make(&x.host);
+    EXPECT_EQ(buf_lit(&pb, "PATH="), OK);
+    EXPECT_EQ(buf_str(&pb, ran_at(&x, "fakebin")), OK);
+    EXPECT_EQ(buf_lit(&pb, ":/usr/bin:/bin"), OK);
+    at(room, 0) = os_str_own(buf_view(&pb));
+    x.lh.env = (SpawnStrs){path_env, 1};
+    ran_put(&x, "remotes", "git@github.com:showell/\n");
+    FileSystemCPath remotes_cp;
+    const char *remotes_c = NULL;
+    EXPECT_EQ(file_system_cstr(&remotes_cp, os_str_own(ran_at(&x, "remotes")), &remotes_c), FILE_SYSTEM_OK);
+    EXPECT_EQ(setenv("SHALE_REMOTES", remotes_c, 1), 0);
+    guards_git_bare(&x, ran_at(&x, "github.git"));
+    ran_write(&x, "github.git/HEAD", S("ref: refs/heads/main\n"));
+    ran_put(&x, "root/where.txt", "w\n");
+    ran_run(&x, S("function c(a, o) return host(\"run\", a, o) end\n"
+                  "function g(args)\n  local argv = {\"git\", \"-c\", \"user.name=t\", \"-c\", \"user.email=t@t\"}\n  for a in args do push(argv, a) end\n  return c(argv, {timeout_ms = 10000, tail = 3}).code\nend\n"
+                  "function u(args)\n  local argv = {\"git\"}\n  for a in args do push(argv, a) end\n  return c(argv, {timeout_ms = 10000, tail = 3, unconfined = \"t: head\"})\nend\n"
+                  "function no(args)\n  local argv = {\"git\"}\n  for a in args do push(argv, a) end\n  return attempt(c, argv, {timeout_ms = 10000, tail = 3, unconfined = \"t: head\"}).error\nend\n"
+                  "print(g({\"init\", \"-q\", \"-b\", \"main\"}), g({\"add\", \"where.txt\"}), g({\"commit\", \"-q\", \"-m\", \"m1\"}))\n"
+                  "print(g({\"remote\", \"add\", \"origin\", \"git@github.com:showell/t.git\"}), g({\"remote\", \"add\", \"other\", \"git@github.com:someone/t.git\"}), g({\"remote\", \"add\", \"split\", \"git@github.com:someone/t.git\"}), g({\"config\", \"remote.split.pushurl\", \"git@github.com:showell/t.git\"}))\n"
+                  "print(u({\"push\", \"-q\", \"origin\", \"main\"}).code, g({\"config\", \"remote.origin.uploadpack\", \"evil-pack\"}))\n"
+                  "print(no({\"ls-remote\", \"origin\"}))\n"
+                  "print(no({\"ls-remote\", \"--symref\", \"origin\"}))\n"
+                  "print(no({\"ls-remote\", \"--symref\", \"origin\", \"main*\"}))\n"
+                  "print(no({\"ls-remote\", \"--upload-pack=x\", \"--symref\", \"origin\", \"HEAD\"}))\n"
+                  "print(no({\"ls-remote\", \"--symref\", \"git@github.com:showell/t.git\", \"HEAD\"}))\n"
+                  "print(no({\"ls-remote\", \"--symref\", \"other\", \"HEAD\"}))\n"
+                  "print(no({\"ls-remote\", \"--symref\", \"split\", \"HEAD\"}))\n"
+                  "print(lines(u({\"-C\", \".\", \"-c\", \"color.ui=never\", \"ls-remote\", \"--symref\", \"origin\", \"HEAD\"}).out)[1])\n"),
+           ran_budgets());
+    EXPECT_EQ(unsetenv("SHALE_REMOTES"), 0);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("0\t0\t0\n0\t0\t0\t0\n0\t0\n"
+                                     "`run`'s `unconfined` ls-remote is `git ls-remote --symref <remote> HEAD` alone: it asks which branch the remote's HEAD names, and nothing else\n"
+                                     "`run`'s `unconfined` ls-remote is `git ls-remote --symref <remote> HEAD` alone: it asks which branch the remote's HEAD names, and nothing else\n"
+                                     "`run`'s `unconfined` ls-remote is `git ls-remote --symref <remote> HEAD` alone: it asks which branch the remote's HEAD names, and nothing else\n"
+                                     "`run`'s `unconfined` ls-remote is `git ls-remote --symref <remote> HEAD` alone: it asks which branch the remote's HEAD names, and nothing else\n"
+                                     "`run`'s `unconfined` ls-remote names a remote, not git@github.com:showell/t.git: its URL is held to the remotes file\n"
+                                     "`run`'s `unconfined` fetch comes only from a remote of the remotes file (~/.config/shale/remotes, or SHALE_REMOTES's), `<user@host:owner/><repo>.git`: `other` fetches from git@github.com:someone/t.git\n"
+                                     "`run`'s `unconfined` fetch comes only from a remote of the remotes file (~/.config/shale/remotes, or SHALE_REMOTES's), `<user@host:owner/><repo>.git`: `split` fetches from git@github.com:someone/t.git\n"
+                                     "ref: refs/heads/main\tHEAD\n"));
+    Str said = S("");
+    EXPECT(ran_file(&x, "ssh.log", &said));
+    EXPECT(guards_holds(said, "-o HostName=github.com "));
+    EXPECT(guards_holds(said, "git@github.com git-upload-pack 'showell/t.git' allow=ssh\n"));
+    EXPECT(!guards_holds(said, "evil-pack"));
+    EXPECT(x.lh.records.len > 0);
+    EXPECT(str_starts_with(at(x.lh.records, x.lh.records.len - 1), S("run git -C . -c color.ui=never ls-remote --symref origin HEAD (unconfined: t: head) -> exit 0")));
     ran_free(&x);
 }
 
@@ -750,7 +817,7 @@ TEST(an_unconfined_deploy_s_host_may_be_a_secret_and_is_never_shown) {
                                      "`run`'s `unconfined` ssh takes `-o` for BatchMode=yes and LogLevel=QUIET alone, not `<secret OPT>`: another setting could name a program, a file or a hop\n"
                                      "`run`'s `unconfined` ssh takes `-o` for BatchMode=yes and LogLevel=QUIET alone, not `LogLevel=DEBUG`: another setting could name a program, a file or a hop\n"
                                      "`run`'s `unconfined` rsync takes `-e ssh` alone of a remote shell, with `-o BatchMode=yes` and `-o LogLevel=QUIET` after it: any other is a program it would start\n"
-                                     "`run`'s `unconfined` (t: deploy) is for a `git push` or `git fetch`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts\n"
+                                     "`run`'s `unconfined` (t: deploy) is for a `git push`, a `git fetch` or a `git ls-remote --symref`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts\n"
                                      "fake ssh <secret PROD> true\n21\nsealed\n\n"
                                      "true\tfalse\n"));
     EXPECT(!guards_holds(buf_view(&x.r.out), "192.0.2"));
@@ -963,4 +1030,5 @@ TEST_PART(run_guards, TEST_CASE(a_program_writes_and_reads_only_where_the_mounts
           TEST_CASE(ssh_reads_its_known_hosts_and_no_key_and_the_caches_are_the_build_mount_s), TEST_CASE(an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone), TEST_CASE(an_unconfined_copy_s_hosts_are_the_hosts_file_s_and_none_without_one),
           TEST_CASE(an_unconfined_deploy_s_host_may_be_a_secret_and_is_never_shown),
           TEST_CASE(an_unconfined_push_reaches_the_remotes_file_s_remotes_alone),
-          TEST_CASE(an_unconfined_fetch_comes_from_the_remotes_file_s_remotes_alone), TEST_CASE(gh_reads_no_configuration_and_never_says_its_token));
+          TEST_CASE(an_unconfined_fetch_comes_from_the_remotes_file_s_remotes_alone),
+          TEST_CASE(an_unconfined_ls_remote_asks_the_remotes_file_s_remotes_for_their_head_alone), TEST_CASE(gh_reads_no_configuration_and_never_says_its_token));

@@ -1270,6 +1270,13 @@ git_fetch(repo: Path, opts?: Opts) -> Nil
   doc: nothing: the remote fetched, unconfined over ssh
   anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
 
+git_remote_head(repo: Path, remote: Str) -> Str | Nil
+  impl: prelude git
+  kind: effect
+  stops: fail (git's error, named; over ssh, `run`'s refusals: a remote not the remotes file's)
+  doc: the branch the remote's HEAD names, asked of it and set as `<remote>/HEAD` here; nil for none
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
 git_tag(repo: Path, name: Str, opts?: Opts) -> Nil
   impl: prelude git
   kind: effect

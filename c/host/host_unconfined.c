@@ -1,8 +1,9 @@
 // host_unconfined.c: `run`'s `unconfined = "tag: why"`, the programs `run`
 // starts outside the Landlock confinement (host_confine.c), because what
-// they need no rule allows: ssh's key files. There are five, each held to a
-// narrow shape: a `git push` and a `git fetch`, each with a remote of the
-// remotes file, and `ssh`, `scp` and `rsync` to a host of the hosts file
+// they need no rule allows: ssh's key files. There are six, each held to a
+// narrow shape: a `git push`, a `git fetch` and a `git ls-remote --symref
+// <remote> HEAD` (which branch the remote's HEAD names), each with a remote
+// of the remotes file, and `ssh`, `scp` and `rsync` to a host of the hosts file
 // alone (a deploy's). Every other program, and every other shape of these
 // (every other git command), is refused; a `want` is beside the point, and
 // the run's record says `(unconfined: ...)`.
@@ -34,7 +35,8 @@ static const char *const HOST_UNCONFINED_GIT[] = {"-c", "core.hooksPath=/dev/nul
 // git it starts, with hooks of its own); a command for an alternate's refs
 // that is `true` itself, never one the repository's config names (git runs
 // it to negotiate); no bundle a server offers; and no commit graph written.
-// host_run_unconfined adds `--upload-pack=git-upload-pack` after `fetch`, so
+// An unconfined `ls-remote` runs under them too. host_run_unconfined adds
+// `--upload-pack=git-upload-pack` after `fetch` (or `ls-remote`), so
 // the command asked for on the host is git's own (a `-c
 // remote.<name>.uploadpack` would not do: git takes the first of the
 // remote's `uploadpack`s, the repository's own), and the ssh as a push's.
@@ -583,7 +585,7 @@ static STATUS_MUST_USE Status host_unconfined_push_refspec(Run *r, Pos pos, cons
 static const char *const HOST_UNCONFINED_FETCH_FLAGS[] = {"-q", "--quiet", "-v", "--verbose", "-p", "--prune", "-t", "--tags", "-n", "--no-tags", "--dry-run", "--no-recurse-submodules", "--no-auto-gc", "--no-auto-maintenance", "--no-write-fetch-head"};
 
 static STATUS_MUST_USE Status host_unconfined_not_git(Run *r, Pos pos, Str why) {
-    return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` ({s}) is for a `git push` or `git fetch`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(why)));
+    return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` ({s}) is for a `git push`, a `git fetch` or a `git ls-remote --symref`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(why)));
 }
 
 // Whether `s` is a remote's name a fetch takes: letters, digits, `.`, `_`
@@ -627,9 +629,23 @@ static STATUS_MUST_USE Status host_unconfined_fetch(Run *r, Pos pos, const HostU
     return OK;
 }
 
+// `ls-remote --symref <remote> HEAD`, `ls-remote` at word `i`, its remote
+// into `*remote`: the one form, which asks the remote which branch its HEAD
+// names (the git prelude's git_remote_head), by a remote's name.
+static STATUS_MUST_USE Status host_unconfined_ls_remote(Run *r, Pos pos, const HostUnconfinedArgv *a, size_t i, Str *remote) {
+    size_t n = a->filled.len;
+    bool shaped = n == i + 4 && str_eq(host_unconfined_word(a, i + 1), S("--symref")) && str_eq(host_unconfined_word(a, i + 3), S("HEAD"));
+    if (!shaped) return host_fail_plain(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` ls-remote is `git ls-remote --symref <remote> HEAD` alone: it asks which branch the remote's HEAD names, and nothing else"));
+    if (!host_unconfined_remote_name(host_unconfined_word(a, i + 2))) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` ls-remote names a remote, not {s}: its URL is held to the remotes file"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(host_unconfined_shown(a, i + 2))));
+    *remote = host_unconfined_word(a, i + 2);
+    return OK;
+}
+
 // `git [-C dir] [-c color.ui=never]... push [options] <remote> <refspec>...`,
-// or the same with `fetch` (host_unconfined_fetch, `*fetch` set), into
-// `*dir`, `*remote` and `*command` (the word `push` or `fetch` is): before
+// or the same with `fetch` (host_unconfined_fetch) or `ls-remote`
+// (host_unconfined_ls_remote), each of which sets `*fetch` (it reads the
+// remote by its fetch URLs, with a fetch's settings), into
+// `*dir`, `*remote` and `*command` (the command's word): before
 // the command, `-C` (a folder under the root or a writable mount) and the
 // git prelude's `-c color.ui=never` alone; after a push,
 // HOST_UNCONFINED_PUSH_FLAGS' options alone, a remote by its name and at
@@ -641,7 +657,7 @@ static STATUS_MUST_USE Status host_unconfined_git(Host *h, Run *r, Pos pos, Str 
     size_t i = 1;
     *dir = S("");
     *fetch = false;
-    while (i < n && !str_eq(host_unconfined_word(a, i), S("push")) && !str_eq(host_unconfined_word(a, i), S("fetch"))) {
+    while (i < n && !str_eq(host_unconfined_word(a, i), S("push")) && !str_eq(host_unconfined_word(a, i), S("fetch")) && !str_eq(host_unconfined_word(a, i), S("ls-remote"))) {
         Str w = host_unconfined_word(a, i);
         if (str_eq(w, S("-C")) && i + 1 < n) {
             TRY(host_unconfined_local(h, r, pos, S("git"), cwd, host_unconfined_word(a, i + 1), host_unconfined_shown(a, i + 1), true));
@@ -660,6 +676,10 @@ static STATUS_MUST_USE Status host_unconfined_git(Host *h, Run *r, Pos pos, Str 
     if (str_eq(host_unconfined_word(a, i), S("fetch"))) {
         *fetch = true;
         return host_unconfined_fetch(r, pos, a, i, remote);
+    }
+    if (str_eq(host_unconfined_word(a, i), S("ls-remote"))) {
+        *fetch = true;
+        return host_unconfined_ls_remote(r, pos, a, i, remote);
     }
     bool deleting = false;
     bool lease = false;

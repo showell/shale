@@ -3,8 +3,8 @@
 -- host_write_gate.c, host_run_secrets.c, host_run.c, jobs.c, host_jobs.c).
 -- c/build.shale runs it, with the `build` mount that `use` below reads; see
 -- that file for the tiers and the blocks.
--- (steps, reads and read bytes: its plants, 60 with the Landlock lane's,
--- the unconfined gate's, secret_args', the push's, the fetch's, gh's and the
+-- (steps, reads and read bytes: its plants, 63 with the Landlock lane's,
+-- the unconfined gate's, secret_args', the push's, the fetch's and ls-remote's, gh's and the
 -- scrubber's parts', each copy c/, about 2M steps, 290 reads and 1.7 MB read a copy:
 -- 34 of them stopped at 10,000 reads.)
 -- budget: steps=250000000 reads=30000 read_bytes=300000000 programs=600 arena_bytes=268435456 changes=30000 change_bytes=1610612736
@@ -21,7 +21,7 @@ use("build:lib.shale")
 -- faults below planted in a copy of c/ (`run_plants`), each caught by its
 -- `aim` tests.
 
-const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 15, ["c/tests/host_builtins/test_run_guards.c"] = 22, ["c/tests/host_builtins/test_run_secret_args.c"] = 2}
+const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 15, ["c/tests/host_builtins/test_run_guards.c"] = 23, ["c/tests/host_builtins/test_run_secret_args.c"] = 2}
 const HOST_BUILTINS_PLANTS = {
   {name = "an unconfined run is any program", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
@@ -149,6 +149,15 @@ const HOST_BUILTINS_PLANTS = {
   {name = "an unconfined fetch names a URL for its remote", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "an_unconfined_fetch_comes_from_the_remotes_file_s_remotes_alone",
    old = "    if (!host_unconfined_remote_name(*remote)) return", new = "    if (0) return"},
+  {name = "an unconfined ls-remote takes another form", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_ls_remote_asks_the_remotes_file_s_remotes_for_their_head_alone",
+   old = "    bool shaped = n == i + 4 &&", new = "    bool shaped = n >= i + 3 ||"},
+  {name = "an unconfined ls-remote names a URL for its remote", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_ls_remote_asks_the_remotes_file_s_remotes_for_their_head_alone",
+   old = "    if (!host_unconfined_remote_name(host_unconfined_word(a, i + 2))) return", new = "    if (0) return"},
+  {name = "an unconfined ls-remote is held as a push", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_ls_remote_asks_the_remotes_file_s_remotes_for_their_head_alone",
+   old = "        *fetch = true;\n        return host_unconfined_ls_remote(", new = "        return host_unconfined_ls_remote("},
   {name = "gh auth runs", file = "host_refusals.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "gh_reads_no_configuration_and_never_says_its_token",
    old = "        if (str_eq(w, S(\"auth\"))) return", new = "        if (0) return"},

@@ -39,26 +39,13 @@ function git(dir, args)
   return run(argv, {timeout_ms = 60000, whole = 1000000})
 end
 
--- As `git`, for a call whose nonzero exit is an answer, not a failure.
-function git_may_fail(dir, args, why)
-  local argv = {"git", "-C", dir}
-  for a in args do argv[#argv + 1] = a end
-  return run(argv, {timeout_ms = 60000, whole = 1000000, want = why})
-end
-
--- The default branch's name on origin, asked of origin itself (`remote
--- set-head --auto`), never a checkout's old note of it, which outlives a
--- default changed or a branch deleted. The name is read from the ref it
--- set (`symbolic-ref`), never from what it prints, whose words changed in
--- git 2.48 ("origin/HEAD set to main" before, "'origin/HEAD' is now
--- created and points to 'main'" after).
-function default_branch(dir)
-  local r = git_may_fail(dir, {"remote", "set-head", "origin", "--auto"}, "nonzero: said by the caller")
-  if r.code ~= 0 then return nil end
-  local ref = git_may_fail(dir, {"symbolic-ref", "--short", "refs/remotes/origin/HEAD"}, "nonzero: no origin/HEAD, said by the caller")
-  local said = trim(ref.out)
-  if ref.code ~= 0 or not starts_with(said, "origin/") then return nil end
-  return sub(said, #"origin/" + 1, #said)
+-- The default branch's name on origin, `repo` a Shale path, asked of origin
+-- itself (git_remote_head: `ls-remote --symref origin HEAD`, unconfined
+-- over ssh, then origin/HEAD set here to it), never a checkout's old note of
+-- it, which outlives a default changed or a branch deleted; nil when
+-- origin's HEAD names no branch.
+function default_branch(repo)
+  return git_remote_head(repo, "origin")
 end
 
 function prefixed(name, prefixes)
@@ -69,14 +56,15 @@ function prefixed(name, prefixes)
 end
 
 -- One repo's verdicts, `repo` a Shale path, a list of {act, repo, branch,
--- why}: four programs (fetch, set-head, symbolic-ref, one for-each-ref with
--- each branch's commits ahead of the default), whatever the branches. The
--- fetch is git_fetch's, so one over ssh runs unconfined.
+-- why}: a fixed few programs (the fetch, the remote's HEAD asked and set,
+-- one for-each-ref with each branch's commits ahead of the default),
+-- whatever the branches. The fetch and the question are the git prelude's,
+-- so each over ssh runs unconfined.
 function judge(repo, label, prefixes)
   local out = {}
   local dir = real(repo)
   git_fetch(repo, {remote = "origin", prune = true})
-  local main = default_branch(dir)
+  local main = default_branch(repo)
   if main == nil then
     out[#out + 1] = {act = "skip", repo = label, branch = "", why = "origin's default branch is not known here"}
     return out

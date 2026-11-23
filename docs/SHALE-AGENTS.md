@@ -261,11 +261,12 @@ has none of it):
   `PLAYWRIGHT_BROWSERS_PATH`, as roc-apps' do. ssh
   reads `~/.ssh/known_hosts` and `~/.ssh/config`, and no key file: a
   confined ssh authenticates only through an agent (`SSH_AUTH_SOCK` is
-  passed on). **`run`'s `unconfined = "tag: why"`** runs five shapes past
+  passed on). **`run`'s `unconfined = "tag: why"`** runs six shapes past
   the rules, each recorded as `(unconfined: ...)`
-  (`c/host/host_unconfined.c`): a `git push` and a `git fetch`, and a
-  deploy's `ssh`, `scp` and `rsync` to a host of the hosts file; no other
-  git command (a `clone`, an `ls-remote`, a `pull`). **The push** is `git [-C dir]
+  (`c/host/host_unconfined.c`): a `git push`, a `git fetch` and a `git
+  ls-remote --symref <remote> HEAD`, and a deploy's `ssh`, `scp` and `rsync`
+  to a host of the hosts file; no other git command (a `clone`, another
+  `ls-remote`, a `pull`). **The push** is `git [-C dir]
   [-c color.ui=never] push [options] <remote> <refspec>...`, its options
   HOST_UNCONFINED_PUSH_FLAGS' alone (`-q`, `-u`, `--delete`,
   `--force-with-lease`, ...; no `--receive-pack` or `--exec`), a remote
@@ -292,8 +293,11 @@ has none of it):
   automatic gc and maintenance, bundle URIs and commit graph off, an
   alternate's refs command `true`, the host asked for git's own
   `git-upload-pack` whatever the remote's `uploadpack` says, and the same
-  ssh. A `-c` but `color.ui=never` is refused before either. The git
-  prelude's `git_push` and `git_fetch` run every push and fetch over ssh
+  ssh. **The ls-remote** is that one form alone, which asks which branch
+  the remote's HEAD names, held as a fetch is (its remote by name, every
+  fetch URL the remotes file's, the fetch's settings and upload-pack). A
+  `-c` but `color.ui=never` is refused before any of them. The git
+  prelude's `git_push`, `git_fetch` and `git_remote_head` run each over ssh
   so (below). **The deploy's** `ssh`, `scp` and `rsync` go to a host of the
   **hosts file** alone: `~/.config/shale/hosts`, beside the mounts file (or
   the file `SHALE_HOSTS` names), one `user@host` a line, `#` lines and blank
@@ -598,6 +602,10 @@ or `"."` for the root and `repos:roc-chat` for a mount.
     a local path runs confined. `git_pull_ff(repo)` is `git_fetch` and a
     fast-forward to the upstream (never `git pull`'s own fetch), and
     `git_merge_ff(repo, ref)` a fast-forward to `ref`.
+  - `git_remote_head(repo, remote)` asks the remote which branch its HEAD
+    names (`ls-remote --symref`, unconfined over ssh) and sets
+    `<remote>/HEAD` here to it, as `git remote set-head --auto` would (which
+    runs confined, and so cannot reach an ssh remote); nil for none.
   - `git_merge(repo, ref)` makes a merge commit when one is needed and
     gives the new head. On a conflict it undoes the merge (`merge
     --abort`) and stops, naming the conflicted paths, so the checkout is

@@ -78,15 +78,14 @@ function git_ok(dir_os, args)
 end
 
 -- origin's default branch's name, from `origin/HEAD`, asked of origin when
--- the checkout has no note of it; nil when it can't be known.
-function default_branch(dir_os)
+-- the checkout has no note of it (git_remote_head from `repo`, the lane's
+-- Shale path: `ls-remote --symref`, unconfined over ssh, then origin/HEAD
+-- set); nil when it can't be known.
+function default_branch(dir_os, repo)
   local ref = git(dir_os, {"symbolic-ref", "--short", "refs/remotes/origin/HEAD"})
-  if ref.code ~= 0 then
-    git(dir_os, {"remote", "set-head", "origin", "--auto"})
-    ref = git(dir_os, {"symbolic-ref", "--short", "refs/remotes/origin/HEAD"})
-  end
+  if ref.code ~= 0 then return git_remote_head(repo, "origin") end
   local said = trim(ref.out)
-  if ref.code ~= 0 or not starts_with(said, "origin/") then return nil end
+  if not starts_with(said, "origin/") then return nil end
   return sub(said, #"origin/" + 1, #said)
 end
 
@@ -189,7 +188,7 @@ function remove_lane(cfg)
   git_fetch(path, {remote = "origin", prune = true})
   print("remove_lane: fetched origin in " .. repo_os)
   require_clear(cfg.root, dir, cfg.env)
-  local main = default_branch(repo_os)
+  local main = default_branch(repo_os, path)
   local said = {}
   if is_worktree then
     -- The remote branch is settled while the lane is there to push from,
