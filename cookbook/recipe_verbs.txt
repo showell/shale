@@ -32,6 +32,7 @@ look
 map
 measure
 move
+open
 parse
 patch
 plan

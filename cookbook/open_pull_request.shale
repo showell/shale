@@ -1,0 +1,161 @@
+-- This recipe opens a pull request on a GitHub repository, someone else's
+-- included, from a branch of one of our forks. It runs exactly
+--
+--   gh pr create --repo <repo> --base <base> --head <head> --title <title> --body-file <body> [--draft]
+--
+-- with the fenced token, `secrets = {GH_TOKEN = "keys:github-pr-token"}`,
+-- and prints the pull request's URL.
+--
+-- **Dry run first, always**: `dry=1` checks everything below and prints the
+-- exact command, creating nothing. Then run it again without `dry`.
+--
+--   shale cookbook:open_pull_request.shale --args-stdin <<'ARGS'
+--   repo=Pixelsprout/rocco-engine
+--   base=main
+--   head=showell:firefox-wgsl-and-sky-blend
+--   title=Fix the sky blend in Firefox's WebGPU
+--   body=build:lanes/rocco-pr1-body.md
+--   dry=1
+--   ARGS
+--
+-- `repo` is the base repository, `OWNER/NAME`; `base` its branch (default
+-- `main`); `head` is `OWNER:BRANCH`, the owner one of the remotes file's
+-- github.com owners (~/.config/shale/remotes, which `git_push` is held to
+-- as well), so the branch is one of our forks'; `title` is the title (a
+-- long one goes on stdin with `--args-stdin`, as above); `body` is a Shale
+-- path to the body's file, under the root or a mount; `draft=1` opens it as
+-- a draft. `fork` names our fork when its name is not the base
+-- repository's (default the same name).
+--
+-- It refuses before running anything: a `repo`, `base` or `head` not of its
+-- shape, a head whose owner the remotes file doesn't list, a head branch
+-- that isn't on the fork (`git ls-remote` over https, which reads a public
+-- fork with no token), an empty title or body, and a body outside the root
+-- and the mounts.
+--
+-- **The token is fenced in Shale itself, not only here.** keys:github-pr-token
+-- is a classic token with `public_repo`, so it can write to every public
+-- repository Steve can reach. `run` hands it only to `gh pr create`, `gh pr
+-- view` and `gh pr close`, each held to its options, a head's owner to the
+-- remotes file's, and always as the system's own /usr/bin/gh
+-- (c/host/host_run_secrets.c's HOST_SECRET_FENCED, docs/SHALE-AGENTS.md).
+-- This recipe is that fence's one user.
+--
+-- **Launch it at the top level.** It reads the token through `run`'s
+-- `secrets`, and a nested shale (one a script runs) reaches no secrets
+-- mount, so it can't read the token there.
+--
+-- Never point it at `gh pr merge`: the fence refuses that, and so should we.
+
+const REPO = arg("repo", "")
+const BASE = arg("base", "main")
+const HEAD = arg("head", "")
+const TITLE = arg("title", "")
+const BODY = arg("body", "")
+const DRAFT = arg("draft", 0)
+const DRY = arg("dry", 0)
+const FORK = arg("fork", "")
+const TOKEN = "keys:github-pr-token"
+
+const WHO = "open_pull_request"
+
+-- A GitHub owner's or repository's name: letters, digits, `.`, `_` and
+-- `-`, not first `.` or `-`.
+function is_github_name(s)
+  return re_match(s, "^[A-Za-z0-9_][A-Za-z0-9._-]*$")
+end
+
+-- A branch's name as the fence takes it: name bytes and `/`, not first `-`,
+-- `.` or `/`, no `..`.
+function is_branch(s)
+  return re_match(s, "^[A-Za-z0-9_][A-Za-z0-9._/-]*$") and find(s, "..") == nil
+end
+
+-- Every refusal, before any program runs.
+function checked()
+  not_option(WHO, "repo", REPO)
+  not_option(WHO, "base", BASE)
+  not_option(WHO, "head", HEAD)
+  local r = re_find(REPO, "^([^/]+)/([^/]+)$")
+  if r == nil or not is_github_name(r.groups[1]) or not is_github_name(r.groups[2]) then fail(WHO .. ": `repo` is OWNER/NAME, not \"" .. REPO .. "\"") end
+  if not is_branch(BASE) then fail(WHO .. ": `base` is a branch's name, not \"" .. BASE .. "\"") end
+  local h = re_find(HEAD, "^([^:]+):(.+)$")
+  if h == nil or not is_github_name(h.groups[1]) or not is_branch(h.groups[2]) then fail(WHO .. ": `head` is OWNER:BRANCH, one of our forks' branches, not \"" .. HEAD .. "\"") end
+  local owner = h.groups[1]
+  local listed = {}
+  for o in remote_owners() do
+    if o.host == "github.com" then push(listed, o.owner) end
+  end
+  if not has_item(listed, owner) then
+    local said = join(listed, ", ")
+    if said == "" then said = "none" end
+    fail(WHO .. ": the head's owner " .. owner .. " is not a github.com owner of the remotes file (~/.config/shale/remotes): " .. said)
+  end
+  if trim(TITLE) == "" then fail(WHO .. ": `title` is empty") end
+  if BODY == "" then fail(WHO .. ": `body` names the body's file, a Shale path") end
+  -- `read` holds the path to the root and the mounts, refusing an absolute
+  -- one, `..` and a secrets mount's.
+  if not exists(BODY) then fail(WHO .. ": the body " .. BODY .. " is not there") end
+  if trim(read(BODY)) == "" then fail(WHO .. ": the body " .. BODY .. " is empty") end
+  local fork = FORK
+  if fork == "" then fork = r.groups[2] end
+  if not is_github_name(fork) then fail(WHO .. ": `fork` is a repository's name, not \"" .. fork .. "\"") end
+  return {owner = owner, branch = h.groups[2], fork = owner .. "/" .. fork}
+end
+
+-- Whether the fork has the branch: `git ls-remote` over https, with no
+-- credential helper and no prompt, so a missing fork fails rather than
+-- asking for a password.
+function branch_on_fork(c)
+  local url = "https://github.com/" .. c.fork .. ".git"
+  local ref = "refs/heads/" .. c.branch
+  local r = run({"git", "-c", "credential.helper=", "ls-remote", "--heads", url, ref}, {timeout_ms = 30000, tail = 20, env = {GIT_TERMINAL_PROMPT = "0"}})
+  if r.code ~= 0 then fail(WHO .. ": `git ls-remote " .. url .. "` exited " .. r.code .. ": is " .. c.fork .. " a public repository?\n" .. trim(r.out)) end
+  for l in lines(r.out) do
+    if ends_with(l, "\t" .. ref) then return true end
+  end
+  return false
+end
+
+function replace_all(s, old, new)
+  return join(split(s, old), new)
+end
+
+-- How the command reads, each word as a shell would need it quoted.
+function shown(argv)
+  local words = {}
+  for w in argv do
+    if re_match(w, "^[A-Za-z0-9_./:=@,+-]+$") then push(words, w) else push(words, "'" .. replace_all(w, "'", "'\\''") .. "'") end
+  end
+  return join(words, " ")
+end
+
+-- The real run: the URL gh prints last, or a stop with what it said.
+function opened(argv)
+  local r = run(argv, {timeout_ms = 60000, tail = 20, secrets = {GH_TOKEN = TOKEN}})
+  if r.code ~= 0 then
+    print(trim(r.out))
+    fail(WHO .. ": `gh pr create` exited " .. r.code .. "; nothing above is secret, the token is scrubbed")
+  end
+  local url = nil
+  for l in lines(r.out) do
+    if starts_with(l, "https://github.com/") then url = l end
+  end
+  if url == nil then
+    print(trim(r.out))
+    fail(WHO .. ": gh exited 0 and printed no pull request URL")
+  end
+  return url
+end
+
+local c = checked()
+if not branch_on_fork(c) then fail(WHO .. ": the branch " .. c.branch .. " is not on " .. c.fork .. ": push it first (`git_push`)") end
+local argv = {"gh", "pr", "create", "--repo", REPO, "--base", BASE, "--head", HEAD, "--title", TITLE, "--body-file", real(BODY)}
+if DRAFT == 1 then push(argv, "--draft") end
+print("checked: " .. REPO .. " <- " .. HEAD .. " (on " .. c.fork .. "), base " .. BASE .. ", body " .. BODY .. " (" .. count_lines(BODY) .. " lines)")
+if DRY == 1 then
+  print("dry run, nothing created; it would run, with secrets = {GH_TOKEN = \"" .. TOKEN .. "\"}:")
+  print(shown(argv))
+else
+  print(opened(argv))
+end

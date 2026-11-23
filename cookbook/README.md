@@ -40,6 +40,14 @@ checkouts, and `<lanes>` the one that holds your lanes.
   `master`, never forces and never deletes. Steve allows this one command
   without asking.
   `cd <repos> && shale cookbook:push_rocco_fork.shale dir=<mount path> branch=<name>`
+- `open_pull_request.shale`: for "open a PR from a fork". It opens a pull
+  request on any GitHub repository from a branch of one of our forks, with
+  the fenced token `keys:github-pr-token`, which `run` hands only to `gh pr
+  create`, `view` and `close`. It checks the head's owner against the remotes
+  file, the branch on the fork, the title and the body file; `dry=1` checks
+  it all and prints the command. Run `dry=1` first, at the top level.
+  `shale cookbook:open_pull_request.shale --args-stdin` with `repo=`,
+  `base=`, `head=showell:<branch>`, `title=`, `body=<path>` and `dry=1` on stdin
 
 ## For any project
 

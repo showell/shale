@@ -711,6 +711,85 @@ TEST(gh_reads_no_configuration_and_never_says_its_token) {
     ran_free(&x);
 }
 
+// The fenced secret (HOST_SECRET_FENCED, a classic token that writes every
+// public repository) goes to `gh pr create`, `gh pr view` and `gh pr close`
+// alone, held to their options, a head's owner the remotes file's, and runs
+// as the system's own gh (the fake in Host's `unconfined_bin`), never the
+// decoy first on PATH, with HOST_UNCONFINED_PATH. Refused: `gh pr merge`,
+// `gh api -X POST`, curl, another owner's head, a `--repo` with a host,
+// `--web`, a create with no head, an `env`, a second secret, `secret_args`,
+// a gh by its path, and the secret's file in a folder of its mount (an
+// `env` given). Every refusal comes before the secret is read, so none ran.
+TEST(a_fenced_secret_goes_to_gh_pr_create_view_and_close_alone) {
+    static Ran x;
+    guards_ran_with(&x, "k = D/keys secrets\nfake = D/fakebin ro\ndecoy = D/decoy ro\n", false);
+    guards_zig_fake(&x, "fakebin/gh", "");
+    ran_write(&x, "fakebin/gh", ran_d(&x, "#!/bin/sh\necho \"gh $* token=$GH_TOKEN path=$PATH\"\n"));
+    guards_zig_fake(&x, "decoy/gh", "#!/bin/sh\necho planted\n");
+    static OsStr path_env[1];
+    SLICE_TYPE(EnvRoom, OsStr);
+    EnvRoom room = {path_env, 1};
+    Buf pb = buf_make(&x.host);
+    EXPECT_EQ(buf_lit(&pb, "PATH="), OK);
+    EXPECT_EQ(buf_str(&pb, ran_at(&x, "decoy")), OK);
+    EXPECT_EQ(buf_lit(&pb, ":/usr/bin:/bin"), OK);
+    at(room, 0) = os_str_own(buf_view(&pb));
+    x.lh.env = (SpawnStrs){path_env, 1};
+    guards_unconfined_bin(&x);
+    ran_put(&x, "remotes", "git@github.com:showell/\n");
+    FileSystemCPath remotes_cp;
+    const char *remotes_c = NULL;
+    EXPECT_EQ(file_system_cstr(&remotes_cp, os_str_own(ran_at(&x, "remotes")), &remotes_c), FILE_SYSTEM_OK);
+    EXPECT_EQ(setenv("SHALE_REMOTES", remotes_c, 1), 0);
+    ran_put(&x, "keys/github-pr-token", "ghp_PRTOKENABCDEFGHIJKLMNOPQRSTUVWXYZ0123\n");
+    ran_put(&x, "keys/github-token", "github_pat_OTHERTOKEN0123456789\n");
+    ran_put(&x, "keys/old/github-pr-token", "ghp_PRTOKENOLDABCDEFGHIJKLMNOPQRSTUVWXYZ\n");
+    ran_run(&x, S("function c(a, o) return host(\"run\", a, o) end\n"
+                  "function no(a, o) return attempt(c, a, o).error end\n"
+                  "local o = {timeout_ms = 10000, tail = 5, secrets = {GH_TOKEN = \"k:github-pr-token\"}}\n"
+                  "print(c({\"gh\", \"pr\", \"create\", \"--repo\", \"showell/t\", \"--base\", \"main\", \"--head\", \"showell:lane/a\", \"--title\", \"A title\", \"--body-file\", \"b.md\", \"--draft\"}, o).out)\n"
+                  "print(c({\"gh\", \"pr\", \"view\", \"7\", \"--repo\", \"showell/t\", \"--json\", \"url,state\"}, o).out)\n"
+                  "print(c({\"gh\", \"pr\", \"close\", \"7\", \"--repo\", \"showell/t\"}, o).out)\n"
+                  "print(host(\"remote_owners\")[1].owner)\n"
+                  "print(no({\"gh\", \"pr\", \"merge\", \"7\", \"--repo\", \"showell/t\"}, o))\n"
+                  "print(no({\"gh\", \"api\", \"-X\", \"POST\", \"repos/showell/t/merges\"}, o))\n"
+                  "print(no({\"curl\", \"https://api.github.com/user\"}, o))\n"
+                  "print(no({\"gh\", \"pr\", \"create\", \"--repo\", \"showell/t\", \"--head\", \"someone:lane\", \"--title\", \"t\", \"--body-file\", \"b.md\"}, o))\n"
+                  "print(no({\"gh\", \"pr\", \"view\", \"7\", \"--repo\", \"evil.example/showell/t\"}, o))\n"
+                  "print(no({\"gh\", \"pr\", \"create\", \"--repo\", \"showell/t\", \"--head\", \"showell:lane\", \"--title\", \"t\", \"--body-file\", \"b.md\", \"--web\"}, o))\n"
+                  "print(no({\"gh\", \"pr\", \"create\", \"--repo\", \"showell/t\", \"--title\", \"t\", \"--body-file\", \"b.md\"}, o))\n"
+                  "print(no({\"gh\", \"pr\", \"view\", \"7\", \"--repo\", \"showell/t\"}, {timeout_ms = 10000, tail = 5, secrets = o.secrets, env = {GH_HOST = \"evil.example\"}}))\n"
+                  "print(no({\"gh\", \"pr\", \"view\", \"7\", \"--repo\", \"showell/t\"}, {timeout_ms = 10000, tail = 5, secrets = {GH_TOKEN = \"k:github-pr-token\", X = \"k:github-token\"}}))\n"
+                  "print(no({\"echo\", \"<secret T>\"}, {timeout_ms = 10000, tail = 5, secret_args = {T = \"k:github-pr-token\"}}))\n"
+                  "print(no({\"fake:gh\", \"pr\", \"view\", \"7\", \"--repo\", \"showell/t\"}, o))\n"
+                  "print(no({\"gh\", \"pr\", \"view\", \"7\", \"--repo\", \"showell/t\"}, {timeout_ms = 10000, tail = 5, secrets = {GH_TOKEN = \"k:old/github-pr-token\"}, env = {A = \"b\"}}))\n"),
+           ran_budgets());
+    EXPECT(x.parsed);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("gh pr create --repo showell/t --base main --head showell:lane/a --title A title --body-file b.md --draft token=<secret GH_TOKEN> path=/usr/bin:/bin\n"
+                                     "\n"
+                                     "gh pr view 7 --repo showell/t --json url,state token=<secret GH_TOKEN> path=/usr/bin:/bin\n"
+                                     "\n"
+                                     "gh pr close 7 --repo showell/t token=<secret GH_TOKEN> path=/usr/bin:/bin\n"
+                                     "\n"
+                                     "showell\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: its command is `gh pr create`, `gh pr view` or `gh pr close`, not gh pr merge\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: its command is `gh pr create`, `gh pr view` or `gh pr close`\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: its program is `gh`, named bare (the system's own), not curl\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: a head's owner is a github.com owner of the remotes file (~/.config/shale/remotes, or SHALE_REMOTES's), not the one in someone:lane\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: a value not of its option's shape (`--repo OWNER/NAME`, `--head OWNER:BRANCH`, `--base BRANCH`, `--json a,b`, no other empty): evil.example/showell/t\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: an option it does not name: --web\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: `gh pr create` names its `--head`, `--title` and `--body-file`, so gh never asks, forks or pushes\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: its run takes no `env`, `want`, `unconfined` or `stdout_secret`\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: it is the run's only secret\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: it goes in `secrets`, never `secret_args`\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: its program is `gh`, named bare (the system's own), not fake:gh\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: its run takes no `env`, `want`, `unconfined` or `stdout_secret`\n"));
+    EXPECT(!guards_holds(buf_view(&x.r.out), "PRTOKEN"));
+    EXPECT(!guards_holds(buf_view(&x.r.out), "planted"));
+    ran_free(&x);
+}
+
 // The hosts file is the one list of an unconfined copy's hosts, and Shale
 // ships none: with no SHALE_HOSTS and no ~/.config/shale/hosts (a decoy home)
 // no host is allowed; a SHALE_HOSTS that names no file, and a line that is
@@ -1155,4 +1234,5 @@ TEST_PART(run_guards, TEST_CASE(a_program_writes_and_reads_only_where_the_mounts
           TEST_CASE(an_unconfined_push_reaches_the_remotes_file_s_remotes_alone),
           TEST_CASE(an_unconfined_fetch_comes_from_the_remotes_file_s_remotes_alone),
           TEST_CASE(an_unconfined_ls_remote_asks_the_remotes_file_s_remotes_for_their_head_alone), TEST_CASE(gh_reads_no_configuration_and_never_says_its_token),
+          TEST_CASE(a_fenced_secret_goes_to_gh_pr_create_view_and_close_alone),
           TEST_CASE(a_program_gets_no_session_socket_and_no_env_sets_one), TEST_CASE(an_unconfined_program_is_the_system_s_never_one_planted_on_path));

@@ -849,6 +849,13 @@ real(path: Path) -> Str
   values: none
   driver: return real(q.path)
 
+remote_owners() -> List({host: Str, owner: Str})
+  impl: prelude linux
+  kind: effect
+  stops: host (a remotes file that cannot be read, or a line not `user@host:owner/`)
+  doc: each line of the remotes file (~/.config/shale/remotes) as `{host, owner}`, `{}` with none
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
 job_start(argv: List(Str), opts: Opts) -> Job
   impl: prelude linux
   kind: effect
