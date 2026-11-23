@@ -3,11 +3,11 @@
 -- host_write_gate.c, host_run_secrets.c, host_run.c, jobs.c, host_jobs.c).
 -- c/build.shale runs it, with the `build` mount that `use` below reads; see
 -- that file for the tiers and the blocks.
--- (steps, reads and read bytes: its plants, 63 with the Landlock lane's,
--- the unconfined gate's, secret_args', the push's, the fetch's and ls-remote's, gh's and the
--- scrubber's parts', each copy c/, about 2M steps, 290 reads and 1.7 MB read a copy:
+-- (steps, reads, read bytes and the arena: its plants, 71 with the Landlock lane's,
+-- the unconfined gate's, secret_args', the push's, the fetch's and ls-remote's, gh's, the
+-- scrubber's parts' and the security review's (2026-11-23, past 256 MiB of arena), each copy c/, about 2M steps, 290 reads and 1.7 MB read a copy:
 -- 34 of them stopped at 10,000 reads.)
--- budget: steps=250000000 reads=30000 read_bytes=300000000 programs=600 arena_bytes=268435456 changes=30000 change_bytes=1610612736
+-- budget: steps=400000000 reads=50000 read_bytes=500000000 programs=800 arena_bytes=536870912 changes=30000 change_bytes=1610612736
 
 use("build:lib.shale")
 
