@@ -1,0 +1,113 @@
+=== name_type.roc table=cookbook:roc/plants/find_names_that_disagree_with_their_types/table.txt (exit 1)
+find_names_that_disagree_with_their_types (Roc): 1 files; name_type 6, bare_beside_unit 0, no_value 0
+cookbook:roc/plants/find_names_that_disagree_with_their_types/name_type.roc:3: name_type: `bull_dist` is `Geom.Along`, and a name ending `dist` is `Distance` here
+cookbook:roc/plants/find_names_that_disagree_with_their_types/name_type.roc:6: name_type: `leg_steps` is `U32`, and a name ending `steps` is `Steps` here
+cookbook:roc/plants/find_names_that_disagree_with_their_types/name_type.roc:8: name_type: `walk_dist` is `F64`, and a name ending `dist` is `Distance` here
+cookbook:roc/plants/find_names_that_disagree_with_their_types/name_type.roc:11: name_type: `read_dist!` is `F64`, and a name ending `dist` is `Distance` here
+cookbook:roc/plants/find_names_that_disagree_with_their_types/name_type.roc:14: name_type: `frames` ends in `frames`, which no name here may: its type is `Steps`
+cookbook:roc/plants/find_names_that_disagree_with_their_types/name_type.roc:17: name_type: `in_2_frames` ends in `frames`, which no name here may: its type is `Steps`
+find_names_that_disagree_with_their_types (Roc): 1 files; name_type 6, bare_beside_unit 0, no_value 0
+── stop: fail: find_names_that_disagree_with_their_types (Roc): 1 files; name_type 6, bare_beside_unit 0, no_value 0
+=== name_type.roc (exit 0)
+find_names_that_disagree_with_their_types (Roc): 1 files; name_type 0, bare_beside_unit 0, no_value 0
+=== quiet_name_type.roc table=cookbook:roc/plants/find_names_that_disagree_with_their_types/table.txt (exit 0)
+find_names_that_disagree_with_their_types (Roc): 1 files; name_type 0, bare_beside_unit 0, no_value 0
+=== bare_beside_unit/*.roc (exit 1)
+find_names_that_disagree_with_their_types (Roc): 3 files; name_type 0, bare_beside_unit 2, no_value 0
+cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_beside_unit/Rider.roc:4: bare_beside_unit: the field `forward` is a bare `F64` here and a `Distance` at cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_beside_unit/Road.roc:2
+cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_beside_unit/Rider.roc:5: bare_beside_unit: the field `left` is a bare `U64` here and a `Geom.Distance` at cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_beside_unit/Road.roc:2
+find_names_that_disagree_with_their_types (Roc): 3 files; name_type 0, bare_beside_unit 2, no_value 0
+── stop: fail: find_names_that_disagree_with_their_types (Roc): 3 files; name_type 0, bare_beside_unit 2, no_value 0
+=== quiet_bare/*.roc (exit 0)
+find_names_that_disagree_with_their_types (Roc): 3 files; name_type 0, bare_beside_unit 0, no_value 0
+=== bare_any/*.roc (exit 1)
+find_names_that_disagree_with_their_types (Roc): 2 files; name_type 0, bare_beside_unit 1, no_value 0
+cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_any/Heard.roc:3: bare_beside_unit: the field `id` is a bare `U64` here and a `UserId` at cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_any/UserId.roc:2
+find_names_that_disagree_with_their_types (Roc): 2 files; name_type 0, bare_beside_unit 1, no_value 0
+── stop: fail: find_names_that_disagree_with_their_types (Roc): 2 files; name_type 0, bare_beside_unit 1, no_value 0
+=== bare_any/*.roc table=cookbook:roc/plants/find_names_that_disagree_with_their_types/table_any.txt (exit 0)
+find_names_that_disagree_with_their_types (Roc): 2 files; name_type 0, bare_beside_unit 0, no_value 0
+=== name_type.roc table=cookbook:roc/plants/find_names_that_disagree_with_their_types/table_any.txt (exit 0)
+find_names_that_disagree_with_their_types (Roc): 1 files; name_type 0, bare_beside_unit 0, no_value 0
+=== no_value.roc (exit 1)
+find_names_that_disagree_with_their_types (Roc): 1 files; name_type 0, bare_beside_unit 0, no_value 4
+cookbook:roc/plants/find_names_that_disagree_with_their_types/no_value.roc:6: no_value: `no_painter` means none and is a `Painter`: keep the case as a tag
+cookbook:roc/plants/find_names_that_disagree_with_their_types/no_value.roc:9: no_value: `no_frames` means none and is a `Steps`: keep the case as a tag
+cookbook:roc/plants/find_names_that_disagree_with_their_types/no_value.roc:12: no_value: `unset_id` means none and is a `U64`: keep the case as a tag
+cookbook:roc/plants/find_names_that_disagree_with_their_types/no_value.roc:15: no_value: `none_left` means none and is a `Str`: keep the case as a tag
+find_names_that_disagree_with_their_types (Roc): 1 files; name_type 0, bare_beside_unit 0, no_value 4
+── stop: fail: find_names_that_disagree_with_their_types (Roc): 1 files; name_type 0, bare_beside_unit 0, no_value 4
+=== quiet_no_value.roc (exit 0)
+find_names_that_disagree_with_their_types (Roc): 1 files; name_type 0, bare_beside_unit 0, no_value 0
+=== broken/*.roc (exit 1)
+find_names_that_disagree_with_their_types (Roc): 1 files; name_type 0, bare_beside_unit 0, no_value 0
+refused: cookbook:roc/plants/find_names_that_disagree_with_their_types/broken/refused.roc: 4 parse problem(s): a file that does not parse has no tree to hunt
+── stop: fail: find_names_that_disagree_with_their_types: roc-ast refused 1 files (named above), which have no tree to judge; every other file was judged
+=== quiet_name_type.roc table=cookbook:roc/plants/find_names_that_disagree_with_their_types/no_such.txt (exit 1)
+── stop: fail: find_names_that_disagree_with_their_types: no table cookbook:roc/plants/find_names_that_disagree_with_their_types/no_such.txt
+=== quiet_name_type.roc table=cookbook:roc/plants/find_names_that_disagree_with_their_types/table_malformed.txt (exit 1)
+── stop: fail: find_names_that_disagree_with_their_types: cookbook:roc/plants/find_names_that_disagree_with_their_types/table_malformed.txt:2: expected `word: Type, Type`, `word: none` or `word: any`
+=== quiet_name_type.roc table=cookbook:roc/plants/find_names_that_disagree_with_their_types/table_twice.txt (exit 1)
+── stop: fail: find_names_that_disagree_with_their_types: cookbook:roc/plants/find_names_that_disagree_with_their_types/table_twice.txt:2: `dist` is listed twice
+=== **/*.roc (exit 1)
+find_names_that_disagree_with_their_types (Roc): 13 files; name_type 0, bare_beside_unit 3, no_value 4
+cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_any/Heard.roc:3: bare_beside_unit: the field `id` is a bare `U64` here and a `UserId` at cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_any/UserId.roc:2
+cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_beside_unit/Rider.roc:4: bare_beside_unit: the field `forward` is a bare `F64` here and a `Distance` at cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_beside_unit/Road.roc:2
+cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_beside_unit/Rider.roc:5: bare_beside_unit: the field `left` is a bare `U64` here and a `Geom.Distance` at cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_beside_unit/Road.roc:2
+cookbook:roc/plants/find_names_that_disagree_with_their_types/no_value.roc:6: no_value: `no_painter` means none and is a `Painter`: keep the case as a tag
+cookbook:roc/plants/find_names_that_disagree_with_their_types/no_value.roc:9: no_value: `no_frames` means none and is a `Steps`: keep the case as a tag
+cookbook:roc/plants/find_names_that_disagree_with_their_types/no_value.roc:12: no_value: `unset_id` means none and is a `U64`: keep the case as a tag
+cookbook:roc/plants/find_names_that_disagree_with_their_types/no_value.roc:15: no_value: `none_left` means none and is a `Str`: keep the case as a tag
+find_names_that_disagree_with_their_types (Roc): 13 files; name_type 0, bare_beside_unit 3, no_value 4
+refused: cookbook:roc/plants/find_names_that_disagree_with_their_types/broken/refused.roc: 4 parse problem(s): a file that does not parse has no tree to hunt
+── stop: fail: find_names_that_disagree_with_their_types: roc-ast refused 1 files (named above), which have no tree to judge; every other file was judged
+=== **/*.roc table=cookbook:roc/plants/find_names_that_disagree_with_their_types/table.txt (exit 1)
+find_names_that_disagree_with_their_types (Roc): 13 files; name_type 7, bare_beside_unit 3, no_value 4
+cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_any/Heard.roc:3: bare_beside_unit: the field `id` is a bare `U64` here and a `UserId` at cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_any/UserId.roc:2
+cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_beside_unit/Rider.roc:4: bare_beside_unit: the field `forward` is a bare `F64` here and a `Distance` at cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_beside_unit/Road.roc:2
+cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_beside_unit/Rider.roc:5: bare_beside_unit: the field `left` is a bare `U64` here and a `Geom.Distance` at cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_beside_unit/Road.roc:2
+cookbook:roc/plants/find_names_that_disagree_with_their_types/name_type.roc:3: name_type: `bull_dist` is `Geom.Along`, and a name ending `dist` is `Distance` here
+cookbook:roc/plants/find_names_that_disagree_with_their_types/name_type.roc:6: name_type: `leg_steps` is `U32`, and a name ending `steps` is `Steps` here
+cookbook:roc/plants/find_names_that_disagree_with_their_types/name_type.roc:8: name_type: `walk_dist` is `F64`, and a name ending `dist` is `Distance` here
+cookbook:roc/plants/find_names_that_disagree_with_their_types/name_type.roc:11: name_type: `read_dist!` is `F64`, and a name ending `dist` is `Distance` here
+cookbook:roc/plants/find_names_that_disagree_with_their_types/name_type.roc:14: name_type: `frames` ends in `frames`, which no name here may: its type is `Steps`
+cookbook:roc/plants/find_names_that_disagree_with_their_types/name_type.roc:17: name_type: `in_2_frames` ends in `frames`, which no name here may: its type is `Steps`
+cookbook:roc/plants/find_names_that_disagree_with_their_types/no_value.roc:6: no_value: `no_painter` means none and is a `Painter`: keep the case as a tag
+cookbook:roc/plants/find_names_that_disagree_with_their_types/no_value.roc:9: name_type: `no_frames` ends in `frames`, which no name here may: its type is `Steps`
+cookbook:roc/plants/find_names_that_disagree_with_their_types/no_value.roc:9: no_value: `no_frames` means none and is a `Steps`: keep the case as a tag
+cookbook:roc/plants/find_names_that_disagree_with_their_types/no_value.roc:12: no_value: `unset_id` means none and is a `U64`: keep the case as a tag
+cookbook:roc/plants/find_names_that_disagree_with_their_types/no_value.roc:15: no_value: `none_left` means none and is a `Str`: keep the case as a tag
+find_names_that_disagree_with_their_types (Roc): 13 files; name_type 7, bare_beside_unit 3, no_value 4
+refused: cookbook:roc/plants/find_names_that_disagree_with_their_types/broken/refused.roc: 4 parse problem(s): a file that does not parse has no tree to hunt
+── stop: fail: find_names_that_disagree_with_their_types: roc-ast refused 1 files (named above), which have no tree to judge; every other file was judged
+=== **/*.roc table=cookbook:roc/plants/find_names_that_disagree_with_their_types/table_any.txt (exit 1)
+find_names_that_disagree_with_their_types (Roc): 13 files; name_type 0, bare_beside_unit 2, no_value 4
+cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_beside_unit/Rider.roc:4: bare_beside_unit: the field `forward` is a bare `F64` here and a `Distance` at cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_beside_unit/Road.roc:2
+cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_beside_unit/Rider.roc:5: bare_beside_unit: the field `left` is a bare `U64` here and a `Geom.Distance` at cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_beside_unit/Road.roc:2
+cookbook:roc/plants/find_names_that_disagree_with_their_types/no_value.roc:6: no_value: `no_painter` means none and is a `Painter`: keep the case as a tag
+cookbook:roc/plants/find_names_that_disagree_with_their_types/no_value.roc:9: no_value: `no_frames` means none and is a `Steps`: keep the case as a tag
+cookbook:roc/plants/find_names_that_disagree_with_their_types/no_value.roc:12: no_value: `unset_id` means none and is a `U64`: keep the case as a tag
+cookbook:roc/plants/find_names_that_disagree_with_their_types/no_value.roc:15: no_value: `none_left` means none and is a `Str`: keep the case as a tag
+find_names_that_disagree_with_their_types (Roc): 13 files; name_type 0, bare_beside_unit 2, no_value 4
+refused: cookbook:roc/plants/find_names_that_disagree_with_their_types/broken/refused.roc: 4 parse problem(s): a file that does not parse has no tree to hunt
+── stop: fail: find_names_that_disagree_with_their_types: roc-ast refused 1 files (named above), which have no tree to judge; every other file was judged
+=== quiet_*.roc table=cookbook:roc/plants/find_names_that_disagree_with_their_types/table.txt (exit 0)
+find_names_that_disagree_with_their_types (Roc): 2 files; name_type 0, bare_beside_unit 0, no_value 0
+=== nothing_here/*.roc (exit 0)
+find_names_that_disagree_with_their_types (Roc): 0 files; name_type 0, bare_beside_unit 0, no_value 0
+=== self_test=1 (exit 0)
+ok   cookbook:roc/plants/find_names_that_disagree_with_their_types/name_type.roc
+ok   cookbook:roc/plants/find_names_that_disagree_with_their_types/name_type.roc
+ok   cookbook:roc/plants/find_names_that_disagree_with_their_types/quiet_name_type.roc
+ok   cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_beside_unit/*.roc
+ok   cookbook:roc/plants/find_names_that_disagree_with_their_types/quiet_bare/*.roc
+ok   cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_any/*.roc
+ok   cookbook:roc/plants/find_names_that_disagree_with_their_types/bare_any/*.roc
+ok   cookbook:roc/plants/find_names_that_disagree_with_their_types/name_type.roc
+ok   cookbook:roc/plants/find_names_that_disagree_with_their_types/no_value.roc
+ok   cookbook:roc/plants/find_names_that_disagree_with_their_types/quiet_no_value.roc
+ok   cookbook:roc/plants/find_names_that_disagree_with_their_types/broken/*.roc
+ok   cookbook:roc/plants/find_names_that_disagree_with_their_types/quiet_name_type.roc
+ok   cookbook:roc/plants/find_names_that_disagree_with_their_types/quiet_name_type.roc
+ok   cookbook:roc/plants/find_names_that_disagree_with_their_types/quiet_name_type.roc
+find_names_that_disagree_with_their_types self_test: PASS (14 rows: each plant gives its findings and a nonzero exit, each clean case none and exit 0)

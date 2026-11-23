@@ -3,7 +3,7 @@
 -- line, then the summary again (just once when there are no lines).
 --
 --   use("cookbook:findings.shale")
---   print_findings("check_errors (Roc): 12 files; 3 errors", lines)
+--   print_findings("check_how_failure_is_reported (Roc): 12 files; 3 errors", lines)
 --
 -- The summary is printed twice because Shale stops printing at a script's output budget (64 KiB by
 -- default, a few hundred lines), so the first copy survives a long list;

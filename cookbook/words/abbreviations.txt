@@ -1,5 +1,5 @@
 -- Abbreviations a Roc name should spell out, one a line. Read by
--- find_unclear_names.shale, whose `abbreviation` check reports a name holding one,
+-- find_names_and_docs_that_say_too_little.shale, whose `abbreviation` check reports a name holding one,
 -- or its plural (`params`), unless a project's `accepted=` file holds it.
 accel
 args

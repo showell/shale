@@ -1,7 +1,7 @@
 -- Calls nested three or more deep, like `f(g(h(x)))`, in a Go tree, read
 -- from Go's own parser (go_tree, cookbook/go/parsed.shale). Such a call is
 -- read from the inside out; a named middle step reads left to right. The
--- Roc recipe's rule (cookbook/roc/find_deep_calls.shale), in Go's terms.
+-- Roc recipe's rule (cookbook/roc/find_calls_nested_three_deep.shale), in Go's terms.
 --
 --   cd <repo> && shale <shale>/cookbook/go/find_deep_calls.shale min=4
 --   shale cookbook:go/find_deep_calls.shale self_test=1

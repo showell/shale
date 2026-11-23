@@ -5,7 +5,7 @@
 ## node's type found; and the paths of the Roc and the roc-types a pin names.
 ## Running roc-types, and holding its pin to the tree's Roc, are effects, so
 ## they stay in the recipe that asks: a small Types.roc in each of
-## check_errors, hunt_names and check_boundaries, the same file in all three.
+## check_how_failure_is_reported, find_awkward_names and find_functions_and_parameters_that_dont_earn_their_keep, the same file in all three.
 import Text
 import Tree
 
@@ -164,7 +164,7 @@ RocTypes := [].{
 		by_module : Dict(Str, Dict(Str, Str)),
 	}
 
-	## The nodes whose types a run keeps: the expressions (check_errors'), or
+	## The nodes whose types a run keeps: the expressions (check_how_failure_is_reported'), or
 	## the patterns, whose type is a definition's or a parameter's.
 	Kind : [Expressions, Patterns]
 

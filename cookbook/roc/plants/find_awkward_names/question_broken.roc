@@ -1,0 +1,5 @@
+# A plant for find_awkward_names's `question`: it asks but gives a `Str`, the
+# annotation broken after its colon.
+is_ready :
+	Str -> Str
+is_ready = |text| text

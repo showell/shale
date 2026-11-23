@@ -8,7 +8,7 @@ description: the pinned Roc and roc-types under ~/tools
 runs:
   using: composite
   steps:
-    # rewrite_method_calls.shale's typed plant reads Roc's checker's types from
+    # rewrite_module_calls_as_method_calls.shale's typed plant reads Roc's checker's types from
     # ~/tools/roc-types/bin/roc-types: the asset showell/roc-types publishes
     # for the pin below (SELF_TEST_PIN), its URL and sha256 those of that
     # repo's `release` file, the checksum checked. It is pinned here, as
@@ -24,8 +24,8 @@ runs:
         tar -xzf /tmp/roc-types.tar.gz -C ~/tools/roc-types
         test -x ~/tools/roc-types/bin/roc-types
 
-    # The Roc rewrites' self-tests (cookbook/roc/rewrite_method_calls.shale and
-    # check_stacking.shale) are judged by the compiler itself, at
+    # The Roc rewrites' self-tests (cookbook/roc/rewrite_module_calls_as_method_calls.shale and
+    # check_and_fix_group_stacking.shale) are judged by the compiler itself, at
     # tools:roc-0.1.0_RC1/roc (cookbook/roc/pinned.shale's SELF_TEST_PIN,
     # roc-types' pin): roc-lang/roc's release 0.1.0_RC1, its checksum the one
     # GitHub publishes for it, and its `roc version` the pin.
@@ -38,7 +38,7 @@ runs:
         tar -xzf /tmp/roc.tar.gz -C ~/tools/roc-0.1.0_RC1 --strip-components=1
         test "$(~/tools/roc-0.1.0_RC1/roc version)" = "Roc compiler version 0.1.0_RC1"
 
-    # A second nightly, which rewrite_method_calls' goldens pin a copy of the
+    # A second nightly, which rewrite_module_calls_as_method_calls' goldens pin a copy of the
     # plants to (its Pin case): the tree's Roc is then another than the one
     # roc-types was built for, and the run must stop saying so. Only its path
     # is read; it never runs.

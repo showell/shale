@@ -1,5 +1,5 @@
--- roc_platform/tools/compare.shale: cookbook/roc/check_module_size.shale and
--- its Roc port (roc_platform/examples/check_module_size.roc), run on the
+-- roc_platform/tools/compare.shale: cookbook/roc/check_modules_stay_under_500_lines.shale and
+-- its Roc port (roc_platform/examples/check_modules_stay_under_500_lines.roc), run on the
 -- same input, their outputs held to each other line for line, and each
 -- one's wall and CPU time said. From the checkout's root:
 --   shale roc_platform/tools/compare.shale glob=repos:roc-chat/**/*.roc limit=300 all=1
@@ -38,8 +38,8 @@ function fastest(argv)
   return {ms = best.ms, cpu_ms = best.cpu_ms, code = best.code, out = out}
 end
 
-local shale_r = fastest({"shale", "cookbook/roc/check_module_size.shale", "--args-stdin"})
-local roc_r = fastest({"shale", "roc_platform/run.shale", "script=roc_platform/examples/check_module_size.roc", "--args-stdin"})
+local shale_r = fastest({"shale", "cookbook/roc/check_modules_stay_under_500_lines.shale", "--args-stdin"})
+local roc_r = fastest({"shale", "roc_platform/run.shale", "script=roc_platform/examples/check_modules_stay_under_500_lines.roc", "--args-stdin"})
 local a = body(shale_r.out)
 local b = body(roc_r.out)
 local differ = 0

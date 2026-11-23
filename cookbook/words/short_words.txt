@@ -1,5 +1,5 @@
 -- English words of two to four letters, one a line, each listed for its
--- plain meaning, so a name may hold it. Read by find_unclear_names.shale,
+-- plain meaning, so a name may hold it. Read by find_names_and_docs_that_say_too_little.shale,
 -- whose `abbreviation` check reports any other word that short in a name
 -- (`st`, `tks`, `Inl`, `Emph`), unless accepted_terms.txt accepts it. A
 -- plural of a listed word passes too (`dogs` for `dog`). A word whose usual

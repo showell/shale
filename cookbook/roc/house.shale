@@ -2,13 +2,13 @@
 -- a fault in anyone else's code. Our guides hold our trees to them, and they
 -- stay on by default. Another project's guide may say otherwise: Luke Boswell's
 -- roc-style.md asks for `if (x) a else b` where ours has braces. `house=0` on a
--- recipe leaves its house checks out, and cookbook/roc/check_foreign_code.shale runs every
+-- recipe leaves its house checks out, and cookbook/roc/check_another_projects_roc_code.shale runs every
 -- recipe that way.
 --
 --   use("cookbook:roc/house.shale")
 --   HOUSE_CHECKS                  each recipe's house checks, by the recipe
 --
--- check_foreign_code.shale loads it, and hunt_names' Roc reads its row from
+-- check_another_projects_roc_code.shale loads it, and find_awkward_names' Roc reads its row from
 -- this file's text. Each Roc recipe reads its own `house=` argument.
 --
 -- A check belongs here when a careful project could fairly do the opposite, so
@@ -17,10 +17,10 @@
 -- does not.
 
 const HOUSE_CHECKS = {
-  check_boundaries = {"single"},
-  hunt_names = {"bare_participle", "container", "phrase_name", "singular_list", "where_name", "world_verb"},
-  find_deep_calls = {"nested"},
-  find_extra_parens = {"paren_if", "lambda_if"},
-  find_unclear_names = {"abbreviation"},
-  check_stacking = {"stack", "unstack", "long", "wide string"},
+  find_functions_and_parameters_that_dont_earn_their_keep = {"single"},
+  find_awkward_names = {"bare_participle", "container", "phrase_name", "singular_list", "where_name", "world_verb"},
+  find_calls_nested_three_deep = {"nested"},
+  find_and_remove_extra_parentheses = {"paren_if", "lambda_if"},
+  find_names_and_docs_that_say_too_little = {"abbreviation"},
+  check_and_fix_group_stacking = {"stack", "unstack", "long", "wide string"},
 }

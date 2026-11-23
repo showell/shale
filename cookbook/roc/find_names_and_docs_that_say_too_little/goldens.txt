@@ -1,0 +1,167 @@
+=== pure_mutator.roc (exit 1)
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 7, abbreviation 0, module_doc 0
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/pure_mutator.roc:3: pure_mutator: `push_cat` is pure and gives a new `List(U64)`: name it for what it gives
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/pure_mutator.roc:6: pure_mutator: `fill_row` is pure and gives a new `List(U64)`: name it for what it gives
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/pure_mutator.roc:9: pure_mutator: `add_cat` is pure and gives a new `List(U8)`: name it for what it gives
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/pure_mutator.roc:12: pure_mutator: `get_speed` is pure and gives a new `F64`: name it for what it gives
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/pure_mutator.roc:15: pure_mutator: `add_to_count` is pure and gives a new `Try(U64, [Full])`: name it for what it gives
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/pure_mutator.roc:18: pure_mutator: `append_cat` is pure and gives a new `Try({ count : U64, cat : U64 }, [Full])`: name it for what it gives
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/pure_mutator.roc:21: pure_mutator: `set_ride` is pure and gives a new `List(Rider)`: name it for what it gives
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 7, abbreviation 0, module_doc 0
+── stop: fail: find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 7, abbreviation 0, module_doc 0
+=== quiet_pure_mutator.roc (exit 0)
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 0, module_doc 0
+=== terms.roc (exit 1)
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 2, abbreviation 0, module_doc 0
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/terms.roc:3: pure_mutator: `set_cookie_header` is pure and gives a new `Str`: name it for what it gives
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/terms.roc:6: pure_mutator: `set_cookies` is pure and gives a new `Str`: name it for what it gives
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 2, abbreviation 0, module_doc 0
+── stop: fail: find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 2, abbreviation 0, module_doc 0
+=== terms.roc terms=cookbook:roc/plants/find_names_and_docs_that_say_too_little/terms.txt (exit 1)
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 1, abbreviation 0, module_doc 0
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/terms.roc:6: pure_mutator: `set_cookies` is pure and gives a new `Str`: name it for what it gives
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 1, abbreviation 0, module_doc 0
+── stop: fail: find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 1, abbreviation 0, module_doc 0
+=== terms.roc terms=cookbook:roc/plants/find_names_and_docs_that_say_too_little/no_such.txt (exit 1)
+── stop: fail: no word list cookbook:roc/plants/find_names_and_docs_that_say_too_little/no_such.txt
+=== abbreviation.roc (exit 1)
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 4, module_doc 0
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/abbreviation.roc:3: abbreviation: `max_vis_cats` abbreviates: vis
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/abbreviation.roc:6: abbreviation: `SunPos` abbreviates: pos
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/abbreviation.roc:6: abbreviation: `dist` abbreviates: dist
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/abbreviation.roc:8: abbreviation: `sim_step` abbreviates: sim
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 4, module_doc 0
+── stop: fail: find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 4, module_doc 0
+=== quiet_abbreviation.roc (exit 0)
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 0, module_doc 0
+=== abbreviation.roc abbreviations=cookbook:roc/plants/find_names_and_docs_that_say_too_little/project_words.txt (exit 1)
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 4, module_doc 0
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/abbreviation.roc:3: abbreviation: `max_vis_cats` abbreviates: vis, cats
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/abbreviation.roc:6: abbreviation: `SunPos` abbreviates: pos
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/abbreviation.roc:6: abbreviation: `dist` abbreviates: dist
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/abbreviation.roc:8: abbreviation: `sim_step` abbreviates: sim
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 4, module_doc 0
+── stop: fail: find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 4, module_doc 0
+=== short_words/*.roc (exit 1)
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 5, module_doc 0
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/short_words/Tbl.roc:1: abbreviation: `Tbl` abbreviates: tbl
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/short_words/Tbl.roc:4: abbreviation: `Trk` abbreviates: trk
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/short_words/Tbl.roc:7: abbreviation: `trk` abbreviates: trk
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/short_words/Tbl.roc:8: abbreviation: `pts` abbreviates: pts
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/short_words/Tbl.roc:9: abbreviation: `hgt` abbreviates: hgt
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 5, module_doc 0
+── stop: fail: find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 5, module_doc 0
+=== quiet_short_words/*.roc (exit 0)
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 0, module_doc 0
+=== short_words/*.roc accepted=cookbook:roc/plants/find_names_and_docs_that_say_too_little/project_terms.txt (exit 1)
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 3, module_doc 0
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/short_words/Tbl.roc:1: abbreviation: `Tbl` abbreviates: tbl
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/short_words/Tbl.roc:8: abbreviation: `pts` abbreviates: pts
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/short_words/Tbl.roc:9: abbreviation: `hgt` abbreviates: hgt
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 3, module_doc 0
+── stop: fail: find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 3, module_doc 0
+=== quiet_short_words/*.roc accepted=cookbook:roc/plants/find_names_and_docs_that_say_too_little/project_terms.txt (exit 0)
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 0, module_doc 0
+=== quiet_short_words/*.roc accepted=cookbook:roc/plants/find_names_and_docs_that_say_too_little/no_reason.txt (exit 1)
+── stop: fail: cookbook:roc/plants/find_names_and_docs_that_say_too_little/no_reason.txt: `qty` has no reason after `--`
+=== quiet_abbreviation.roc abbreviations=cookbook:roc/plants/find_names_and_docs_that_say_too_little/no_such.txt (exit 1)
+── stop: fail: no word list cookbook:roc/plants/find_names_and_docs_that_say_too_little/no_such.txt
+=== long_abbreviations/*.roc (exit 1)
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 11, module_doc 0
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/long_abbreviations/Parser.roc:5: abbreviation: `attrs` abbreviates: attrs
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/long_abbreviations/Parser.roc:5: abbreviation: `delim` abbreviates: delim
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/long_abbreviations/Parser.roc:5: abbreviation: `idxes` abbreviates: idxes
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/long_abbreviations/Parser.roc:5: abbreviation: `vals` abbreviates: vals
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/long_abbreviations/Parser.roc:7: abbreviation: `parse_args` abbreviates: args
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/long_abbreviations/Parser.roc:8: abbreviation: `args` abbreviates: args
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/long_abbreviations/Parser.roc:9: abbreviation: `params` abbreviates: params
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/long_abbreviations/Parser.roc:10: abbreviation: `elem_count` abbreviates: elem
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/long_abbreviations/Parser.roc:11: abbreviation: `expr_text` abbreviates: expr
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/long_abbreviations/Parser.roc:12: abbreviation: `stmt_kind` abbreviates: stmt
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/long_abbreviations/Parser.roc:13: abbreviation: `tmpl_name` abbreviates: tmpl
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 11, module_doc 0
+── stop: fail: find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 11, module_doc 0
+=== long_abbreviations/*.roc accepted=cookbook:roc/plants/find_names_and_docs_that_say_too_little/project_args.txt (exit 1)
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 9, module_doc 0
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/long_abbreviations/Parser.roc:5: abbreviation: `attrs` abbreviates: attrs
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/long_abbreviations/Parser.roc:5: abbreviation: `delim` abbreviates: delim
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/long_abbreviations/Parser.roc:5: abbreviation: `idxes` abbreviates: idxes
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/long_abbreviations/Parser.roc:5: abbreviation: `vals` abbreviates: vals
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/long_abbreviations/Parser.roc:9: abbreviation: `params` abbreviates: params
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/long_abbreviations/Parser.roc:10: abbreviation: `elem_count` abbreviates: elem
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/long_abbreviations/Parser.roc:11: abbreviation: `expr_text` abbreviates: expr
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/long_abbreviations/Parser.roc:12: abbreviation: `stmt_kind` abbreviates: stmt
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/long_abbreviations/Parser.roc:13: abbreviation: `tmpl_name` abbreviates: tmpl
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 9, module_doc 0
+── stop: fail: find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 9, module_doc 0
+=== quiet_long_abbreviations/*.roc (exit 0)
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 0, module_doc 0
+=== common_words/*.roc (exit 1)
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 2, module_doc 0
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/common_words/Night.roc:4: abbreviation: `Flw` abbreviates: flw
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/common_words/Night.roc:6: abbreviation: `night_dmr` abbreviates: dmr
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 2, module_doc 0
+── stop: fail: find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 2, module_doc 0
+=== quiet_common_words/*.roc (exit 0)
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 0, module_doc 0
+=== tags.roc (exit 1)
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 5, module_doc 0
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/tags.roc:4: abbreviation: `NoRef` abbreviates: ref
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/tags.roc:4: abbreviation: `Ref` abbreviates: ref
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/tags.roc:6: abbreviation: `TmplMissing` abbreviates: tmpl
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/tags.roc:12: abbreviation: `BadAttr` abbreviates: attr
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/tags.roc:14: abbreviation: `TmplGone` abbreviates: tmpl
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 5, module_doc 0
+── stop: fail: find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 5, module_doc 0
+=== quiet_tags.roc (exit 0)
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 0, module_doc 0
+=== module_doc/*.roc (exit 1)
+find_names_and_docs_that_say_too_little (Roc): 5 files; pure_mutator 0, abbreviation 0, module_doc 5
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/module_doc/Hashless.roc:1: module_doc: `Hashless` has no `##` doc saying what it is for
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/module_doc/NoDoc.roc:1: module_doc: `NoDoc` has no `##` doc saying what it is for
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/module_doc/Old.roc:1: module_doc: `Old`'s top comment says `originally`: say what the module does, and leave history to git
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/module_doc/Sky.roc:1: module_doc: `Sky`'s top comment says `used to`: say what the module does, and leave history to git
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/module_doc/Sun.roc:3: module_doc: `Sun`'s doc says `originally`: say what the module does, and leave history to git
+find_names_and_docs_that_say_too_little (Roc): 5 files; pure_mutator 0, abbreviation 0, module_doc 5
+── stop: fail: find_names_and_docs_that_say_too_little (Roc): 5 files; pure_mutator 0, abbreviation 0, module_doc 5
+=== quiet_module_doc/*.roc (exit 0)
+find_names_and_docs_that_say_too_little (Roc): 4 files; pure_mutator 0, abbreviation 0, module_doc 0
+=== module_doc_private/*.roc (exit 1)
+find_names_and_docs_that_say_too_little (Roc): 4 files; pure_mutator 0, abbreviation 0, module_doc 2
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/module_doc_private/Shown.roc:1: module_doc: `Shown` has no `##` doc saying what it is for
+cookbook:roc/plants/find_names_and_docs_that_say_too_little/module_doc_private/Silent.roc:1: module_doc: `Silent` has no `##` doc saying what it is for
+find_names_and_docs_that_say_too_little (Roc): 4 files; pure_mutator 0, abbreviation 0, module_doc 2
+── stop: fail: find_names_and_docs_that_say_too_little (Roc): 4 files; pure_mutator 0, abbreviation 0, module_doc 2
+=== broken/*.roc (exit 1)
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 0, module_doc 0
+refused: cookbook:roc/plants/find_names_and_docs_that_say_too_little/broken/refused.roc: 4 parse problem(s): a file that does not parse has no tree to hunt
+── stop: fail: find_names_and_docs_that_say_too_little: roc-ast refused 1 files (named above), which have no tree to judge; every other file was judged
+=== tags.roc house=0 (exit 0)
+find_names_and_docs_that_say_too_little (Roc): 1 files; pure_mutator 0, abbreviation 0, module_doc 0; left out as house style: abbreviation
+=== self_test=1 (exit 0)
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/pure_mutator.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/quiet_pure_mutator.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/terms.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/terms.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/terms.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/abbreviation.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/quiet_abbreviation.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/abbreviation.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/short_words/*.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/quiet_short_words/*.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/short_words/*.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/quiet_short_words/*.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/quiet_short_words/*.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/quiet_abbreviation.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/long_abbreviations/*.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/long_abbreviations/*.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/quiet_long_abbreviations/*.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/common_words/*.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/quiet_common_words/*.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/tags.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/quiet_tags.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/module_doc/*.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/quiet_module_doc/*.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/module_doc_private/*.roc
+ok   cookbook:roc/plants/find_names_and_docs_that_say_too_little/broken/*.roc
+find_names_and_docs_that_say_too_little self_test: PASS (25 rows: each plant gives its findings and a nonzero exit, each clean case none and exit 0)

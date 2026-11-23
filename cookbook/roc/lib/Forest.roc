@@ -1,5 +1,5 @@
 ## Every parsed file's tree joined into one list of nodes, as the Shale
-## originals of check_errors and check_boundaries join them: each node's
+## originals of check_how_failure_is_reported and find_functions_and_parameters_that_dont_earn_their_keep join them: each node's
 ## `parent` and `kids` are places in the joined list, counted from 1, a
 ## file's root's parent 0, and each node keeps its file's path. Nodes are in source order, each before its kids, so a
 ## subtree runs from its root to its last descendant, and a node with no line

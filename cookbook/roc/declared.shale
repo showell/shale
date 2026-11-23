@@ -1,7 +1,7 @@
 -- A Roc file's parse tree (from `roc_tree`) is a list of nodes, each
 -- `{kind, parent, kids, line, column, end_line, end_column, depth}` plus attributes
 -- such as `name` and `raw`, and a node's index is its place in the list. This
--- library reads what print_module_types and rank_boundary_hints share out of
+-- library reads what print_module_types and rank_hints_that_a_module_does_anothers_work share out of
 -- that tree, with member_uses.shale and module_family.shale beside it. The
 -- recipes that judge names are Roc now, and read the tree with
 -- cookbook/roc/lib/.

@@ -54,7 +54,7 @@ const PINS = {
 const EXPECT = {
   grep_literal = "bench-ok 3266 files, 3705 hits",
   grep_regex = "bench-ok 3266 files, 6988 hits",
-  hunt_names = "hunt_names (Roc): 435 files; state_effect 0, question 2, vague 0, name_type 0, negative 0, noun_effect 3, command_tense 0, mixed_tense 0, container 29, preposition_split 3, short_name 9, worker_name 2, stacked_preposition 0, taken_word 0, bare_participle 38, phrase_name 19, singular_list 259, world_verb 7, where_name 0",
+  find_awkward_names = "find_awkward_names (Roc): 435 files; state_effect 0, question 2, vague 0, name_type 0, negative 0, noun_effect 3, command_tense 0, mixed_tense 0, container 29, preposition_split 3, short_name 9, worker_name 2, stacked_preposition 0, taken_word 0, bare_participle 38, phrase_name 19, singular_list 259, world_verb 7, where_name 0",
   edit_files = "bench-ok 493 files, 8501 replaced",
   regex_lines = "bench-ok 17179440 bytes, 10730 lines, 0 none",
   json_read = "bench-ok 40000 items, 40000 last",
@@ -275,7 +275,7 @@ function ran_ms(out)
   return ms
 end
 
--- roc-ast alone over hunt_names's files, as the hunt runs it, so the
+-- roc-ast alone over find_awkward_names's files, as the hunt runs it, so the
 -- hunt's own CPU is its whole less this.
 function roc_ast_alone(cwd)
   local reals = {}
@@ -373,8 +373,8 @@ function runtime_workloads()
     {name = "grep_literal", cwd = repos, per = "1 run", launches = 1, child = "none"},
     {name = "grep_regex", cwd = repos, per = "1 run", launches = 1, child = "none"},
     -- The recipe itself, at the pin: its summary line is its answer.
-    {name = "hunt_names", cwd = repos .. "/roc-apps", per = "1 run", launches = 1, child = "roc-ast", verbose = true,
-      script = repos .. "/shale/cookbook/roc/hunt_names.shale", ok = "hunt_names (Roc):"},
+    {name = "find_awkward_names", cwd = repos .. "/roc-apps", per = "1 run", launches = 1, child = "roc-ast", verbose = true,
+      script = repos .. "/shale/cookbook/roc/find_awkward_names.shale", ok = "find_awkward_names (Roc):"},
     {name = "edit_files", cwd = "build:bench/scratch/edits", per = "1 run", launches = 1, child = "none", setup = "edits"},
     {name = "regex_lines", cwd = INPUTS, per = "1 run", launches = 1, child = "none"},
     {name = "json_read", cwd = INPUTS, per = "1 run", launches = 1, child = "none"},

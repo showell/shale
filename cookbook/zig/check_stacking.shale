@@ -3,7 +3,7 @@
 -- container or error set holding three or more items on one line is a
 -- finding, `path:line: stack: ...`, and so is a line wider than `width`
 -- (100), `long: ...`. It is the Roc recipe's twin
--- (`cookbook/roc/check_stacking.shale`).
+-- (`cookbook/roc/check_and_fix_group_stacking.shale`).
 --
 --   cd <repo> && shale <shale>/cookbook/zig/check_stacking.shale glob=src/**/*.zig
 --   cd <repo> && shale <shale>/cookbook/zig/check_stacking.shale glob=src/**/*.zig write=1

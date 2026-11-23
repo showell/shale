@@ -1,0 +1,85 @@
+-- This recipe finds the parentheses and braceless `if`s that a code emitter
+-- leaves in Roc, and with `write=1` rewrites them. Roc's own formatter keeps
+-- both, and adds the condition's parentheses itself to an `if` with no braces,
+-- so neither `roc check` nor `roc fmt` sees them. It reads each file's syntax
+-- tree from Roc's own parser. It is written in Roc, the app
+-- cookbook/roc/find_and_remove_extra_parentheses/find_and_remove_extra_parentheses.roc, the modules beside it
+-- (Checks, the rules; Edits and Rewriting, the rewrite; Report; SelfTest) and
+-- the cookbook's Roc library (cookbook/roc/lib/: Finding, Text and Tree), on
+-- Shale's Roc platform (roc_platform/README.md); this file is its launcher,
+-- so it is launched as every Shale recipe is:
+--
+--   cd <repo> && shale <shale>/cookbook/roc/find_and_remove_extra_parentheses.shale glob=chat/**/*.roc
+--   cd <repo> && shale <shale>/cookbook/roc/find_and_remove_extra_parentheses.shale glob=chat/**/*.roc write=1
+--   shale cookbook:roc/find_and_remove_extra_parentheses.shale self_test=1
+--
+-- The arguments:
+--   glob   the files to check, `**/*.roc` by default;
+--   house  with `house=0`, leave out `paren_if` and `lambda_if`, which are
+--          only our house style (cookbook/roc/house.shale): Luke Boswell's
+--          roc-style.md asks for `if (x) a else b`;
+--   write  with `write=1`, rewrite the files (see below).
+--
+-- Each finding is one line, `path:line: check: source line`:
+--   paren_if      an `if` written `if (x) a else b`, or with a condition wholly
+--                 in parentheses, or a branch with no braces;
+--   wrapped_body  parentheses around the whole of a lambda's body, a match
+--                 branch's body, a statement or a declaration's multi-line
+--                 value (`|x| (...)`, `Some => (...)`, `y = (\n...\n)`);
+--   else_block    `else { if ... }`, which is `else if ...`;
+--   lambda_if     an `if` that is a lambda's whole body and hangs off its `|`
+--                 (`|x| if x > 1 {`). It starts its own line. An `if` that
+--                 paren_if also finds gets this finding once that one is fixed.
+--
+-- Parentheses around one operand or one argument are left alone: they group,
+-- and a float's order of operations can rest on them. So is a one-line
+-- declaration such as `width = (half * 2.0)`, which holds no structure to hide.
+--
+-- The output is the counts, the findings, and the counts again
+-- (cookbook/findings.shale). Files that don't parse are listed after the
+-- findings, and then the run fails.
+--
+-- With `write=1`, the recipe makes each of these edits by the parser's spans,
+-- runs `roc fmt` on the files it changed, and repeats until a pass changes
+-- nothing, because taking off one pair can show the next. A comment inside a
+-- bracket stays, so it can leave a line a reader tidies. It runs the Roc the
+-- tree is built with (cookbook/roc/pinned.shale), from the repository's root.
+--
+-- `self_test=1` checks the plants in `cookbook/roc/plants/find_and_remove_extra_parentheses/`. A plant
+-- line ending `# paren_if`, `# wrapped_body`, `# else_block` or `# lambda_if`
+-- must give that finding, and no unmarked line may give one. Then the test copies the plants
+-- to `scratch:parens/` and rewrites them there: every file must still parse, no
+-- finding may be left, a second rewrite must change nothing, and a plant with a
+-- `.want` file must come out as it.
+--
+-- **The launcher** hands every value it is given to roc_platform/run.shale in
+-- the checkout this cookbook is in (the `cookbook` mount's parent), which
+-- builds the Roc there (cached; the first build after a change to C Shale
+-- compiles the platform's host, 25 to 50 s) and runs the program rooted
+-- here, so `glob=` is this root's paths and `write=1` reads this root's
+-- `roc-version`, as the Shale recipe did. A value the Roc script reads no
+-- `Shale.arg!` of stops the run before anything is built. Its output is the
+-- program's, then the launchers' own stops when it stops. `reads=inputs`
+-- builds and runs nothing, and prints the real path of each file the program
+-- is built from, one a line (run.shale's header), for a caller's cache key.
+-- It is Roc's dev build. Its goldens, the Shale original's output on the
+-- plants, are held by cookbook/roc/find_and_remove_extra_parentheses/check_goldens.shale.
+-- budget: programs=10 output_bytes=8000000
+
+const SCRIPT = "cookbook/roc/find_and_remove_extra_parentheses/find_and_remove_extra_parentheses.roc"
+const CHECKOUT = dirname(dirname(real("cookbook:README.md")))
+const HERE = real(".")
+
+-- `self_test` is read here by name, as the cookbook's full tier finds the
+-- recipes it runs `self_test=1` of. `arg_names()` is every value given; the
+-- rest are read by a name made as the run goes, so Shale's own check cannot
+-- see them: run.shale holds them to the script's reads.
+const SELF_TEST = arg("self_test", "")
+local values = {"script=" .. SCRIPT, "in=" .. HERE}
+if SELF_TEST ~= "" then push(values, "self_test=" .. SELF_TEST) end
+for name in arg_names() do
+  if name ~= "self_test" then push(values, name .. "=" .. arg(name, "")) end
+end
+local r = run({"shale", "--root", CHECKOUT, CHECKOUT .. "/roc_platform/run.shale", "--args-stdin"}, {stdin = join(values, "\n") .. "\n", timeout_ms = 1800000, whole = 8000000})
+print(trim_end(r.out))
+if r.code ~= 0 then fail("find_and_remove_extra_parentheses: the Roc program stopped (exit " .. r.code .. ")") end

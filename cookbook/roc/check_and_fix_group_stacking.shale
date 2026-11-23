@@ -1,0 +1,147 @@
+-- This recipe finds groups in .roc files laid out against the stacking rule,
+-- and with `write=1` lays them out by it. A group is a list, record, tuple,
+-- call's arguments, tag payload or lambda's arguments. A group of three or
+-- more items and six or more tokens stacks, one item a line. Any other group
+-- sits on one line while that line fits `width`. It is written in Roc, the
+-- app cookbook/roc/check_and_fix_group_stacking/check_and_fix_group_stacking.roc, the modules beside it
+-- (Annotations, a function type's bare arguments; Report, the findings;
+-- Rewrite; SelfTest) and the cookbook's Roc library (cookbook/roc/lib/:
+-- Groups reads the groups and their tokens, Stacking holds the rule, Packed
+-- the rows and data that stay packed, with Bytes, Headers, Finding and
+-- Text), on Shale's Roc platform (roc_platform/README.md); this file is its
+-- launcher, so it is launched as every Shale recipe is. The Shale reading it
+-- was ported from, groups.shale, is gone: wrap_long_lines_with_trailing_commas' Roc reads the
+-- same library, the stacking rule's one home.
+--
+--   cd <repo> && shale <shale>/cookbook/roc/check_and_fix_group_stacking.shale glob=chat/**/*.roc
+--   cd <repo> && shale <shale>/cookbook/roc/check_and_fix_group_stacking.shale glob=chat/**/*.roc write=1
+--   shale cookbook:roc/check_and_fix_group_stacking.shale self_test=1
+--
+-- The arguments:
+--   glob   the files to check, `**/*.roc` by default;
+--   skip   files the glob finds to leave out, by path, comma-separated, for
+--          tables of data that read better side by side;
+--   width  the widest a line may be, 100 by default, a tab counting four;
+--   tokens the tokens from which a group stacks, 6 by default;
+--   dictated a table of functions whose arguments something outside the file
+--          dictates, one `path name -- reason` a line, judged as a header's
+--          names are (below);
+--   house  with `house=0`, leave out every finding here, as the stacking rule
+--          is our house style (cookbook/roc/house.shale);
+--   write  with `write=1`, rewrite the files (see below).
+--
+-- A group on one line that should stack is a finding, `path:line: stack: ...`,
+-- left to right. A stacked group that should sit on one line is a finding,
+-- `path:line: unstack: ...`, at the line it opens on. A line wider than `width`
+-- with nothing to stack by the rule is a finding too, of one of two kinds. It
+-- is `wide string` when
+-- it would fit `width` if the text of each string literal on it counted as
+-- empty, because Roc has no short way to split a string. Otherwise it is
+-- `long`. Roc's own parser says which columns are a string's text, so the
+-- code in an interpolation (`"${...}"`) counts, a comment counts, and so does
+-- a string in an `import` or the file's header, which has no such node. The
+-- output is the counts, the findings, and the counts again
+-- (cookbook/findings.shale). A file with a line wider than `width` that
+-- roc-ast refuses keeps that line as `long`, and the run fails, naming it, as
+-- it does for an app's or platform's file that roc-ast refuses.
+--
+-- A stacked group stays stacked, with no finding, when its joined line would
+-- be wider than `width`, or when it holds a comment, a `\\` string, a blank
+-- line, a block's statements, or a group that stays stacked.
+--
+-- Some groups are not findings, or get special advice:
+--   - A list or tuple whose items are all literals (numbers, plain strings,
+--     characters, bare tags) is a table's row, like `[0, 0, 0]` or
+--     `(0.0, 0.0, 1.5)`, and is read at a glance. It is no finding while
+--     its line fits `width`. A call's arguments are never a row.
+--   - A group of three or more `Bool`s or Bool literals is told that a flag
+--     a caller passes should be a tag, as roc-style.md says, whatever its
+--     tokens.
+--   - A function's annotation (`name : A, B, C -> R`), or a type alias of a
+--     function (`Pick(a) : a, a, a -> a`), is read to its first arrow, over
+--     the lines `roc fmt` wraps it onto, from a type that starts on the line
+--     after the colon, past a comment on a line of its own, to a blank line.
+--     When it is a finding for its arguments, at its first line, the
+--     function's lambda arguments on the line after it are not reported
+--     again.
+--   - A field of a record type on one line whose type is a function
+--     (`{ on_pick : U8, U8, U8 -> U8 }`) is read the same way, its arguments
+--     counted up to its arrow, unless its file's header dictates it (a
+--     platform's `requires { step : U8, U8, U8 -> U8 }`).
+--   - The annotation of a name its file's header dictates is no finding for
+--     its arguments, as the platform chose them: what an app's header
+--     provides, and what a platform's header requires and provides
+--     (cookbook/roc/lib/Headers.roc). Nor are that name's lambda arguments.
+--   - The items of a `where` clause are its method constraints, so
+--     `k.is_eq : k, k -> Bool` is one item, and a record or list pattern's
+--     rest (`..`) is no item.
+--   - The groups of a platform header's `targets:` section are no findings, and
+--     the rewrite leaves them alone, as `roc fmt` lays that section out by
+--     itself. A line there wider than `width` is still `long`.
+-- Strings, characters, `\\` multiline strings and `#` comments are skipped,
+-- so a comma or bracket inside one is no item.
+--
+-- With `write=1`, the recipe gives each group that should stack a trailing
+-- comma after its last item, outermost first, takes the trailing comma from
+-- each group that should unstack, and runs `roc fmt` on the files it changed,
+-- which stacks a group with a trailing comma and joins a group without one. On
+-- a long line with no group to stack by the rule, the widest group of two or
+-- more items gets the comma, as wrap_long_lines_with_trailing_commas.shale does. This repeats until a
+-- pass changes nothing, so a second run changes nothing either. The recipe then
+-- prints the findings left, which the rewrite can't reach: long lines, and
+-- the arguments of a function type, bare (`three : U8, U8, U8 -> U8`) or in
+-- parentheses (`(U8, U8, U8 -> U8)`), because Roc refuses a trailing comma
+-- there.
+--
+-- `roc fmt`'s layout changes between Roc nightlies, so `write=1` runs the
+-- Roc the tree is built with: `tools:roc-<pin>/roc`, the pin read from the
+-- `roc-version` file in the directory the run starts in, normally the
+-- repository's root. Without that file it stops before changing anything
+-- (cookbook/roc/pinned.shale).
+--
+-- `self_test=1` checks the plants in `cookbook/roc/plants/check_and_fix_group_stacking/`. Each
+-- plant must give a finding of the kind its name starts with (`long`,
+-- `wide`, `unstack`, or else `stack`), a `long` plant no `wide string` and a
+-- `wide` plant no `long`, and a `clean*.roc` plant none. A plant line ending
+-- `# findings N` must give exactly N findings, and with `advice W` after
+-- it each of them must contain the word W. Then the test copies the plants
+-- to `scratch:stack/` and rewrites them there with the self-test's Roc:
+-- the rewrite must end, a second rewrite must change nothing, every file must
+-- still parse, and a plant with a `.want` file must come out as it.
+--
+--
+-- A line's width counts its bytes, a tab four, not its columns, so a line of
+-- non-ASCII text (a banner of box-drawing characters) counts each character
+-- as two or three: the Shale original's reading, kept.
+--
+-- **The launcher** hands every value it is given to roc_platform/run.shale in
+-- the checkout this cookbook is in (the `cookbook` mount's parent), which
+-- builds the Roc there (cached; the first build after a change to C Shale
+-- compiles the platform's host, 25 to 50 s) and runs the program rooted
+-- here, so `glob=` is this root's paths and `write=1` reads this root's
+-- `roc-version`, as the Shale recipe did. A value the Roc script reads no
+-- `Shale.arg!` of stops the run before anything is built. Its output is the
+-- program's, then the launchers' own stops when it stops. `reads=inputs`
+-- builds and runs nothing, and prints the real path of each file the program
+-- is built from, one a line (run.shale's header), for a caller's cache key.
+-- It is Roc's dev build. Its goldens, the Shale original's output on the
+-- plants, are held by cookbook/roc/check_and_fix_group_stacking/check_goldens.shale.
+-- budget: programs=10 output_bytes=8000000
+
+const SCRIPT = "cookbook/roc/check_and_fix_group_stacking/check_and_fix_group_stacking.roc"
+const CHECKOUT = dirname(dirname(real("cookbook:README.md")))
+const HERE = real(".")
+
+-- `self_test` is read here by name, as the cookbook's full tier finds the
+-- recipes it runs `self_test=1` of. `arg_names()` is every value given; the
+-- rest are read by a name made as the run goes, so Shale's own check cannot
+-- see them: run.shale holds them to the script's reads.
+const SELF_TEST = arg("self_test", "")
+local values = {"script=" .. SCRIPT, "in=" .. HERE}
+if SELF_TEST ~= "" then push(values, "self_test=" .. SELF_TEST) end
+for name in arg_names() do
+  if name ~= "self_test" then push(values, name .. "=" .. arg(name, "")) end
+end
+local r = run({"shale", "--root", CHECKOUT, CHECKOUT .. "/roc_platform/run.shale", "--args-stdin"}, {stdin = join(values, "\n") .. "\n", timeout_ms = 1800000, whole = 8000000})
+print(trim_end(r.out))
+if r.code ~= 0 then fail("check_and_fix_group_stacking: the Roc program stopped (exit " .. r.code .. ")") end

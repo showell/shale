@@ -1,0 +1,1 @@
+cookbook/roc/plants/check_modules_stay_under_500_lines/Gone.roc -- a module since removed

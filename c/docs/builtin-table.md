@@ -130,6 +130,6 @@ to extend. The library both scripts use is `c/builtin_table.shale`.
   `roc_platform/self_test.shale` is the policy proofs end to end, run by
   hand. Both need the pinned Roc.
 - **The full tier's `cookbook-test`** runs the Roc recipes' self-tests with
-  the rest (cookbook/roc/find_unclear_names.shale, a launcher, and its
+  the rest (cookbook/roc/find_names_and_docs_that_say_too_little.shale, a launcher, and its
   check_goldens.shale), so it builds the host's object once, with the pinned
   Roc that c-full.yml installs.

@@ -8,14 +8,14 @@ each one is for and how to start it.
 Run a recipe from the root of the repository it works on. In the lines
 below, `<repo>` is that repository and `<shale>` is the shale checkout:
 
-    cd <repo> && shale <shale>/cookbook/roc/hunt_names.shale glob='app/**/*.roc'
+    cd <repo> && shale <shale>/cookbook/roc/find_awkward_names.shale glob='app/**/*.roc'
 
 Most recipes take `glob=`, the files to read (`**/*.roc` by default), and
 `self_test=1`, which runs the recipe over its test files in
 `plants/<recipe>/` and fails on any wrong result. Run a self-test from the
 shale checkout:
 
-    cd <shale> && shale cookbook:roc/hunt_names.shale self_test=1
+    cd <shale> && shale cookbook:roc/find_awkward_names.shale self_test=1
 
 A recipe that runs the Roc compiler uses the version named in the
 `roc-version` file where the run starts, so start it at the repository's
@@ -25,9 +25,9 @@ root.
 
 One command reads another project's Roc code, from that repository's root:
 
-    cd <repo> && shale <shale>/cookbook/roc/check_foreign_code.shale
+    cd <repo> && shale <shale>/cookbook/roc/check_another_projects_roc_code.shale
 
-[check_foreign_code.shale](check_foreign_code.shale) runs the checks below
+[check_another_projects_roc_code.shale](check_another_projects_roc_code.shale) runs the checks below
 once over the whole tree. It only parses, so it runs nothing from the tree
 and works without a compiler at the project's pin. It prints each recipe's
 summary, then the findings to read first, and keeps each recipe's whole
@@ -40,7 +40,7 @@ any one recipe leaves them out of that run. Our own trees keep all of them.
 
 A project's guide outranks ours. Luke Boswell's roc-style.md asks for
 `if (x) a else b` where our braces stand, and it asks for stacking where
-our rule is ours alone. `check_foreign_code.shale` names any guide it sees,
+our rule is ours alone. `check_another_projects_roc_code.shale` names any guide it sees,
 so read it, and run a left-out recipe alone when the guide asks for what it
 checks.
 
@@ -48,94 +48,94 @@ checks.
 
 These recipes print findings, one line each that starts `path:line:` and
 names its check, between two copies of a summary of counts. Only the
-`write=1` of `check_stacking.shale` and `find_extra_parens.shale` changes
+`write=1` of `check_and_fix_group_stacking.shale` and `find_and_remove_extra_parentheses.shale` changes
 files. A file that roc-ast refuses is listed at the end, and the run then
 fails.
 
 **For a reader** (a run with findings exits 0; each finding is a
 question):
 
-- [hunt_names.shale](hunt_names.shale): awkward names. Its word lists are
+- [find_awkward_names.shale](find_awkward_names.shale): awkward names. Its word lists are
   in `cookbook/words/`; a project's own terms come in as `terms=`. It is
   written in Roc, a root,
-  [hunt_names/hunt_names.roc](hunt_names/hunt_names.roc), with its reading
+  [find_awkward_names/find_awkward_names.roc](find_awkward_names/find_awkward_names.roc), with its reading
   and its checks in the modules beside it;
-  [check_goldens.shale](hunt_names/check_goldens.shale) holds it to its
+  [check_goldens.shale](find_awkward_names/check_goldens.shale) holds it to its
   goldens.
-- [check_errors.shale](check_errors.shale): how code reports failure.
-- [check_boundaries.shale](check_boundaries.shale): whether each function
+- [check_how_failure_is_reported.shale](check_how_failure_is_reported.shale): how code reports failure.
+- [find_functions_and_parameters_that_dont_earn_their_keep.shale](find_functions_and_parameters_that_dont_earn_their_keep.shale): whether each function
   earns its boundary and each parameter is really one. Give it the whole
   tree, tests included, since it counts callers only in the files it reads.
   It is written in Roc, a root,
-  [check_boundaries/check_boundaries.roc](check_boundaries/check_boundaries.roc),
+  [find_functions_and_parameters_that_dont_earn_their_keep/find_functions_and_parameters_that_dont_earn_their_keep.roc](find_functions_and_parameters_that_dont_earn_their_keep/find_functions_and_parameters_that_dont_earn_their_keep.roc),
   with its passes and checks in the modules beside it;
-  [check_goldens.shale](check_boundaries/check_goldens.shale) holds it to
+  [check_goldens.shale](find_functions_and_parameters_that_dont_earn_their_keep/check_goldens.shale) holds it to
   its goldens.
-- [find_deep_calls.shale](find_deep_calls.shale): calls nested three or
+- [find_calls_nested_three_deep.shale](find_calls_nested_three_deep.shale): calls nested three or
   more deep, like `f(g(h(x)))`, which read inside out. It is written in
   Roc, a root,
-  [find_deep_calls/find_deep_calls.roc](find_deep_calls/find_deep_calls.roc),
+  [find_calls_nested_three_deep/find_calls_nested_three_deep.roc](find_calls_nested_three_deep/find_calls_nested_three_deep.roc),
   with its rule in `Nest.roc` beside it;
-  [check_goldens.shale](find_deep_calls/check_goldens.shale) holds it to
+  [check_goldens.shale](find_calls_nested_three_deep/check_goldens.shale) holds it to
   its goldens.
-- [find_extra_parens.shale](find_extra_parens.shale): the parentheses and
+- [find_and_remove_extra_parentheses.shale](find_and_remove_extra_parentheses.shale): the parentheses and
   braceless `if`s a code emitter leaves, which Roc's formatter keeps. With
   `write=1` it rewrites them and runs `roc fmt`. In a sweep it goes before
-  `check_stacking.shale`, since what it removes can bring a group within a
+  `check_and_fix_group_stacking.shale`, since what it removes can bring a group within a
   line.
-- [check_stacking.shale](check_stacking.shale): groups laid out against
+- [check_and_fix_group_stacking.shale](check_and_fix_group_stacking.shale): groups laid out against
   the stacking rule, both ways, and lines wider than `width=`. With
   `write=1` it adds trailing commas and runs `roc fmt`. It is written in
   Roc, a root,
-  [check_stacking/check_stacking.roc](check_stacking/check_stacking.roc),
+  [check_and_fix_group_stacking/check_and_fix_group_stacking.roc](check_and_fix_group_stacking/check_and_fix_group_stacking.roc),
   with the rule in the Roc library's `Groups.roc` and `Stacking.roc`
   (cookbook/roc/lib/);
-  [check_goldens.shale](check_stacking/check_goldens.shale) holds it to
+  [check_goldens.shale](check_and_fix_group_stacking/check_goldens.shale) holds it to
   its goldens.
 
 **For a gate** (a run with findings exits nonzero; a project's own words
 are passed in):
 
-- [check_module_size.shale](check_module_size.shale): each module held to
+- [check_modules_stay_under_500_lines.shale](check_modules_stay_under_500_lines.shale): each module held to
   a size, the whole file counted, so a module stays small enough to take
   whole.
 
-      cd <repo> && shale <shale>/cookbook/roc/check_module_size.shale exempt=tools/module_size.txt
+      cd <repo> && shale <shale>/cookbook/roc/check_modules_stay_under_500_lines.shale exempt=tools/module_size.txt
 
-- [check_vocabulary.shale](check_vocabulary.shale): a project held to its
+- [find_retired_words.shale](find_retired_words.shale): a project held to its
   decided words. It is written in Roc, a root,
-  [check_vocabulary/check_vocabulary.roc](check_vocabulary/check_vocabulary.roc),
+  [find_retired_words/find_retired_words.roc](find_retired_words/find_retired_words.roc),
   with its checks in `Retired.roc` beside it;
-  [check_goldens.shale](check_vocabulary/check_goldens.shale) holds it to
+  [check_goldens.shale](find_retired_words/check_goldens.shale) holds it to
   its goldens.
-- [check_name_types.shale](check_name_types.shale): names that disagree
+- [find_names_that_disagree_with_their_types.shale](find_names_that_disagree_with_their_types.shale): names that disagree
   with their types. It is written in Roc, a root,
-  [check_name_types/check_name_types.roc](check_name_types/check_name_types.roc),
+  [find_names_that_disagree_with_their_types/find_names_that_disagree_with_their_types.roc](find_names_that_disagree_with_their_types/find_names_that_disagree_with_their_types.roc),
   with its checks in `NameType.roc`, `BareBesideUnit.roc` and `NoValue.roc`
-  beside it; [check_goldens.shale](check_name_types/check_goldens.shale)
+  beside it; [check_goldens.shale](find_names_that_disagree_with_their_types/check_goldens.shale)
   holds it to its goldens.
-- [check_families.shale](check_families.shale): a module spelled unlike
+- [find_names_that_differ_across_lookalike_modules.shale](find_names_that_differ_across_lookalike_modules.shale): a module spelled unlike
   the others that share its last word, and one type name declared in two
   modules with different shapes, and a type's `<noun>` that gives the type
   beside its `to_<noun>`, which is `from_<noun>`. Give it the whole tree, since twins often
   sit in two folders. It is written in Roc, a root,
-  [check_families/check_families.roc](check_families/check_families.roc),
+  [find_names_that_differ_across_lookalike_modules/find_names_that_differ_across_lookalike_modules.roc](find_names_that_differ_across_lookalike_modules/find_names_that_differ_across_lookalike_modules.roc),
   with its checks in `Family.roc`, `Twin.roc` and `Conversion.roc` beside it;
-  [check_goldens.shale](check_families/check_goldens.shale) holds it to its
+  [check_goldens.shale](find_names_that_differ_across_lookalike_modules/check_goldens.shale) holds it to its
   goldens.
-- [find_bare_floats.shale](find_bare_floats.shale): a bare `F64` in a
+- [find_floats_outside_unit_types.shale](find_floats_outside_unit_types.shale): a bare `F64` in a
   signature or a type alias's field, against a table of named exceptions.
   It is written in Roc, a root,
-  [find_bare_floats/find_bare_floats.roc](find_bare_floats/find_bare_floats.roc),
+  [find_floats_outside_unit_types/find_floats_outside_unit_types.roc](find_floats_outside_unit_types/find_floats_outside_unit_types.roc),
   with its rule in `Floats.roc` beside it;
-  [check_goldens.shale](find_bare_floats/check_goldens.shale) holds it to
+  [check_goldens.shale](find_floats_outside_unit_types/check_goldens.shale) holds it to
   its goldens.
-- [find_unclear_names.shale](find_unclear_names.shale): names and module
+- [find_names_and_docs_that_say_too_little.shale](find_names_and_docs_that_say_too_little.shale): names and module
   docs that say too little. It is written in Roc, a folder of modules whose
   root is
-  [find_unclear_names/find_unclear_names.roc](find_unclear_names/find_unclear_names.roc),
+  [find_names_and_docs_that_say_too_little/find_names_and_docs_that_say_too_little.roc](find_names_and_docs_that_say_too_little/find_names_and_docs_that_say_too_little.roc),
   on Shale's Roc platform; the `.shale` file is its launcher, and
-  [check_goldens.shale](find_unclear_names/check_goldens.shale) holds it to
+  [check_goldens.shale](find_names_and_docs_that_say_too_little/check_goldens.shale) holds it to
   its goldens.
 - [find_unused_imports.shale](find_unused_imports.shale): an import line
   the file leaves unused, which Roc's compiler accepts quietly. It is
@@ -153,7 +153,7 @@ ordered and printed) and `RocTypes` (roc-types' output read, and a node's
 type found), among others its main.roc lists. A recipe's app names it in
 its header, `lib: "../lib/main.roc"`, and imports `lib.Tree`.
 
-`hunt_names`, `check_errors` and `check_boundaries` can also ask Roc's type
+`find_awkward_names`, `check_how_failure_is_reported` and `find_functions_and_parameters_that_dont_earn_their_keep` can also ask Roc's type
 checker for types: add `types=1 root=<app>`, where the app imports the
 files read, or several apps separated by commas. A file that no app
 imports is checked without types, listed at the end, and fails the run.
@@ -161,30 +161,30 @@ Each runs roc-types from a small `Types.roc` of its own, the same file in
 all three, since a package reaches no effect; what reads the output is
 `lib/RocTypes.roc`.
 
-    cd <repo> && shale <shale>/cookbook/roc/check_errors.shale glob='app/**/*.roc' types=1 root=app/main.roc,app/Specs.roc
+    cd <repo> && shale <shale>/cookbook/roc/check_how_failure_is_reported.shale glob='app/**/*.roc' types=1 root=app/main.roc,app/Specs.roc
 
 ## Rewrites and comparisons
 
-- [wrap_long_lines.shale](wrap_long_lines.shale): shortens lines wider than
+- [wrap_long_lines_with_trailing_commas.shale](wrap_long_lines_with_trailing_commas.shale): shortens lines wider than
   `width=` by adding a trailing comma to a group, so `roc fmt` lays it out
   one item a line, and lists the lines it leaves. It rewrites a copy and
   writes the folder once the rewrite has finished, so a run that stops
   leaves the folder as it was. It is the launcher of a Roc script
-  ([wrap_long_lines/](wrap_long_lines/)), whose stacking rule is the Roc
-  library's `Stacking.roc`, the rule's one home, which `check_stacking`
+  ([wrap_long_lines_with_trailing_commas/](wrap_long_lines_with_trailing_commas/)), whose stacking rule is the Roc
+  library's `Stacking.roc`, the rule's one home, which `check_and_fix_group_stacking`
   reads too.
 
-      cd <repo> && shale <shale>/cookbook/roc/wrap_long_lines.shale dir=roc width=100
+      cd <repo> && shale <shale>/cookbook/roc/wrap_long_lines_with_trailing_commas.shale dir=roc width=100
 
-- [rename.shale](rename.shale): renames one identifier across a tree by
+- [rename_identifier_by_whole_word.shale](rename_identifier_by_whole_word.shale): renames one identifier across a tree by
   whole words, so `portion` leaves `proportion` and `portion_size` alone.
   `to_module=` moves a qualified name to another module after a split,
   fixing the imports.
 
-      cd <repo> && shale <shale>/cookbook/roc/rename.shale from=portion to=share module=Pie
-      cd <repo> && shale <shale>/cookbook/roc/rename.shale from=RiderPoint module=Geom to_module=RiderView
+      cd <repo> && shale <shale>/cookbook/roc/rename_identifier_by_whole_word.shale from=portion to=share module=Pie
+      cd <repo> && shale <shale>/cookbook/roc/rename_identifier_by_whole_word.shale from=RiderPoint module=Geom to_module=RiderView
 
-- [rewrite_method_calls.shale](rewrite_method_calls.shale): rewrites calls
+- [rewrite_module_calls_as_method_calls.shale](rewrite_module_calls_as_method_calls.shale): rewrites calls
   like `List.map(xs, f)` as method calls, `xs.map(f)`. Roc's type checker
   and compiler decide which rewrites are safe; each call it leaves is
   listed with the reason. It reports until given `apply=1`. Run it in a git
@@ -193,14 +193,14 @@ all three, since a package reaches no effect; what reads the output is
   call (`U64.max(a, b)`, from
   [symmetric_functions.txt](symmetric_functions.txt)) stays a module call.
   It is written in Roc, a root,
-  [rewrite_method_calls/rewrite_method_calls.roc](rewrite_method_calls/rewrite_method_calls.roc),
+  [rewrite_module_calls_as_method_calls/rewrite_module_calls_as_method_calls.roc](rewrite_module_calls_as_method_calls/rewrite_module_calls_as_method_calls.roc),
   with the run in the modules beside it and the unused-import rule in the
   Roc library's `Imports.roc`;
-  [check_goldens.shale](rewrite_method_calls/check_goldens.shale) holds it,
+  [check_goldens.shale](rewrite_module_calls_as_method_calls/check_goldens.shale) holds it,
   and the files it rewrites, to its goldens.
 
-      cd <repo> && shale <shale>/cookbook/roc/rewrite_method_calls.shale glob='app/*.roc' root=app/main.roc,app/Specs.roc
-      cd <repo> && shale <shale>/cookbook/roc/rewrite_method_calls.shale glob='app/*.roc' root=app/main.roc trials=0
+      cd <repo> && shale <shale>/cookbook/roc/rewrite_module_calls_as_method_calls.shale glob='app/*.roc' root=app/main.roc,app/Specs.roc
+      cd <repo> && shale <shale>/cookbook/roc/rewrite_module_calls_as_method_calls.shale glob='app/*.roc' root=app/main.roc trials=0
 
 - [compare_machine_code.shale](compare_machine_code.shale): says whether
   two builds of a Roc archive or program hold the same machine code, to
@@ -227,11 +227,11 @@ all three, since a package reaches no effect; what reads the output is
 
       cd <repo> && shale <shale>/cookbook/roc/print_module_types.shale module=Pigs packages=lib=<path to lib>
 
-- [rank_boundary_hints.shale](rank_boundary_hints.shale): ranks cheap
+- [rank_hints_that_a_module_does_anothers_work.shale](rank_hints_that_a_module_does_anothers_work.shale): ranks cheap
   hints that one module does another's work, for a short review. It fails
   only on a file roc-ast refuses.
 
-      cd canvas_apps && shale <shale>/cookbook/roc/rank_boundary_hints.shale root=safari clients=*_widget,widget_kit
+      cd canvas_apps && shale <shale>/cookbook/roc/rank_hints_that_a_module_does_anothers_work.shale root=safari clients=*_widget,widget_kit
 
 ## Libraries
 
@@ -242,7 +242,7 @@ lists its functions. The recipes ported to Roc share `lib/` instead.
 - [parsed.shale](parsed.shale): parse a tree's files, check the ones that
   parse, and fail at the end with the ones roc-ast refused.
 - [house.shale](house.shale): the checks that are our house style alone,
-  by recipe (check_foreign_code loads it, and hunt_names reads it).
+  by recipe (check_another_projects_roc_code loads it, and find_awkward_names reads it).
 - [findings.shale](../findings.shale), in the cookbook's top folder: the
   summary, the findings and the summary again, so the counts survive when
   the output limit cuts a long list.
@@ -275,4 +275,4 @@ file node starts after the leading comments, and a `|>` is an
 error at the line of the definition around it, so match its errors to an
 edit by span. A Shale run starts at most its `programs` budget of
 programs, so a recipe that compiles once per file stops and resumes past
-it, as `rewrite_method_calls`' `from=` does.
+it, as `rewrite_module_calls_as_method_calls`' `from=` does.

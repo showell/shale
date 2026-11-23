@@ -1,5 +1,5 @@
 -- Short terms a Roc name may hold though no word list has them, one a line,
--- each with its reason after `--`. Read by find_unclear_names.shale, whose
+-- each with its reason after `--`. Read by find_names_and_docs_that_say_too_little.shale, whose
 -- `abbreviation` check passes these, and a plural of one (`ids`). A line with
 -- no reason fails the run. A project's own go in its own file, `accepted=`,
 -- which adds to these.

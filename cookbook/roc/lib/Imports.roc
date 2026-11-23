@@ -1,7 +1,7 @@
 ## A Roc file's imports, read from Roc's own tree of it, and the ones the file
 ## never uses: find_unused_imports' rule, `unused_import`, in its one home
 ## (cookbook/roc/find_unused_imports.shale's header says what counts as a
-## use). rewrite_method_calls asks it too, of a file before and after its
+## use). rewrite_module_calls_as_method_calls asks it too, of a file before and after its
 ## rewrite, to name each import the rewrite left unused.
 import Tree
 

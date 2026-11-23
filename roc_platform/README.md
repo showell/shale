@@ -97,7 +97,7 @@ launcher takes with it:
   `cookbook/c/items/main.roc`, as `items`. A package reaches no effect, so
   what runs a program or reads a file (a self-test, a word list, the C
   itself) stays in each recipe, which hands the package the text: so
-  check_errors, hunt_names and check_boundaries each keep a small
+  check_how_failure_is_reported, find_awkward_names and find_functions_and_parameters_that_dont_earn_their_keep each keep a small
   `Types.roc`, the same file in all three, that runs roc-types and hands
   its output to the package's `RocTypes`. A script's package imports no
   package of its own.
@@ -122,11 +122,11 @@ says what it was built for in its `built_for` file, which pruning reads.
 file the program is built from (the script's files, the platform, the
 launcher, the host and the code git tracks in `c/`), one a line, for a
 caller that keys a cache on a Roc recipe. A launcher hands its values on,
-so `shale cookbook:roc/find_unclear_names.shale reads=inputs` asks the
+so `shale cookbook:roc/find_names_and_docs_that_say_too_little.shale reads=inputs` asks the
 recipe itself, with no `const SCRIPT` to read.
 
 The examples in `examples/`: `count_lines.roc`, the smallest app;
-`check_module_size.roc`, a cookbook recipe in Roc, held line for line to
+`check_modules_stay_under_500_lines.roc`, a cookbook recipe in Roc, held line for line to
 its Shale original by `tools/compare.shale`; and `escape.roc`, which tries
 each guard and stops with Shale's own refusal. escape.roc is several files:
 `Reach.roc`, a module of its own that tries a guard too, and `kit/`, a
@@ -143,12 +143,12 @@ object, so it runs when a Roc build is asked for, outside the tiers.
 
 ## The ports
 
-**`cookbook/roc/find_unclear_names/`** is a recipe in Roc: its app's root
-is `find_unclear_names.roc` (the word lists, the run, the verdict), and
+**`cookbook/roc/find_names_and_docs_that_say_too_little/`** is a recipe in Roc: its app's root
+is `find_names_and_docs_that_say_too_little.roc` (the word lists, the run, the verdict), and
 beside it are a module a check (`PureMutator`, `Abbreviation`,
 `ModuleDoc`) and `SelfTest`, each under 500 lines; what the checks read
 (`Tree`, `Declarations`, `Text`) and `Finding` are `cookbook/roc/lib/`'s.
-`cookbook/roc/find_unclear_names.shale` is its launcher. The
+`cookbook/roc/find_names_and_docs_that_say_too_little.shale` is its launcher. The
 launcher hands its values to `run.shale` in the checkout its cookbook is in
 (the `cookbook` mount's parent) with `in=` its own root, so the build is
 the checkout's and the program runs where the caller is. That folder's
@@ -156,54 +156,54 @@ the checkout's and the program runs where the caller is. That folder's
 from the Shale original on the plants, and the full tier runs it with the
 cookbook's self-tests.
 
-**`cookbook/roc/count_roc/count_roc.roc`** is the small one, a file a Roc
+**`cookbook/roc/count_roc_modules_lines_and_tests/count_roc_modules_lines_and_tests.roc`** is the small one, a file a Roc
 reader can take in at once: a Roc project's modules, lines and `expect`s,
 folder by folder, from `Shale.glob!` and `Shale.read!` and plain Roc.
-`cookbook/roc/count_roc.shale` is its launcher, and hands its `in=` on as
+`cookbook/roc/count_roc_modules_lines_and_tests.shale` is its launcher, and hands its `in=` on as
 `folders=`, since run.shale's own `in=` is the root. Its
-`check_goldens.shale` runs it on a copy of `cookbook/roc/plants/count_roc/`.
+`check_goldens.shale` runs it on a copy of `cookbook/roc/plants/count_roc_modules_lines_and_tests/`.
 
 **`cookbook/c/map_file/`**, **`cookbook/c/list_long_functions/`**,
 **`cookbook/c/list_deep_nesting/`**, **`cookbook/c/find_clones/`**,
 **`cookbook/c/find_dead_code/`**, **`cookbook/c/hunt_names/`** (over the
 splitter package **`cookbook/c/items/`**, which each names by a relative
 path), **`cookbook/zig/list_long_files/`**, **`cookbook/zig/count_comments/`**,
-**`cookbook/roc/find_unused_imports/`**, **`cookbook/roc/check_families/`**,
-**`cookbook/roc/find_deep_calls/`**, **`cookbook/roc/check_vocabulary/`**,
-**`cookbook/roc/check_name_types/`**, **`cookbook/roc/find_bare_floats/`**,
-**`cookbook/roc/check_errors/`** (which runs roc-types too, for `types=1`),
-**`cookbook/roc/hunt_names/`** (roc-types too),
-**`cookbook/roc/check_boundaries/`** (roc-types too),
-**`cookbook/count_shale_stops/`**, **`cookbook/roc/find_extra_parens/`**,
-**`cookbook/roc/check_stacking/`**, **`cookbook/roc/wrap_long_lines/`** and
-**`cookbook/roc/rewrite_method_calls/`** (roc-types too)
+**`cookbook/roc/find_unused_imports/`**, **`cookbook/roc/find_names_that_differ_across_lookalike_modules/`**,
+**`cookbook/roc/find_calls_nested_three_deep/`**, **`cookbook/roc/find_retired_words/`**,
+**`cookbook/roc/find_names_that_disagree_with_their_types/`**, **`cookbook/roc/find_floats_outside_unit_types/`**,
+**`cookbook/roc/check_how_failure_is_reported/`** (which runs roc-types too, for `types=1`),
+**`cookbook/roc/find_awkward_names/`** (roc-types too),
+**`cookbook/roc/find_functions_and_parameters_that_dont_earn_their_keep/`** (roc-types too),
+**`cookbook/count_shale_stops/`**, **`cookbook/roc/find_and_remove_extra_parentheses/`**,
+**`cookbook/roc/check_and_fix_group_stacking/`**, **`cookbook/roc/wrap_long_lines_with_trailing_commas/`** and
+**`cookbook/roc/rewrite_module_calls_as_method_calls/`** (roc-types too)
 are ported the same way: the launcher keeps the recipe's name and arguments, the goldens were written
 from the Shale original on plants, and `check_goldens.shale` holds them.
 count_comments' launcher builds with `opt=speed`, since its byte-by-byte
 scan runs about 60 times slower in Roc's dev build, and so does
-find_deep_calls', whose dev build took 1.6 times the Shale original's CPU;
+find_calls_nested_three_deep', whose dev build took 1.6 times the Shale original's CPU;
 count_shale_stops', which reads a transcript's JSON in Roc (its
 ShaleJson module, as Shale's `json_read` reads it) and whose dev build took
 3.5 times the original's CPU over a 180 MB transcript; and the six over
 the C, whose splitter masks a line a byte at a time (the dev build took
 four times map_file's original's CPU over `tree=c`).
-find_extra_parens rewrites as well as finds (`write=1`): its goldens hold
+find_and_remove_extra_parentheses rewrites as well as finds (`write=1`): its goldens hold
 the files a rewrite of every plant leaves, and the rewrite reads a file
 with no finding no more, since Roc's arena frees nothing and a second
 parse of a large tree would not fit (`real!`, `mkdir!` and `remove_tree!`
 were exported for it: `roc fmt`'s argv and the self-test's scratch copy).
-check_stacking rewrites too, and its goldens hold the same; its reading of
+check_and_fix_group_stacking rewrites too, and its goldens hold the same; its reading of
 the bracket groups and the stacking rule is the library's `Groups`,
 `Stacking` and `Packed` (`cookbook/roc/lib/`), the Shale groups.shale's
 line for line, its regular expressions matched by hand. Its dev build took
 0.8 times the original's CPU over roc-apps' projects, and runs the whole of
 roc-apps at once, where the original runs out of its 2 GB arena.
-wrap_long_lines rewrites by the same library, so it is the stacking rule's
+wrap_long_lines_with_trailing_commas rewrites by the same library, so it is the stacking rule's
 one home and groups.shale is gone; its goldens run on copies of the plants
 with a `roc-version`, which Shale's checkout has none of. Its dev build
 took 0.8 times the original's CPU (`roc fmt`'s runs included) over copies
 of roc-chat, roc-screensaver and roc-apps' projects.
-rewrite_method_calls rewrites by the compiler's judgement: each trial is
+rewrite_module_calls_as_method_calls rewrites by the compiler's judgement: each trial is
 written in place and `roc check` and `roc test` run on it, and its goldens
 hold the files each case leaves. A trial is the Roc program's own write, so
 the launcher's `--undo-on-stop` does not reach it: a run stopped mid-trial

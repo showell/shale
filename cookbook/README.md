@@ -119,67 +119,67 @@ checkouts, and `<lanes>` the one that holds your lanes.
 
 ## roc/: Roc code ([README](roc/README.md))
 
-- `roc/check_boundaries.shale`: asks whether each function earns its boundary
+- `roc/find_functions_and_parameters_that_dont_earn_their_keep.shale`: asks whether each function earns its boundary
   and each parameter is really one; the launcher of a Roc script
-  (`roc/check_boundaries/`, on `roc_platform/`, held to its goldens by that
-  folder's `check_goldens.shale`). `shale cookbook:roc/check_boundaries.shale`
-- `roc/check_errors.shale`: checks how Roc code reports failure.
-  `shale cookbook:roc/check_errors.shale`
-- `roc/check_families.shale`: checks that look-alike modules are spelled
+  (`roc/find_functions_and_parameters_that_dont_earn_their_keep/`, on `roc_platform/`, held to its goldens by that
+  folder's `check_goldens.shale`). `shale cookbook:roc/find_functions_and_parameters_that_dont_earn_their_keep.shale`
+- `roc/check_how_failure_is_reported.shale`: checks how Roc code reports failure.
+  `shale cookbook:roc/check_how_failure_is_reported.shale`
+- `roc/find_names_that_differ_across_lookalike_modules.shale`: checks that look-alike modules are spelled
   alike, one type name means one thing and a `to_<noun>` has a
   `from_<noun>`, not a bare `<noun>`; the launcher of a Roc script
-  (`roc/check_families/`, on `roc_platform/`, held to its goldens by that
-  folder's `check_goldens.shale`). `shale cookbook:roc/check_families.shale`
-- `roc/check_foreign_code.shale`: runs the general checks over another
-  project's Roc code, without our house style. `shale cookbook:roc/check_foreign_code.shale`
-- `roc/check_module_size.shale`: holds each Roc module to a size, the whole
-  file counted. `shale cookbook:roc/check_module_size.shale`
-- `roc/check_name_types.shale`: finds names that disagree with their types;
-  the launcher of a Roc script (`roc/check_name_types/`, on `roc_platform/`,
+  (`roc/find_names_that_differ_across_lookalike_modules/`, on `roc_platform/`, held to its goldens by that
+  folder's `check_goldens.shale`). `shale cookbook:roc/find_names_that_differ_across_lookalike_modules.shale`
+- `roc/check_another_projects_roc_code.shale`: runs the general checks over another
+  project's Roc code, without our house style. `shale cookbook:roc/check_another_projects_roc_code.shale`
+- `roc/check_modules_stay_under_500_lines.shale`: holds each Roc module to a size, the whole
+  file counted. `shale cookbook:roc/check_modules_stay_under_500_lines.shale`
+- `roc/find_names_that_disagree_with_their_types.shale`: finds names that disagree with their types;
+  the launcher of a Roc script (`roc/find_names_that_disagree_with_their_types/`, on `roc_platform/`,
   held to its goldens by that folder's `check_goldens.shale`).
-  `shale cookbook:roc/check_name_types.shale table=name_types.txt`
-- `roc/check_stacking.shale`: finds groups laid out against the stacking
+  `shale cookbook:roc/find_names_that_disagree_with_their_types.shale table=name_types.txt`
+- `roc/check_and_fix_group_stacking.shale`: finds groups laid out against the stacking
   rule, and with `write=1` lays them out by it; the launcher of a Roc script
-  (`roc/check_stacking/`, on `roc_platform/`, held to its goldens by that
-  folder's `check_goldens.shale`). `shale cookbook:roc/check_stacking.shale`
-- `roc/check_vocabulary.shale`: holds a project to the words it has decided
-  on; the launcher of a Roc script (`roc/check_vocabulary/`, on
+  (`roc/check_and_fix_group_stacking/`, on `roc_platform/`, held to its goldens by that
+  folder's `check_goldens.shale`). `shale cookbook:roc/check_and_fix_group_stacking.shale`
+- `roc/find_retired_words.shale`: holds a project to the words it has decided
+  on; the launcher of a Roc script (`roc/find_retired_words/`, on
   `roc_platform/`, held to its goldens by that folder's `check_goldens.shale`).
-  `shale cookbook:roc/check_vocabulary.shale words=vocabulary.txt`
+  `shale cookbook:roc/find_retired_words.shale words=vocabulary.txt`
 - `roc/compare_machine_code.shale`: says whether two builds of a Roc archive
   or program hold the same machine code, procedure by procedure. `shale cookbook:roc/compare_machine_code.shale old=a.a new=b.a`
-- `roc/count_roc.shale`: counts a Roc project's modules, lines, test modules,
+- `roc/count_roc_modules_lines_and_tests.shale`: counts a Roc project's modules, lines, test modules,
   test lines and `expect`s, for each folder given; the launcher of a
-  one-file Roc script (`roc/count_roc/count_roc.roc`, on `roc_platform/`,
-  held to its goldens by that folder's `check_goldens.shale`). `cd <repos> && shale cookbook:roc/count_roc.shale in=roc-apps/basic`
+  one-file Roc script (`roc/count_roc_modules_lines_and_tests/count_roc_modules_lines_and_tests.roc`, on `roc_platform/`,
+  held to its goldens by that folder's `check_goldens.shale`). `cd <repos> && shale cookbook:roc/count_roc_modules_lines_and_tests.shale in=roc-apps/basic`
 - `roc/declared.shale` (library): a parse tree's kids and attributes, a
   name's words and a type's names, for the type printer and
-  `rank_boundary_hints`. `use("cookbook:roc/declared.shale")`
-- `roc/find_bare_floats.shale`: finds bare `F64`s in declarations, against a
-  table of exceptions; the launcher of a Roc script (`roc/find_bare_floats/`,
+  `rank_hints_that_a_module_does_anothers_work`. `use("cookbook:roc/declared.shale")`
+- `roc/find_floats_outside_unit_types.shale`: finds bare `F64`s in declarations, against a
+  table of exceptions; the launcher of a Roc script (`roc/find_floats_outside_unit_types/`,
   on `roc_platform/`, held to its goldens by that folder's
-  `check_goldens.shale`). `shale cookbook:roc/find_bare_floats.shale table=bare_floats.txt`
-- `roc/find_deep_calls.shale`: finds calls nested three or more deep; the
-  launcher of a Roc script (`roc/find_deep_calls/`, on `roc_platform/`,
+  `check_goldens.shale`). `shale cookbook:roc/find_floats_outside_unit_types.shale table=bare_floats.txt`
+- `roc/find_calls_nested_three_deep.shale`: finds calls nested three or more deep; the
+  launcher of a Roc script (`roc/find_calls_nested_three_deep/`, on `roc_platform/`,
   held to its goldens by that folder's `check_goldens.shale`).
-  `shale cookbook:roc/find_deep_calls.shale min=4`
-- `roc/find_extra_parens.shale`: finds the parentheses and braceless `if`s a
-  code emitter leaves, and with `write=1` rewrites them. `shale cookbook:roc/find_extra_parens.shale`
-- `roc/find_unclear_names.shale`: finds names and module docs that say too
+  `shale cookbook:roc/find_calls_nested_three_deep.shale min=4`
+- `roc/find_and_remove_extra_parentheses.shale`: finds the parentheses and braceless `if`s a
+  code emitter leaves, and with `write=1` rewrites them. `shale cookbook:roc/find_and_remove_extra_parentheses.shale`
+- `roc/find_names_and_docs_that_say_too_little.shale`: finds names and module docs that say too
   little; the launcher of a Roc script of several modules (its root
-  `roc/find_unclear_names/find_unclear_names.roc`, on `roc_platform/`,
+  `roc/find_names_and_docs_that_say_too_little/find_names_and_docs_that_say_too_little.roc`, on `roc_platform/`,
   held to its goldens by that folder's `check_goldens.shale`).
-  `shale cookbook:roc/find_unclear_names.shale`
+  `shale cookbook:roc/find_names_and_docs_that_say_too_little.shale`
 - `roc/find_unused_imports.shale`: finds the imports a file leaves unused;
   the launcher of a Roc script (`roc/find_unused_imports/`, on
   `roc_platform/`, held to its goldens by that folder's
   `check_goldens.shale`). `shale cookbook:roc/find_unused_imports.shale`
 - `roc/house.shale` (library): the checks that are our house style alone,
   by recipe. `use("cookbook:roc/house.shale")`
-- `roc/hunt_names.shale`: hunts for awkward names; the launcher of a Roc
-  script of several modules (its root `roc/hunt_names/hunt_names.roc`, on
+- `roc/find_awkward_names.shale`: hunts for awkward names; the launcher of a Roc
+  script of several modules (its root `roc/find_awkward_names/find_awkward_names.roc`, on
   `roc_platform/`, held to its goldens by that folder's
-  `check_goldens.shale`). `shale cookbook:roc/hunt_names.shale`
+  `check_goldens.shale`). `shale cookbook:roc/find_awkward_names.shale`
 - `roc/member_uses.shale` (library): how the type printer resolves names and
   counts each member's uses. `use("cookbook:roc/member_uses.shale")`
 - `roc/module_family.shale` (library): how the type printer walks sibling
@@ -190,21 +190,21 @@ checkouts, and `<lanes>` the one that holds your lanes.
   `use("cookbook:roc/pinned.shale")`
 - `roc/print_module_types.shale`: prints a module's types and every type they
   depend on, signatures only. `shale cookbook:roc/print_module_types.shale module=Pigs`
-- `roc/rank_boundary_hints.shale`: ranks hints that one module does
-  another's work. `shale cookbook:roc/rank_boundary_hints.shale root=safari`
-- `roc/rename.shale`: renames one identifier across a tree of Roc code.
-  `shale cookbook:roc/rename.shale from=portion to=share module=Pie`
-- `roc/rewrite_method_calls.shale`: rewrites `List.map(xs, f)` calls as method
+- `roc/rank_hints_that_a_module_does_anothers_work.shale`: ranks hints that one module does
+  another's work. `shale cookbook:roc/rank_hints_that_a_module_does_anothers_work.shale root=safari`
+- `roc/rename_identifier_by_whole_word.shale`: renames one identifier across a tree of Roc code.
+  `shale cookbook:roc/rename_identifier_by_whole_word.shale from=portion to=share module=Pie`
+- `roc/rewrite_module_calls_as_method_calls.shale`: rewrites `List.map(xs, f)` calls as method
   calls, judged by the compiler; the launcher of a Roc script of several
-  modules (its root `roc/rewrite_method_calls/rewrite_method_calls.roc`, on
+  modules (its root `roc/rewrite_module_calls_as_method_calls/rewrite_module_calls_as_method_calls.roc`, on
   `roc_platform/`, held to its goldens by that folder's
-  `check_goldens.shale`). `shale cookbook:roc/rewrite_method_calls.shale apply=1`
+  `check_goldens.shale`). `shale cookbook:roc/rewrite_module_calls_as_method_calls.shale apply=1`
 - `roc/types.shale` (library): the roc-types to run for a Roc, and its
   output cut to some modules' records. `use("cookbook:roc/types.shale")`
-- `roc/wrap_long_lines.shale`: shortens long Roc lines by letting `roc fmt`
-  lay out their groups; the launcher of a Roc script (`roc/wrap_long_lines/`,
+- `roc/wrap_long_lines_with_trailing_commas.shale`: shortens long Roc lines by letting `roc fmt`
+  lay out their groups; the launcher of a Roc script (`roc/wrap_long_lines_with_trailing_commas/`,
   on `roc_platform/`, held to its goldens by that folder's
-  `check_goldens.shale`). `shale cookbook:roc/wrap_long_lines.shale dir=roc width=100`
+  `check_goldens.shale`). `shale cookbook:roc/wrap_long_lines_with_trailing_commas.shale dir=roc width=100`
 
 ## c/: Shale's own C
 
@@ -216,7 +216,7 @@ it. So the dialect is the parser's contract: `c/items/` splits a file
 into its items on it, and stops, naming the file and line, at a line it
 can't account for. It is a Roc package the C finders share: map_file,
 list_long_functions, list_deep_nesting, find_clones, find_dead_code and
-hunt_names are written in Roc on Shale's platform (`roc_platform/`), each
+find_awkward_names are written in Roc on Shale's platform (`roc_platform/`), each
 its folder's app, held to its Shale original's goldens by that folder's
 `check_goldens.shale`. Its Shale original, a second copy of the splitting
 logic, is the fast tier's, `c/build/c_items.shale` beside the cookbook,

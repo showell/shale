@@ -56,7 +56,7 @@
 -- header), for a caller's cache key. Its goldens, the Shale original's output
 -- on the plants, are held by cookbook/roc/find_unused_imports/check_goldens.shale.
 -- The rule's one home is the Roc library's Imports, which
--- rewrite_method_calls asks too.
+-- rewrite_module_calls_as_method_calls asks too.
 -- budget: programs=10 output_bytes=8000000
 
 const SCRIPT = "cookbook/roc/find_unused_imports/find_unused_imports.roc"

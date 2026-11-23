@@ -1,0 +1,5 @@
+# The words and types for find_names_that_disagree_with_their_types' plants.
+
+dist: Distance
+steps: Steps
+frames: none

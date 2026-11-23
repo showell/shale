@@ -16,25 +16,25 @@ vehicle; these fixes are the yield.
 | 2026-11-18 | `nice` needs a `want` on every `run`, though the box's rule is to nice every heavy job | open |
 | 2026-11-18 | `grep_tree` takes one needle, so 25 patterns meant 25 walks of the tree and a raised reads budget | `grep_tree` takes a list of needles, one walk (builtins lane) |
 | 2026-11-18 | `print` of a list of strings stops the run instead of printing the lines | `print(l)` prints each string on its own line (builtins lane) |
-| 2026-11-18 | hunt_names `phrase_name` doesn't see an unqualified type declared inside the module's own type, though its header cites that case as passing | open |
-| 2026-11-18 | hunt_names `singular_list` flags a changed copy whose object is the list's element (`set_run(runs, ...) -> runs`) and suggests a misleading name | open |
-| 2026-11-18 | check_name_types `no_value` doesn't see through an alias of a function type | open |
-| 2026-11-18 | hunt_names `world_verb` can't be answered in the code (no `##` doc or `single`-style answer), so each gate builds its own exception table | open |
-| 2026-11-18 | wrap_long_lines `tokens=6` can leave lines past 100 columns that check_stacking then flags, and odd layouts | its wide-line fallback was a second scanner that stacked a function type's arguments, which broke `roc fmt` on safari; it now uses groups.shale's reading, and lists each wide line it can't stack (recipe-leftovers) |
-| 2026-11-18 | wrap_long_lines takes one `dir=`, and prints every wide-string line it leaves as noise | `dir=a,b`, `write=0` for a report, and wide strings and data lines counted, not listed (recipe-leftovers) |
+| 2026-11-18 | find_awkward_names `phrase_name` doesn't see an unqualified type declared inside the module's own type, though its header cites that case as passing | open |
+| 2026-11-18 | find_awkward_names `singular_list` flags a changed copy whose object is the list's element (`set_run(runs, ...) -> runs`) and suggests a misleading name | open |
+| 2026-11-18 | find_names_that_disagree_with_their_types `no_value` doesn't see through an alias of a function type | open |
+| 2026-11-18 | find_awkward_names `world_verb` can't be answered in the code (no `##` doc or `single`-style answer), so each gate builds its own exception table | open |
+| 2026-11-18 | wrap_long_lines_with_trailing_commas `tokens=6` can leave lines past 100 columns that check_and_fix_group_stacking then flags, and odd layouts | its wide-line fallback was a second scanner that stacked a function type's arguments, which broke `roc fmt` on safari; it now uses groups.shale's reading, and lists each wide line it can't stack (recipe-leftovers) |
+| 2026-11-18 | wrap_long_lines_with_trailing_commas takes one `dir=`, and prints every wide-string line it leaves as noise | `dir=a,b`, `write=0` for a report, and wide strings and data lines counted, not listed (recipe-leftovers) |
 | 2026-11-18 | most Roc recipes take one glob and can't be limited to git-tracked files, so a gate must hold file counts itself | open |
 | 2026-11-18 | the `── time:` line's `…` cut splits a UTF-8 character, leaving invalid bytes in the output | the C's `host_keep_ends` cuts on a character (seen by frictions-2) |
-| 2026-11-18 | rewrite_method_calls stops the whole run on one file no root reaches, instead of listing it and going on | open |
-| 2026-11-18 | rewrite_method_calls holds every root's types at once: 8 roots ran out of the 2 GB arena, and the stop doesn't say which root | open |
+| 2026-11-18 | rewrite_module_calls_as_method_calls stops the whole run on one file no root reaches, instead of listing it and going on | open |
+| 2026-11-18 | rewrite_module_calls_as_method_calls holds every root's types at once: 8 roots ran out of the 2 GB arena, and the stop doesn't say which root | open |
 | 2026-11-18 | `run`'s `re` filter charges the caller's step budget, undocumented; filtering a big child output stopped the caller | open |
-| 2026-11-18 | rewrite_method_calls leaves imports it made unused and lines past 100 columns that the gates then catch | it reports `made_unused_import` and `made_long_line` in the same run, by roc-ast's trees before and after (recipe-leftovers) |
-| 2026-11-18 | wrap_long_lines stacks a list pattern in a `match` arm because a string widened the line | a group stacks for width only when stacking it brings the line within the width (recipe-leftovers) |
-| 2026-11-18 | check_boundaries `constant` can't be answered in code, unlike `single` | open |
+| 2026-11-18 | rewrite_module_calls_as_method_calls leaves imports it made unused and lines past 100 columns that the gates then catch | it reports `made_unused_import` and `made_long_line` in the same run, by roc-ast's trees before and after (recipe-leftovers) |
+| 2026-11-18 | wrap_long_lines_with_trailing_commas stacks a list pattern in a `match` arm because a string widened the line | a group stacks for width only when stacking it brings the line within the width (recipe-leftovers) |
+| 2026-11-18 | find_functions_and_parameters_that_dont_earn_their_keep `constant` can't be answered in code, unlike `single` | open |
 | 2026-11-18 | roc-apps' quality.shale caches per checkout path, so every lane starts cold (about 205 s), and it can't be limited to some apps | open |
 | 2026-11-18 | quality.shale doesn't pass each project's own tables and exemptions, so its counts differ from Safari's own lints | open |
-| 2026-11-18 | quality.shale's findings log leaves out rewrite_method_calls' per-call findings | open |
+| 2026-11-18 | quality.shale's findings log leaves out rewrite_module_calls_as_method_calls' per-call findings | open |
 | 2026-11-18 | the gate refuses a bare `2>&1` after a `shale` launch | open |
-| 2026-11-18 | **rewrite_method_calls changed behaviour with `roc check` clean:** `I64.to_str(x)` became `x.to_str()` where `x` was a loop variable over a literal list or a `var` starting from a literal, so it defaulted to Dec and printed `10.0`. The recipe guards a literal argument or a name bound to one, not these | open |
+| 2026-11-18 | **rewrite_module_calls_as_method_calls changed behaviour with `roc check` clean:** `I64.to_str(x)` became `x.to_str()` where `x` was a loop variable over a literal list or a `var` starting from a literal, so it defaulted to Dec and printed `10.0`. The recipe guards a literal argument or a name bound to one, not these | open |
 | 2026-11-18 | `grep_tree`'s `skip` stops on a folder that doesn't exist (`c/out` in a fresh lane) while `walk_all`'s `skip` doesn't: the two disagree | a missing `skip` passes (frictions-2) |
 | 2026-11-18 | the 1 MiB `kept_bytes` at a `yield` stops a whole-tree recipe that keeps a graph across files; the docs' advice (yield each file) assumes one file's memory | open |
 | 2026-11-18 | `unique()` fails on a list of integers, because `has_key` takes strings only | open |

@@ -1,0 +1,126 @@
+-- Shorten long Roc lines by letting `roc fmt` lay them out. roc fmt never
+-- wraps a line, but it puts the items of a record, list, call or lambda's
+-- arguments one to a line when the last item has a trailing comma. For each
+-- code line wider than `width`, this script adds that comma to the widest
+-- group of two or more items whose stacking brings the line within `width`:
+-- the text up to its opening bracket fits, and so does its closing bracket
+-- with what follows it (Stacking's `group_to_wrap`). A group beside the
+-- wide part, as a list pattern in a `match` arm whose string makes the line
+-- wide, is left alone, and so are a function type's arguments, which can't
+-- take the comma. It runs roc fmt, and repeats until no line changes; a
+-- folder still changing after 8 passes stops the run, naming its files. The
+-- passes work on a copy of the folder's .roc files under
+-- `scratch:roc_commas_work/`, and the changed files are written back only
+-- once the rewrite has finished, so a run that stops before then, on a pass
+-- too many or a budget, leaves the folder as it was. Under a mounts file with no
+-- `scratch:` mount, the copies go in a fresh hidden folder at the root
+-- instead (`.wrap_long_lines_with_trailing_commas.XXXXXX`, named in the output), removed when the
+-- run ends; a run that stops leaves it, for `git status` to show.
+--
+-- Then it lists each code line still too wide, as `path:line (width): why:
+-- text`, `why` being `nothing to stack`: no group whose stacking would bring
+-- it within `width`. A line wide only for the text of its strings, by Roc's
+-- parser (as check_and_fix_group_stacking.shale's `wide string`), and a comment line are
+-- counted, not listed, as no trailing comma shortens either; so is a line
+-- of numeric data, which stays packed (below). The list is
+-- printed between its counts, as cookbook/findings.shale describes. It runs
+-- the Roc that the repository's roc-version file names.
+--
+-- With `tokens=N`, the script holds the folder to roc-style.md's stacking
+-- rule, whose six tokens are `tokens=6`, whatever a line's width: a group of
+-- three or more items and N or more tokens gets the trailing comma, and a
+-- stacked group that should sit on one line loses it, which is how `roc fmt`
+-- is asked to join it. A group and its tokens are read as check_and_fix_group_stacking.shale reads
+-- them, by the same library, so after `tokens=6` check_and_fix_group_stacking.shale finds no
+-- group left to stack or to unstack. A line's outermost group goes first, and
+-- the next pass reaches the groups inside it. A function type's arguments and
+-- a row of literals are left alone, as check_and_fix_group_stacking.shale leaves them, and so is a
+-- platform header's `targets:` section, which `roc fmt` lays out by itself.
+--
+-- The arguments:
+--   dir     the folders to rewrite, `roc` by default; several may be given,
+--           separated by commas, each rewritten in turn.
+--   width   the widest a line may be, 100 by default.
+--   tokens  the stacking rule's tokens, as above; 0 (the default) wraps
+--           wide lines alone.
+--   write   with `write=0`, the rewrite runs in the work copy, the list is
+--           of the lines it would leave, and no folder is written: a
+--           report.
+--
+--   cd <repo> && shale <shale>/cookbook/roc/wrap_long_lines_with_trailing_commas.shale dir=roc width=100
+--   cd <repo> && shale <shale>/cookbook/roc/wrap_long_lines_with_trailing_commas.shale dir=app,platform tokens=6
+--   cd <repo> && shale <shale>/cookbook/roc/wrap_long_lines_with_trailing_commas.shale dir=roc tokens=6 write=0
+--   shale cookbook:roc/wrap_long_lines_with_trailing_commas.shale self_test=1
+--
+-- `self_test=1` copies the plants in `cookbook/roc/plants/wrap_long_lines_with_trailing_commas/` to
+-- `scratch:wrap_long_lines_with_trailing_commas/` (or the hidden folder above), rewrites them there with `tokens=6` and the
+-- self-test's Roc, and checks that the rewrite ends, that each plant comes
+-- out as its `.want` file, that no group is left to stack or to unstack, and
+-- that the list holds exactly `long_plants`' lines and counts
+-- `wide_string_plants` wide strings and `data_plants` lines of data
+-- (SelfTest.roc).
+-- `at_the_cap.roc` nests as deep as 8 passes reach, and `too_deep/` one group
+-- deeper, which has to stop the rewrite, name its file and leave it as it was.
+--
+-- Numeric data stays packed, as Stacking's is_data_line and Packed's
+-- is_number_data say: a number list never stacks, and nothing on a line wider
+-- than `width` that holds one does. `numbers.roc` in the plants checks both
+-- and that a list of names beside them still stacks.
+--
+-- It is written in Roc, the app
+-- cookbook/roc/wrap_long_lines_with_trailing_commas/wrap_long_lines_with_trailing_commas.roc and the modules beside it
+-- (Rewrite, the work copy and its passes; WideLines, the list; SelfTest), on
+-- the cookbook's Roc library (cookbook/roc/lib/: Groups reads the groups and
+-- their tokens, Stacking holds the rule, Packed the rows and data that stay
+-- packed, with Bytes and Text), the one home of the stacking rule, which
+-- check_and_fix_group_stacking reads too; on Shale's Roc platform (roc_platform/README.md).
+-- This file is its launcher, so it is launched as every Shale recipe is.
+--
+-- A line's width counts its bytes, a tab four, not its columns, so a line of
+-- non-ASCII text counts each character as two or three: the Shale
+-- original's reading, kept.
+--
+-- **The launcher** decides where the work copies go (`scratch:`, or the
+-- hidden folder above, which it makes and names) and hands it, with every
+-- value it is given, to roc_platform/run.shale in the checkout this cookbook
+-- is in (the `cookbook` mount's parent), which builds the Roc there (cached;
+-- the first build after a change to C Shale compiles the platform's host, 25
+-- to 50 s) and runs the program rooted here, so `dir=` is this root's paths
+-- and the `roc-version` read is this root's, as the Shale recipe did. A
+-- value the Roc script reads no `Shale.arg!` of stops the run before
+-- anything is built. Its output is the program's, then the launchers' own
+-- stops when it stops. `reads=inputs` builds and runs nothing, and prints
+-- the real path of each file the program is built from, one a line
+-- (run.shale's header), for a caller's cache key. It is Roc's dev build. Its
+-- goldens, the Shale original's output and rewritten files on the plants,
+-- are held by cookbook/roc/wrap_long_lines_with_trailing_commas/check_goldens.shale.
+-- budget: programs=10 output_bytes=8000000
+
+const SCRIPT = "cookbook/roc/wrap_long_lines_with_trailing_commas/wrap_long_lines_with_trailing_commas.roc"
+const CHECKOUT = dirname(dirname(real("cookbook:README.md")))
+const HERE = real(".")
+
+-- Where the work copies go: `scratch:` when the mounts file has it, else a
+-- fresh hidden folder at the root, which the program removes when it ends.
+function work_base()
+  if attempt(real, "scratch:.").ok then return "scratch:" end
+  local base = fresh_dir("", ".wrap_long_lines_with_trailing_commas")
+  print("wrap_long_lines_with_trailing_commas: no `scratch:` mount, so the work copies go in " .. base .. ", removed when the run ends")
+  return base
+end
+
+-- `self_test` is read here by name, as the cookbook's full tier finds the
+-- recipes it runs `self_test=1` of. `arg_names()` is every value given; the
+-- rest are read by a name made as the run goes, so Shale's own check cannot
+-- see them: run.shale holds them to the script's reads.
+const SELF_TEST = arg("self_test", "")
+local values = {"script=" .. SCRIPT, "in=" .. HERE}
+if SELF_TEST ~= "" then push(values, "self_test=" .. SELF_TEST) end
+for name in arg_names() do
+  if name == "work_base" then fail("wrap_long_lines_with_trailing_commas: work_base= is the launcher's to give") end
+  if name ~= "self_test" then push(values, name .. "=" .. arg(name, "")) end
+end
+if not has_item(arg_names(), "reads") then push(values, "work_base=" .. work_base()) end
+local r = run({"shale", "--root", CHECKOUT, CHECKOUT .. "/roc_platform/run.shale", "--args-stdin"}, {stdin = join(values, "\n") .. "\n", timeout_ms = 1800000, whole = 8000000})
+print(trim_end(r.out))
+if r.code ~= 0 then fail("wrap_long_lines_with_trailing_commas: the Roc program stopped (exit " .. r.code .. ")") end

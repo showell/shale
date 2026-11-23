@@ -1,0 +1,35 @@
+=== in=app (exit 0)
+place  modules  lines  test_modules  test_lines  expects
+app          4     23             8          26       14
+=== in=app,lib (exit 0)
+place  modules  lines  test_modules  test_lines  expects
+app          4     23             8          26       14
+lib          1      5             0           0        1
+=== in=lib , app, (exit 0)
+place  modules  lines  test_modules  test_lines  expects
+lib          1      5             0           0        1
+app          4     23             8          26       14
+=== in=app skip=/tutorial/ (exit 0)
+place  modules  lines  test_modules  test_lines  expects
+app          3     18             8          26       13
+=== in=app skip=Main.roc, /tests/ (exit 0)
+place  modules  lines  test_modules  test_lines  expects
+app          3      7             7          21        6
+=== in=app tests= (exit 0)
+place  modules  lines  test_modules  test_lines  expects
+app         12     49             0           0       14
+=== in=app tests=Book.roc (exit 0)
+place  modules  lines  test_modules  test_lines  expects
+app         11     44             1           5       14
+===  (exit 0)
+place  modules  lines  test_modules  test_lines  expects
+.            5     28             8          26       15
+=== in=. (exit 0)
+place  modules  lines  test_modules  test_lines  expects
+.            5     28             8          26       15
+=== in= (exit 0)
+place  modules  lines  test_modules  test_lines  expects
+=== in=no_such_folder (exit 1)
+── stop: fail: count_roc_modules_lines_and_tests: no folder `no_such_folder`
+=== in=app/Main.roc (exit 1)
+── stop: file_system: `walk("app/Main.roc")`: a part of the path is a file, not a folder (NotDir): `is_dir(p)` asks first

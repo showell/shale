@@ -40,7 +40,7 @@ remove_tree("roc_platform/out/cache")
 
 const examples = {
   {name = "count_lines", file = "roc_platform/examples/count_lines.roc", args = {"file=README.md"}, old = "lines\")", new = "lines, counted\")"},
-  {name = "check_module_size", file = "roc_platform/examples/check_module_size.roc", args = {"glob=repos:roc-chat/**/*.roc", "limit=600"}, old = "needs no exemption", new = "needs none"},
+  {name = "check_modules_stay_under_500_lines", file = "roc_platform/examples/check_modules_stay_under_500_lines.roc", args = {"glob=repos:roc-chat/**/*.roc", "limit=600"}, old = "needs no exemption", new = "needs none"},
 }
 local k = 0
 for e in examples do
@@ -59,7 +59,7 @@ end
 print(table(rows, {"what", "wall_ms", "cpu_ms", "phases"}))
 
 -- The peak memory of one cold `roc build`, from GNU time.
-local t = run({"/usr/bin/time", "-v", ROC, "build", real("roc_platform/examples/check_module_size.roc"), "--target=x64musl", "--opt=dev", "--output=" .. real(OUT) .. "/peak.a"}, {timeout_ms = 300000, whole = 100000, nice = 19, env = {ROC_CACHE_DIR = real(OUT) .. "/roc-cache-peak"}, want = "measure: GNU time's peak memory of a roc build"})
+local t = run({"/usr/bin/time", "-v", ROC, "build", real("roc_platform/examples/check_modules_stay_under_500_lines.roc"), "--target=x64musl", "--opt=dev", "--output=" .. real(OUT) .. "/peak.a"}, {timeout_ms = 300000, whole = 100000, nice = 19, env = {ROC_CACHE_DIR = real(OUT) .. "/roc-cache-peak"}, want = "measure: GNU time's peak memory of a roc build"})
 for l in lines(t.out) do
   if contains(l, "Maximum resident") or contains(l, "Elapsed (wall") then print("roc build (cold): " .. trim(l)) end
 end

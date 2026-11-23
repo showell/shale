@@ -1,5 +1,5 @@
 -- Languages, libraries and standards a Roc comment cites another API from,
--- one a line, as written (case counts). Read by hunt_names.shale, whose
+-- one a line, as written (case counts). Read by find_awkward_names.shale, whose
 -- `stale_doc_name` takes a backticked name with one of these before it in
 -- its sentence ("Rust's `is_ascii_digit`", "Zig `isDigit`") as a citation,
 -- not one of the file's own names.

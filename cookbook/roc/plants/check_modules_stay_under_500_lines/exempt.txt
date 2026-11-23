@@ -1,0 +1,2 @@
+# The plants' exemptions: one `path -- reason` a line.
+cookbook/roc/plants/check_modules_stay_under_500_lines/Over.roc -- a plant past the limit on purpose

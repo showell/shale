@@ -46,7 +46,7 @@ itself, and runs the tier under the runner's own umask, 022 (the golden
 tests set their own, below). Beside the checkout it installs what the tier reaches for: TCC, the
 pinned Zig and zig-ast built by it, roc-ast, go-ast, the pinned Roc nightly
 and roc-types under `~/tools` (with a second nightly, a pin roc-types
-refuses, for rewrite_method_calls' goldens), and every sibling `tools/doc_check.shale`
+refuses, for rewrite_module_calls_as_method_calls' goldens), and every sibling `tools/doc_check.shale`
 names checked out beside shale for the docs' citations, as the box has them. The tier's whole output is the run's
 `c-full-log` artifact.
 

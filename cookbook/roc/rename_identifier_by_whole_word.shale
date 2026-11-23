@@ -1,0 +1,624 @@
+-- This recipe renames one identifier across a tree of Roc code, by whole
+-- words, so renaming `portion` leaves `proportion` and `portion_size` alone,
+-- and `Rider` leaves `RiderState`.
+--
+--   cd <repo> && shale <shale>/cookbook/roc/rename_identifier_by_whole_word.shale --args-stdin <<'ARGS'
+--   glob=app/**/*.roc
+--   from=portion
+--   to=share
+--   ARGS
+--   shale cookbook:roc/rename_identifier_by_whole_word.shale self_test=1
+--
+-- The arguments:
+--   glob       the files to rename in, `**/*.roc` by default; several globs
+--              may be given, separated by commas;
+--   from, to   the name and its new name, each a whole identifier;
+--   module     with `module=Ride`, only Ride's own `from` is renamed: the
+--              qualified form `Ride.from` in every file, and `from` bare
+--              inside `Ride.roc`, its declaration among them. Without it,
+--              every bare `from` and every `Mod.from` is renamed, whatever
+--              `Mod` is;
+--   skip       globs to leave out, separated by commas (a huge data file);
+--   fields     with `fields=1`, a record field named `from` is renamed too:
+--              `.from` after a value (`slice.from`, which is also how a
+--              method call reads), and `from:` in a record or a record type.
+--              Without it they are left;
+--   book       a markdown file whose `{{code Mod.from ...}}` includes are
+--              renamed too, `Mod` held to `module=` when it is given. Any
+--              other mention of `from` in the book (prose, an include's
+--              `from "..."` text) is left and counted as in a string;
+--   to_module  with `to_module=RiderView` (and `module=Geom`), Geom's `from`
+--              moves to RiderView: each `Geom.from` becomes `RiderView.to`
+--              (`to` is `from` unless given), or bare `to` inside
+--              `RiderView.roc`. A file that changed gains `import RiderView`
+--              beside its `import Geom` (`import game.Geom` gives
+--              `import game.RiderView`) unless it imports RiderView already,
+--              and loses `import Geom` when no `Geom.` is left in its code.
+--              A changed file whose `import Geom` exposes or aliases, or
+--              which has none, is refused, and a refusal writes no file.
+--              Bare uses are left: the declarations move by hand;
+--   dry        with `dry=1`, the counts are reported and nothing is written;
+--   self_test  with `self_test=1`, run the plants in
+--              `cookbook/roc/plants/rename_identifier_by_whole_word/` on copies under `scratch:`.
+--
+-- What counts as a use: `from` with no letter, digit, `_` or `$` either
+-- side, in code. A `from` in a comment or inside a string is left and
+-- counted (`left in comments`, `left in strings`), since those are often
+-- prose; a `${...}` interpolation is code. A character literal (`'c'`,
+-- `'\''`, `'"'`) is never a name: roc-ast's tree says where each one is, so
+-- `from=c` leaves `'c'` alone and a quote inside one doesn't open a string.
+-- A file holding `from` and a `'` that roc-ast refuses is refused, since its
+-- literals can't be told. A `from` followed by `:` is a
+-- record field when it comes after `{` or `,`, or when its line ends in `,`
+-- and the next line of code goes on with the record (another field, a
+-- `..` spread, or the closing bracket). Otherwise it is a declaration, and a
+-- stacked annotation is one: `f : List(a),` with the rest of its type,
+-- `Str -> Bool`, on the line below.
+--
+-- What it can't see: past the character literals, the text is read line by
+-- line, not parsed, so a multi-line string's lines read as code. A record field written as a pun
+-- (`{ from }`, `{ from, other }`) is renamed with the variable, which changes
+-- the field's name. An import's alias (`import pkg.Ride as R`) and a name
+-- an import exposes (`exposing [from]`) are not followed under `module=`.
+-- A stacked annotation whose next line is a lone type variable (`a,`) reads
+-- as a field's line, since a pun looks the same. `roc check` judges the
+-- result.
+--
+-- The output is one line per file that changed or holds a left mention, then
+-- the total. The run fails when nothing was renamed: a rename that renames
+-- nothing is a mistake. No file is written until every file has been read,
+-- so a refusal leaves the tree as it was.
+--
+--   shale cookbook:roc/rename_identifier_by_whole_word.shale from=RiderPoint module=Geom to_module=RiderView
+-- budget: steps=400000000 reads=100000 arena_bytes=2000000000 output_bytes=2000000
+
+const SELF_TEST = arg("self_test", "") == "1"
+const GLOB = arg("glob", "**/*.roc")
+const FROM = arg("from", "")
+const TO = arg("to", FROM)
+const MODULE = arg("module", "")
+const TO_MODULE = arg("to_module", "")
+const MOVE = TO_MODULE ~= ""
+const SKIP = arg("skip", "")
+const FIELDS = arg("fields", "") == "1"
+const BOOK = arg("book", "")
+const DRY = arg("dry", "") == "1"
+const IDENT = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_$"
+const UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+function is_ident(c)
+  return c ~= "" and contains(IDENT, c)
+end
+
+function is_roc_name(s)
+  if s == "" then return false end
+  for i = 1, #s do
+    if not is_ident(sub(s, i, i)) then return false end
+  end
+  return true
+end
+
+-- Whether byte `at` of `line` is in code, a string or a comment.
+function context_at(line, at)
+  local state = "code"
+  local interp = false
+  local depth = 0
+  local i = 1
+  while i < at do
+    local c = sub(line, i, i)
+    if state == "code" then
+      if c == "#" then return "comment" end
+      if c == "\"" then
+        state = "string"
+      elseif interp and c == "{" then
+        depth = depth + 1
+      elseif interp and c == "}" then
+        if depth == 0 then
+          state = "string"
+          interp = false
+        else
+          depth = depth - 1
+        end
+      end
+    else
+      if c == "\\" then
+        i = i + 1
+      elseif c == "\"" then
+        state = "code"
+      elseif c == "$" and sub(line, i + 1, i + 1) == "{" then
+        state = "code"
+        interp = true
+        depth = 0
+        i = i + 1
+      end
+    end
+    i = i + 1
+  end
+  return state
+end
+
+-- The identifier that ends just before the `.` at byte `dot`.
+function qualifier_of(line, dot)
+  local s = dot
+  while s > 1 and is_ident(sub(line, s - 1, s - 1)) do s = s - 1 end
+  return sub(line, s, dot - 1)
+end
+
+-- Whether a line of code goes on with a record after a field's line: it is
+-- another field (`name :`, `name:`, or a pun, `name,` or `name`), a spread
+-- (`..base`), or the bracket that closes the record. A stacked annotation's
+-- next line is the rest of its type instead (`Str -> Bool`, `List(a),`).
+function goes_on_with_record(next)
+  if next == "" or starts_with(next, "}") or starts_with(next, ")") or starts_with(next, "]") or starts_with(next, "..") then return true end
+  local e = 1
+  while e <= #next and is_ident(sub(next, e, e)) do e = e + 1 end
+  if e == 1 or contains(UPPER, sub(next, 1, 1)) then return false end
+  local rest = trim(sub(next, e))
+  return rest == "" or starts_with(rest, ",") or (starts_with(rest, ":") and not starts_with(rest, ":=") and not starts_with(rest, "::"))
+end
+
+-- Whether the name at `at`, ending before `stop`, is a record field's
+-- declaration: `name:` after `{` or `,`, or on a line that ends in `,`
+-- when `next`, the next line of code, goes on with the record. A line that
+-- ends in `,` with the rest of a type below it is a stacked annotation's
+-- first line (`f : List(a),` then `Str -> Bool`), a declaration.
+function is_field_def(line, at, stop, next)
+  local rest = trim(sub(line, stop))
+  if not starts_with(rest, ":") or starts_with(rest, ":=") or starts_with(rest, "::") then return false end
+  local before = trim(sub(line, 1, at - 1))
+  if ends_with(before, "{") or ends_with(before, ",") then return true end
+  return ends_with(trim(line), ",") and goes_on_with_record(next)
+end
+
+-- The next line of code after line `i` of `all`, trimmed: blank lines and
+-- comment lines are passed over, and the file's end gives "".
+function next_code_line(all, i)
+  for k = i + 1, #all do
+    local t = trim(all[k])
+    if t ~= "" and not starts_with(t, "#") then return t end
+  end
+  return ""
+end
+
+function is_wanted(line, at, stop, in_module, next)
+  if at > 1 and sub(line, at - 1, at - 1) == "." then
+    local q = qualifier_of(line, at - 1)
+    if q ~= "" and contains(UPPER, sub(q, 1, 1)) then return MODULE == "" or q == MODULE end
+    return FIELDS
+  end
+  if MOVE then return false end
+  if MODULE ~= "" and not in_module then return false end
+  if is_field_def(line, at, stop, next) then return FIELDS end
+  return true
+end
+
+-- `line` with each character literal on it blanked to spaces, so it is no
+-- name and its quote opens no string. `spans` are the literals'
+-- `{column, end_column}` on this line, from roc-ast; the length is kept, so a byte of the
+-- blanked line is the same byte of `line`.
+function blank_literals(line, spans)
+  local out = line
+  for s in spans do
+    out = sub(out, 1, s.column - 1) .. rep(" ", s.end_column - s.column) .. sub(out, s.end_column)
+  end
+  return out
+end
+
+-- `next` is the line of code after this one (`next_code_line`), which
+-- tells a field's line that ends in `,` from a stacked annotation's.
+-- `spans` are the character literals on the line (`blank_literals`).
+function rename_line(line, in_module, counts, next, spans)
+  local seen = blank_literals(line, spans)
+  local out = ""
+  local copied = 1
+  local pos = 1
+  while true do
+    local at = find(seen, FROM, pos)
+    if at == nil then break end
+    local stop = at + #FROM
+    pos = at + 1
+    local before = ""
+    if at > 1 then before = sub(seen, at - 1, at - 1) end
+    if not is_ident(before) and not is_ident(sub(seen, stop, stop)) then
+      local where = context_at(seen, at)
+      if where == "comment" then
+        counts.comments = counts.comments + 1
+      elseif where == "string" then
+        counts.strings = counts.strings + 1
+      elseif MOVE and is_wanted(seen, at, stop, in_module, next) then
+        -- A move rewrites the qualifier too; `in_module` is whether this
+        -- is the new module's own file, where the name stands bare.
+        local start = at - 1 - #qualifier_of(seen, at - 1)
+        local name = TO_MODULE .. "." .. TO
+        if in_module then name = TO end
+        out = out .. sub(line, copied, start - 1) .. name
+        copied = stop
+        pos = stop
+        counts.renamed = counts.renamed + 1
+      elseif is_wanted(seen, at, stop, in_module, next) then
+        out = out .. sub(line, copied, at - 1) .. TO
+        copied = stop
+        pos = stop
+        counts.renamed = counts.renamed + 1
+      end
+    end
+  end
+  return out .. sub(line, copied)
+end
+
+-- Every whole-word `from` the line held but its renamed includes is left.
+-- They are counted first, since a move can keep the name.
+function rename_book_line(line, counts)
+  local pos = 1
+  while true do
+    local at = find(line, FROM, pos)
+    if at == nil then break end
+    local stop = at + #FROM
+    if (at == 1 or not is_ident(sub(line, at - 1, at - 1))) and not is_ident(sub(line, stop, stop)) then counts.strings = counts.strings + 1 end
+    pos = at + 1
+  end
+  pos = 1
+  while true do
+    local at = find(line, "{{code ", pos)
+    if at == nil then break end
+    local s = at + 7
+    local e = s
+    while e <= #line and (is_ident(sub(line, e, e)) or sub(line, e, e) == ".") do e = e + 1 end
+    local parts = split(sub(line, s, e - 1), ".")
+    if #parts == 2 and parts[2] == FROM and (MODULE == "" or parts[1] == MODULE) then
+      local qualifier = parts[1]
+      if MOVE then qualifier = TO_MODULE end
+      line = sub(line, 1, s - 1) .. qualifier .. "." .. TO .. sub(line, e)
+      counts.renamed = counts.renamed + 1
+      counts.strings = counts.strings - 1
+    end
+    pos = s
+  end
+  return line
+end
+
+-- The module an `import` line names: `import game.Geom` gives name `Geom`,
+-- prefix `game.`, and `tail`, what follows (an `exposing [...]` or `as G`).
+function import_of(line)
+  local t = trim(line)
+  if not starts_with(t, "import ") then return nil end
+  local rest = trim(sub(t, 8))
+  local e = 1
+  while e <= #rest and (is_ident(sub(rest, e, e)) or sub(rest, e, e) == ".") do e = e + 1 end
+  local token = sub(rest, 1, e - 1)
+  local parts = split(token, ".")
+  local name = parts[#parts]
+  return {name = name, prefix = sub(token, 1, #token - #name), tail = trim(sub(rest, e)), indent = sub(line, 1, find(line, "import") - 1)}
+end
+
+-- Whether a line other than an import still says `MODULE.name` in code.
+function uses_module(lines)
+  local q = MODULE .. "."
+  for line in lines do
+    if import_of(line) == nil then
+      local pos = 1
+      while true do
+        local at = find(line, q, pos)
+        if at == nil then break end
+        pos = at + 1
+        local before = ""
+        if at > 1 then before = sub(line, at - 1, at - 1) end
+        if not is_ident(before) and before ~= "." and is_ident(sub(line, at + #q, at + #q)) and context_at(line, at) == "code" then return true end
+      end
+    end
+  end
+  return false
+end
+
+-- A moved file's import block: `import TO_MODULE` added beside the old
+-- import unless present (or this is TO_MODULE's own file), and the old one
+-- dropped when no `MODULE.` is left. Gives the lines, or a refusal.
+function move_imports(lines, own_file, counts)
+  local old_at = 0
+  local has_new = false
+  for i = 1, #lines do
+    local imp = import_of(lines[i])
+    if imp ~= nil and imp.name == MODULE and old_at == 0 then old_at = i end
+    if imp ~= nil and imp.name == TO_MODULE then has_new = true end
+  end
+  if old_at == 0 then return {refusal = "it says `" .. MODULE .. "." .. FROM .. "` but has no `import " .. MODULE .. "` line"} end
+  local old = import_of(lines[old_at])
+  if old.tail ~= "" and not starts_with(old.tail, "#") then return {refusal = "its `import " .. MODULE .. "` has `" .. old.tail .. "`, which a move doesn't follow: edit that import by hand first"} end
+  local keep_old = uses_module(lines)
+  local out = {}
+  for i = 1, #lines do
+    if i ~= old_at then
+      push(out, lines[i])
+    else
+      if keep_old then push(out, lines[i]) else counts.dropped = true end
+      if not has_new and not own_file then
+        push(out, old.indent .. "import " .. old.prefix .. TO_MODULE)
+        counts.added = true
+      end
+    end
+  end
+  return {lines = out, refusal = ""}
+end
+
+-- The character literals of one chunk's files, into `out` (`literal_spans`).
+function literal_spans_of_chunk(chunk, out)
+  for t in roc_tree(chunk) do
+    if t.err ~= "" then
+      out.refused[t.path] = t.err
+    else
+      local by_line = {}
+      for n in t.nodes do
+        if n.kind == "e-single-quote" then push_at(by_line, "" .. n.line, {column = n.column, end_column = n.end_column}) end
+      end
+      out.spans[t.path] = by_line
+    end
+  end
+  return nil
+end
+
+-- The character literals of the Roc files among `paths` that hold `FROM`
+-- and a `'`, as `{spans, refused}`: `spans[path]["<line>"]` is a list of
+-- `{column, end_column}`, and `refused[path]` is roc-ast's refusal of a file it can't
+-- parse. The files are parsed a chunk at a time, so only the spans are held.
+function literal_spans(paths)
+  local out = {spans = {}, refused = {}}
+  local wanted = {}
+  for p in paths do
+    if p ~= BOOK then
+      local text = read(p)
+      if contains(text, FROM) and contains(text, "'") then push(wanted, p) end
+    end
+  end
+  local i = 1
+  while i <= #wanted do
+    literal_spans_of_chunk(slice(wanted, i, min(i + 49, #wanted)), out)
+    yield()
+    i = i + 50
+  end
+  return out
+end
+
+-- Renames in one file and gives its counts, its new text, and a refusal
+-- (`""` when there is none). Nothing is written here. `literals` is
+-- `literal_spans`' answer.
+function rename_file(p, is_book, literals)
+  local counts = {renamed = 0, comments = 0, strings = 0, added = false, dropped = false}
+  local result = {counts = counts, text = "", refusal = ""}
+  local was = read(p)
+  local needle = FROM
+  if is_book then needle = "{{code " end
+  if not contains(was, FROM) or not contains(was, needle) then return result end
+  local in_module = MODULE ~= "" and basename(p) == MODULE .. ".roc"
+  if MOVE then in_module = basename(p) == TO_MODULE .. ".roc" end
+  if MODULE ~= "" and (MOVE or not in_module) and not is_book and not contains(was, MODULE .. "." .. FROM) then return result end
+  if has_key(literals.refused, p) then
+    result.refusal = "roc-ast can't parse it, so its character literals can't be told from names: " .. literals.refused[p]
+    return result
+  end
+  local spans = get(literals.spans, p, {})
+  local out = {}
+  local all = split(was, "\n")
+  for i = 1, #all do
+    local line = all[i]
+    if not contains(line, FROM) then
+      push(out, line)
+    elseif is_book then
+      push(out, rename_book_line(line, counts))
+    else
+      push(out, rename_line(line, in_module, counts, next_code_line(all, i), get(spans, "" .. i, {})))
+    end
+  end
+  if MOVE and not is_book and counts.renamed > 0 then
+    local m = move_imports(out, in_module, counts)
+    if m.refusal ~= "" then
+      result.refusal = m.refusal
+      return result
+    end
+    out = m.lines
+  end
+  result.text = join(out, "\n")
+  return result
+end
+
+function report_line(p, c)
+  local parts = {}
+  if c.renamed > 0 then push(parts, c.renamed .. " renamed") end
+  if c.comments > 0 then push(parts, c.comments .. " left in comments") end
+  if c.strings > 0 then push(parts, c.strings .. " left in strings") end
+  if c.added then push(parts, "import " .. TO_MODULE .. " added") end
+  if c.dropped then push(parts, "import " .. MODULE .. " dropped") end
+  return p .. ": " .. join(parts, ", ")
+end
+
+-- A copy of the plant folder `name` under `scratch`, its .roc and .md files.
+function copy_plants(name, scratch)
+  local dir = scratch .. "/" .. name
+  mkdir(dir)
+  for p in glob("cookbook:roc/plants/rename_identifier_by_whole_word/" .. name .. "/*") do
+    if ends_with(p, ".roc") or ends_with(p, ".md") then replace(dir .. "/" .. basename(p), read(p)) end
+  end
+  return dir
+end
+
+function child(args)
+  local argv = {"shale", real("cookbook:roc/rename_identifier_by_whole_word.shale")}
+  for a in args do push(argv, a) end
+  return run(argv, {timeout_ms = 60000, tail = 40})
+end
+
+function expect_ok(what, r, says, wrong)
+  if r.code ~= 0 then push(wrong, what .. ": exited " .. r.code .. ": " .. r.out) end
+  for s in says do
+    if not contains(r.out, s) then push(wrong, what .. ": the output doesn't say `" .. s .. "`: " .. r.out) end
+  end
+  return nil
+end
+
+function expect_same(what, got, want, wrong)
+  if read(got) ~= read(want) then push(wrong, what .. ": " .. got .. " is not as " .. want .. ":\n" .. read(got)) end
+  return nil
+end
+
+-- A move of `Geom.RiderPoint` to RiderView, with `more` arguments.
+function move_args(more)
+  local a = {"from=RiderPoint", "module=Geom", "to_module=RiderView"}
+  for x in more do push(a, x) end
+  return a
+end
+
+function self_test()
+  local plants = "cookbook:roc/plants/rename_identifier_by_whole_word/"
+  local scratch = fresh_dir("scratch:", "rename_identifier_by_whole_word")
+  local wrong = {}
+
+  local d = copy_plants("portion", scratch)
+  local r = child({"glob=" .. d .. "/*.roc", "from=portion", "to=share", "skip=" .. d .. "/data.roc"})
+  expect_ok("portion", r, {"shapes.roc: 8 renamed, 2 left in comments, 2 left in strings", "8 renamed in 1 file of 1"}, wrong)
+  expect_same("portion", d .. "/shapes.roc", plants .. "portion/shapes.want", wrong)
+  expect_same("portion's skip", d .. "/data.roc", plants .. "portion/data.roc", wrong)
+
+  d = copy_plants("portion", scratch .. "/fields")
+  r = child({"glob=" .. d .. "/shapes.roc", "from=portion", "to=share", "fields=1"})
+  expect_ok("portion fields=1", r, {"shapes.roc: 11 renamed, 2 left in comments, 2 left in strings"}, wrong)
+  expect_same("portion fields=1", d .. "/shapes.roc", plants .. "portion/shapes.fields.want", wrong)
+
+  -- A stacked annotation's first line ends in `,` as a field's line does:
+  -- the annotation is renamed, and the fields a line each are left.
+  d = copy_plants("stacked", scratch)
+  r = child({"glob=" .. d .. "/*.roc", "from=matches", "to=fits"})
+  expect_ok("stacked", r, {"Stacked.roc: 3 renamed", "3 renamed in 1 file of 1"}, wrong)
+  expect_same("stacked", d .. "/Stacked.roc", plants .. "stacked/Stacked.want", wrong)
+
+  -- Character literals are no names: `'c'` stays, and the quotes inside
+  -- `'\''` and `'"'` open no string, so the uses after them are renamed.
+  d = copy_plants("chars", scratch)
+  r = child({"glob=" .. d .. "/Chars.roc", "from=c", "to=byte"})
+  expect_ok("chars", r, {"Chars.roc: 10 renamed, 2 left in comments, 1 left in strings", "10 renamed in 1 file of 1"}, wrong)
+  expect_same("chars", d .. "/Chars.roc", plants .. "chars/Chars.want", wrong)
+  r = child({"glob=" .. d .. "/*.roc", "from=c", "to=byte"})
+  if r.code == 0 or not contains(r.out, "Broken.roc: roc-ast can't parse it") then push(wrong, "a file roc-ast refuses, holding a `'`, should be refused: exited " .. r.code .. ": " .. r.out) end
+  expect_same("chars, refused", d .. "/Chars.roc", plants .. "chars/Chars.want", wrong)
+
+  d = copy_plants("rider", scratch)
+  r = child({"glob=" .. d .. "/*.roc", "from=Rider", "to=Cyclist", "module=Ride", "book=" .. d .. "/book.md"})
+  expect_ok("Rider module=Ride", r, {"Ride.roc: 5 renamed", "Uses.roc: 1 renamed", "book.md: 2 renamed, 2 left in strings", "8 renamed in 3 files of 3"}, wrong)
+  expect_same("Rider module=Ride", d .. "/Ride.roc", plants .. "rider/Ride.want", wrong)
+  expect_same("Rider module=Ride", d .. "/Uses.roc", plants .. "rider/Uses.want", wrong)
+  expect_same("Rider module=Ride", d .. "/book.md", plants .. "rider/book.want", wrong)
+
+  d = copy_plants("portion", scratch .. "/dry")
+  r = child({"glob=" .. d .. "/*.roc", "from=portion", "to=share", "dry=1"})
+  expect_ok("dry=1", r, {"shapes.roc: 8 renamed", "data.roc: 2 renamed", "dry run, nothing written"}, wrong)
+  expect_same("dry=1", d .. "/shapes.roc", plants .. "portion/shapes.roc", wrong)
+  expect_same("dry=1", d .. "/data.roc", plants .. "portion/data.roc", wrong)
+
+  r = child({"glob=" .. d .. "/*.roc", "from=portio", "to=share"})
+  if r.code == 0 or not contains(r.out, "nothing matched") then push(wrong, "a rename of nothing (`portio`) should fail saying so: exited " .. r.code .. ": " .. r.out) end
+  r = child({"glob=" .. d .. "/*.roc", "from=portion", "to=share", "module=Ride"})
+  if r.code == 0 or not contains(r.out, "nothing matched") then push(wrong, "a rename of `Ride.portion`, which no file has, should fail: exited " .. r.code .. ": " .. r.out) end
+
+  d = copy_plants("move", scratch)
+  r = child(move_args({"glob=" .. d .. "/*.roc", "skip=" .. d .. "/Exposes.roc", "book=" .. d .. "/book.md"}))
+  expect_ok("move", r, {"Drops.roc: 1 renamed, 1 left in comments, 1 left in strings, import RiderView added, import Geom dropped", "Keeps.roc: 2 renamed, import RiderView added", "Already.roc: 1 renamed, import Geom dropped", "RiderView.roc: 1 renamed, import Geom dropped", "book.md: 1 renamed", "move `Geom.RiderPoint` to `RiderView.RiderPoint`: 6 renamed in 5 files of 6"}, wrong)
+  if contains(r.out, "Keeps.roc: 2 renamed, import RiderView added, import Geom dropped") then push(wrong, "move: Keeps.roc still says `Geom.near` and must keep its import: " .. r.out) end
+  if contains(r.out, "Geom.roc:") then push(wrong, "move: Geom.roc has no `Geom.RiderPoint` and should be left: " .. r.out) end
+  for name in {"Drops", "Keeps", "Already", "RiderView"} do
+    expect_same("move", d .. "/" .. name .. ".roc", plants .. "move/" .. name .. ".want", wrong)
+  end
+  expect_same("move", d .. "/book.md", plants .. "move/book.want", wrong)
+  expect_same("move", d .. "/Geom.roc", plants .. "move/Geom.roc", wrong)
+
+  d = copy_plants("move", scratch .. "/move_dry")
+  r = child(move_args({"glob=" .. d .. "/*.roc", "skip=" .. d .. "/Exposes.roc", "dry=1"}))
+  expect_ok("move dry=1", r, {"Drops.roc: 1 renamed", "import Geom dropped", "5 renamed in 4 files of 5 (dry run, nothing written)"}, wrong)
+  expect_same("move dry=1", d .. "/Drops.roc", plants .. "move/Drops.roc", wrong)
+
+  r = child(move_args({"glob=" .. d .. "/*.roc"}))
+  if r.code == 0 or not contains(r.out, "Exposes.roc: its `import Geom` has `exposing [near]`") then push(wrong, "a move into a file whose `import Geom` exposes should be refused: exited " .. r.code .. ": " .. r.out) end
+  expect_same("a refused move", d .. "/Drops.roc", plants .. "move/Drops.roc", wrong)
+  expect_same("a refused move", d .. "/Exposes.roc", plants .. "move/Exposes.roc", wrong)
+
+  r = child({"glob=" .. d .. "/*.roc", "from=RiderPont", "module=Geom", "to_module=RiderView"})
+  if r.code == 0 or not contains(r.out, "nothing matched") then push(wrong, "a move of nothing (`RiderPont`) should fail saying so: exited " .. r.code .. ": " .. r.out) end
+
+  remove_tree(scratch)
+  for w in wrong do print("FAIL " .. w) end
+  if #wrong > 0 then fail("rename_identifier_by_whole_word self_test: " .. #wrong .. " wrong") end
+  print("rename_identifier_by_whole_word (Roc) self_test: PASS (portion, fields=1, character literals and a file roc-ast refuses, a stacked annotation beside fields a line each, module=Ride with a book, skip=, dry=1, two renames of nothing that fail, and to_module= moves: imports added, kept, dropped, already there, refused, dry, and of nothing)")
+  return nil
+end
+
+function rename_tree()
+  if not is_roc_name(FROM) or not is_roc_name(TO) then fail("rename_identifier_by_whole_word: from= and to= must each be an identifier, e.g. from=portion to=share") end
+  if not MOVE and arg("to", "") == "" then fail("rename_identifier_by_whole_word: to= is missing, e.g. from=portion to=share") end
+  if FROM == TO and not MOVE then fail("rename_identifier_by_whole_word: from= and to= are the same") end
+  if MODULE ~= "" and not is_roc_name(MODULE) then fail("rename_identifier_by_whole_word: module= must be a module's name, e.g. module=Ride") end
+  if MOVE then
+    if MODULE == "" or not is_roc_name(TO_MODULE) then fail("rename_identifier_by_whole_word: to_module= moves a name from module= to another module, e.g. module=Geom to_module=RiderView") end
+    if MODULE == TO_MODULE then fail("rename_identifier_by_whole_word: module= and to_module= are the same") end
+    if FIELDS then fail("rename_identifier_by_whole_word: fields=1 and to_module= don't go together: a move takes `Mod.name` alone") end
+  end
+  local skipped = {}
+  if SKIP ~= "" then
+    for g in split(SKIP, ",") do
+      for p in glob(trim(g)) do skipped[p] = true end
+    end
+  end
+  local paths = {}
+  for g in split(GLOB, ",") do
+    for p in glob(trim(g)) do
+      if not has_key(skipped, p) then push(paths, p) end
+    end
+  end
+  if BOOK ~= "" then push(paths, BOOK) end
+  local total = 0
+  local files = 0
+  local changed = {}
+  local refusals = {}
+  local literals = literal_spans(paths)
+  for p in paths do
+    local f = rename_file(p, p == BOOK, literals)
+    local c = f.counts
+    if f.refusal ~= "" then
+      push(refusals, p .. ": " .. f.refusal)
+    else
+      if c.renamed + c.comments + c.strings > 0 then print(report_line(p, c)) end
+      if c.renamed > 0 then
+        total = total + c.renamed
+        files = files + 1
+        push(changed, {path = p, text = f.text})
+      end
+    end
+    yield()
+  end
+  -- Every file is written only once all of them have been read, so a
+  -- refusal anywhere writes none.
+  if #refusals == 0 and not DRY then
+    for f in changed do replace(f.path, f.text) end
+  end
+  local verb = "rename "
+  local scope = "`" .. FROM .. "`"
+  if MODULE ~= "" then scope = "`" .. MODULE .. "." .. FROM .. "`" end
+  local target = "`" .. TO .. "`"
+  if MOVE then
+    verb = "move "
+    target = "`" .. TO_MODULE .. "." .. TO .. "`"
+  end
+  local plural = "s"
+  if files == 1 then plural = "" end
+  local dry = ""
+  if DRY then dry = " (dry run, nothing written)" end
+  return {total = total, refusals = refusals, line = verb .. scope .. " to " .. target .. ": " .. total .. " renamed in " .. files .. " file" .. plural .. " of " .. #paths .. dry}
+end
+
+-- This `fail` stands at the top level so the summary is the last line a
+-- caller reads: a stop inside a function prints the calls after it.
+if SELF_TEST then
+  self_test()
+else
+  local r = rename_tree()
+  for w in r.refusals do print("refused " .. w) end
+  print(r.line)
+  if #r.refusals > 0 then fail("rename_identifier_by_whole_word: " .. #r.refusals .. " file(s) refused, nothing written") end
+  if r.total == 0 then fail("rename_identifier_by_whole_word: nothing matched " .. r.line) end
+end

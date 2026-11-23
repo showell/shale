@@ -1,0 +1,107 @@
+-- This recipe finds names and top comments that say less than they should: a
+-- pure function named like a mutation, an abbreviation in a name, and a
+-- module with no doc or with history where its doc belongs. It is written in
+-- Roc, the app cookbook/roc/find_names_and_docs_that_say_too_little/find_names_and_docs_that_say_too_little.roc, the
+-- modules beside it (one a check) and what they read, the cookbook's Roc
+-- library (cookbook/roc/lib/), run on Shale's Roc platform
+-- (roc_platform/README.md); this file is its launcher, so it is
+-- launched as every Shale recipe is:
+--
+--   cd <repo> && shale <shale>/cookbook/roc/find_names_and_docs_that_say_too_little.shale
+--   shale cookbook:roc/find_names_and_docs_that_say_too_little.shale self_test=1
+--
+-- The arguments:
+--   glob           the files to check, `**/*.roc` by default;
+--   abbreviations  the file of abbreviations, one a line, by default
+--                  cookbook/words/abbreviations.txt, for a project with
+--                  words of its own to add;
+--   words          the English words of two to four letters a name may hold,
+--                  by default cookbook/words/short_words.txt;
+--   accepted       a project's file of the short terms a name may hold though
+--                  they are no English word, each with its reason, added to
+--                  cookbook/words/accepted_terms.txt (`html`, `url`, `utf8`);
+--   terms          a project's file of fixed terms that open a name and only
+--                  look like a verb, one a line, such as `set_cookie` for
+--                  HTTP's header, which `pure_mutator` leaves alone;
+--   house          with `house=0`, leave out what is only our house style
+--                  (cookbook/roc/house.shale), for another project's code;
+--   self_test      with `self_test=1`, check the plants in
+--                  `cookbook/roc/plants/find_names_and_docs_that_say_too_little/`.
+--
+-- The checks read top-level names, module members and the record fields of
+-- types and annotations; `abbreviation` reads module names, parameters,
+-- locals and tags too:
+--
+--   pure_mutator  An annotated pure function whose first word says it changes
+--                 something (`push`, `fill`, `set`, `append`, `add`), though
+--                 nothing is being added to. Something is when the result is
+--                 the first argument's type, on its own, as a `Try`'s value,
+--                 or as a field of a record or of an alias in the same file
+--                 (`Try({ users : Users, user : User }, [Full])`), or when the
+--                 first argument is a record with a field of the result's
+--                 type (`{ so_far : List(U8), count : U64 }`). A first word
+--                 `get` always counts, because a Roc function's plain name
+--                 is already what it gets.
+--   abbreviation  A name with a word short for another, since Roc's style
+--                 guide prefers the plain word: a word from the
+--                 abbreviations file, whatever its length (`delim`,
+--                 `param`, `args`), the plural of an abbreviation (`attrs`,
+--                 `params`), or a word of two to four letters (`st`, `tks`,
+--                 `Inl`, `Emph`) that is no English word of the words file,
+--                 no accepted term, no plural of either, and no letter and
+--                 an axis (`dx`). A term accepted, the cookbook's or the
+--                 project's, is never one, even one the abbreviations file
+--                 lists (a project's `args`). A word ending as no plural
+--                 does (`class`, `bonus`, `alias`) is no plural. A type's words are split at
+--                 its capitals, so `TkKind` holds `tk`. A word's marks and
+--                 trailing digits go first (`buf0` is `buf`), and a letter
+--                 alone is find_awkward_names' `short_name`'s. The names read are a
+--                 module's own (its file's), every type, member, field and
+--                 top-level value, every parameter and local, and every tag
+--                 in a union, a pattern or an expression, split at its
+--                 capitals as a type is (`NoRef` holds `ref`), but Roc's own
+--                 `Ok` and `Err`. A name is reported once a file.
+--   module_doc    A module with no `##` doc at the top of its file or above
+--                 its type, or a top comment or a doc above its type that
+--                 tells history (`originally`, `used to`, `emitted`,
+--                 `ported`, even wrapped across two lines) instead of what
+--                 the module does. A
+--                 module its package or platform keeps to itself has no public
+--                 doc to write, so any comment there will do. App files are
+--                 left out, as they have no module type.
+--
+-- The output is the counts, one line per finding, and the counts again
+-- (cookbook/findings.shale). The run fails if there are findings, or if
+-- any file doesn't parse, and the files that do parse are judged either way.
+--
+-- **The launcher** hands every value it is given to roc_platform/run.shale in
+-- the checkout this cookbook is in (the `cookbook` mount's parent), which
+-- builds the Roc there (cached; the first build after a change to C Shale
+-- compiles the platform's host, 25 to 50 s) and runs the program rooted
+-- here, so `glob=` and the word files are this root's paths, as they were
+-- the Shale recipe's. A value the Roc script reads no `Shale.arg!` of stops
+-- the run before anything is built. Its output is the program's, then the
+-- launchers' own stops when it stops. `reads=inputs` builds and runs
+-- nothing, and prints the real path of each file the program is built from,
+-- one a line (run.shale's header), for a caller's cache key. Its goldens,
+-- the Shale original's output on the plants, are held by
+-- cookbook/roc/find_names_and_docs_that_say_too_little/check_goldens.shale.
+-- budget: programs=10 output_bytes=8000000
+
+const SCRIPT = "cookbook/roc/find_names_and_docs_that_say_too_little/find_names_and_docs_that_say_too_little.roc"
+const CHECKOUT = dirname(dirname(real("cookbook:README.md")))
+const HERE = real(".")
+
+-- `self_test` is read here by name, as the cookbook's full tier finds the
+-- recipes it runs `self_test=1` of. `arg_names()` is every value given; the
+-- rest are read by a name made as the run goes, so Shale's own check cannot
+-- see them: run.shale holds them to the script's reads.
+const SELF_TEST = arg("self_test", "")
+local values = {"script=" .. SCRIPT, "in=" .. HERE}
+if SELF_TEST ~= "" then push(values, "self_test=" .. SELF_TEST) end
+for name in arg_names() do
+  if name ~= "self_test" then push(values, name .. "=" .. arg(name, "")) end
+end
+local r = run({"shale", "--root", CHECKOUT, CHECKOUT .. "/roc_platform/run.shale", "--args-stdin"}, {stdin = join(values, "\n") .. "\n", timeout_ms = 1800000, whole = 8000000})
+print(trim_end(r.out))
+if r.code ~= 0 then fail("find_names_and_docs_that_say_too_little: the Roc program stopped (exit " .. r.code .. ")") end

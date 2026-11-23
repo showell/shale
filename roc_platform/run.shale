@@ -23,7 +23,7 @@
 --
 -- `in=DIR` (an absolute folder) runs the program rooted there instead, with
 -- the build still this checkout's: a cookbook launcher's way to run a Roc
--- recipe in another repository's root (cookbook/roc/find_unclear_names.shale).
+-- recipe in another repository's root (cookbook/roc/find_names_and_docs_that_say_too_little.shale).
 --
 -- `reads=inputs` builds and runs nothing: it prints the real path of each
 -- file the program is built from, one a line (the script's files, the

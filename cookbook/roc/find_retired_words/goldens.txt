@@ -1,0 +1,297 @@
+=== names.roc words=words.txt (exit 1)
+find_retired_words (Roc): 1 files; retired_name 9, retired_comment 0
+cookbook:roc/plants/find_retired_words/names.roc:3: retired_name: lib.Journey: journey is ride here
+cookbook:roc/plants/find_retired_words/names.roc:6: retired_name: tilt_step: tilt is lean here
+cookbook:roc/plants/find_retired_words/names.roc:7: retired_name: tilt_step: tilt is lean here
+cookbook:roc/plants/find_retired_words/names.roc:9: retired_name: RideTour: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:9: retired_name: TourStop: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:11: retired_name: tour_stops: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:12: retired_name: tour_stops: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:14: retired_name: TourStop: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:16: retired_name: .tilt: tilt is lean here
+find_retired_words (Roc): 1 files; retired_name 9, retired_comment 0
+── stop: fail: find_retired_words (Roc): 1 files; retired_name 9, retired_comment 0
+=== names_unseen.roc words=words.txt (exit 1)
+find_retired_words (Roc): 1 files; retired_name 3, retired_comment 0
+cookbook:roc/plants/find_retired_words/names_unseen.roc:3: retired_name: tilt_now: tilt is lean here
+cookbook:roc/plants/find_retired_words/names_unseen.roc:7: retired_name: tilt_of: tilt is lean here
+cookbook:roc/plants/find_retired_words/names_unseen.roc:12: retired_name: tilt_pair: tilt is lean here
+find_retired_words (Roc): 1 files; retired_name 3, retired_comment 0
+── stop: fail: find_retired_words (Roc): 1 files; retired_name 3, retired_comment 0
+=== comments.roc words=words.txt (exit 1)
+find_retired_words (Roc): 1 files; retired_name 0, retired_comment 3
+cookbook:roc/plants/find_retired_words/comments.roc:2: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/comments.roc:3: retired_comment: journey is ride here
+cookbook:roc/plants/find_retired_words/comments.roc:4: retired_comment: tour is ride here
+find_retired_words (Roc): 1 files; retired_name 0, retired_comment 3
+── stop: fail: find_retired_words (Roc): 1 files; retired_name 0, retired_comment 3
+=== clean.roc words=words.txt (exit 0)
+find_retired_words (Roc): 1 files; retired_name 0, retired_comment 0
+=== broken/*.roc words=words.txt (exit 1)
+find_retired_words (Roc): 2 files; retired_name 1, retired_comment 0
+cookbook:roc/plants/find_retired_words/broken/read.roc:2: retired_name: tilt: tilt is lean here
+find_retired_words (Roc): 2 files; retired_name 1, retired_comment 0
+refused: cookbook:roc/plants/find_retired_words/broken/refused.roc: 4 parse problem(s): a file that does not parse has no tree to hunt
+── stop: fail: find_retired_words: roc-ast refused 1 files (named above), which have no tree to judge; every other file was judged
+=== clean.roc (exit 1)
+── stop: fail: find_retired_words: give words=<the project's file of decided words>
+=== clean.roc words=no_such.txt (exit 1)
+── stop: fail: find_retired_words: no words file cookbook:roc/plants/find_retired_words/no_such.txt
+=== clean.roc words=words_malformed.txt (exit 1)
+── stop: fail: find_retired_words: cookbook:roc/plants/find_retired_words/words_malformed.txt:2: expected `kept: retired, retired`, in lower case
+=== clean.roc words=words_twice.txt (exit 1)
+── stop: fail: find_retired_words: cookbook:roc/plants/find_retired_words/words_twice.txt:2: `tilt` is retired twice
+=== clean.roc words=words_both.txt (exit 1)
+── stop: fail: find_retired_words: cookbook:roc/plants/find_retired_words/words_both.txt: `tilt` is both kept and retired
+=== clean.roc words=words_both_order.txt (exit 1)
+── stop: fail: find_retired_words: cookbook:roc/plants/find_retired_words/words_both_order.txt: `tilt` is both kept and retired
+=== clean.roc words=words_upper.txt (exit 1)
+── stop: fail: find_retired_words: cookbook:roc/plants/find_retired_words/words_upper.txt:2: expected `kept: retired, retired`, in lower case
+=== clean.roc words=words_twice_line.txt (exit 1)
+── stop: fail: find_retired_words: cookbook:roc/plants/find_retired_words/words_twice_line.txt:1: `tilt` is retired twice
+=== clean.roc words=words_space_comma.txt (exit 1)
+── stop: fail: find_retired_words: cookbook:roc/plants/find_retired_words/words_space_comma.txt:1: expected `kept: retired, retired`, in lower case
+=== *.roc words=words.txt (exit 1)
+find_retired_words (Roc): 5 files; retired_name 22, retired_comment 11
+cookbook:roc/plants/find_retired_words/comments.roc:2: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/comments.roc:3: retired_comment: journey is ride here
+cookbook:roc/plants/find_retired_words/comments.roc:4: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:1: retired_name: Tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:1: retired_name: tilt_2: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:3: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:3: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:4: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:5: retired_name: Tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:5: retired_name: TiltLeft: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:7: retired_name: tilt_2: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:8: retired_name: tilt_2: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:12: retired_name: tilt_tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:13: retired_name: tilt_tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:13: retired_name: x__tilt__y: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:14: retired_comment: journey is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:15: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:16: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:16: retired_name: x__tilt__y: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:18: retired_comment: journey is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:18: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/names.roc:3: retired_name: lib.Journey: journey is ride here
+cookbook:roc/plants/find_retired_words/names.roc:6: retired_name: tilt_step: tilt is lean here
+cookbook:roc/plants/find_retired_words/names.roc:7: retired_name: tilt_step: tilt is lean here
+cookbook:roc/plants/find_retired_words/names.roc:9: retired_name: RideTour: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:9: retired_name: TourStop: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:11: retired_name: tour_stops: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:12: retired_name: tour_stops: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:14: retired_name: TourStop: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:16: retired_name: .tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/names_unseen.roc:3: retired_name: tilt_now: tilt is lean here
+cookbook:roc/plants/find_retired_words/names_unseen.roc:7: retired_name: tilt_of: tilt is lean here
+cookbook:roc/plants/find_retired_words/names_unseen.roc:12: retired_name: tilt_pair: tilt is lean here
+find_retired_words (Roc): 5 files; retired_name 22, retired_comment 11
+── stop: fail: find_retired_words (Roc): 5 files; retired_name 22, retired_comment 11
+=== edges.roc words=words.txt (exit 1)
+find_retired_words (Roc): 1 files; retired_name 10, retired_comment 8
+cookbook:roc/plants/find_retired_words/edges.roc:1: retired_name: Tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:1: retired_name: tilt_2: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:3: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:3: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:4: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:5: retired_name: Tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:5: retired_name: TiltLeft: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:7: retired_name: tilt_2: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:8: retired_name: tilt_2: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:12: retired_name: tilt_tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:13: retired_name: tilt_tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:13: retired_name: x__tilt__y: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:14: retired_comment: journey is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:15: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:16: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:16: retired_name: x__tilt__y: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:18: retired_comment: journey is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:18: retired_comment: tilt is lean here
+find_retired_words (Roc): 1 files; retired_name 10, retired_comment 8
+── stop: fail: find_retired_words (Roc): 1 files; retired_name 10, retired_comment 8
+=== *.roc words=words_edges.txt (exit 1)
+find_retired_words (Roc): 5 files; retired_name 22, retired_comment 13
+cookbook:roc/plants/find_retired_words/comments.roc:2: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/comments.roc:3: retired_comment: journey is ride here
+cookbook:roc/plants/find_retired_words/comments.roc:4: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:1: retired_name: Tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:1: retired_name: tilt_2: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:3: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:3: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:4: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:5: retired_name: Tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:5: retired_name: TiltLeft: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:7: retired_name: tilt_2: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:8: retired_name: tilt_2: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:12: retired_name: tilt_tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:13: retired_name: tilt_tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:13: retired_name: x__tilt__y: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:14: retired_comment: journey is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:15: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:16: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:16: retired_name: x__tilt__y: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:18: retired_comment: journey is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:18: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:19: retired_comment: slant is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:19: retired_comment: trip is ride here
+cookbook:roc/plants/find_retired_words/names.roc:3: retired_name: lib.Journey: journey is ride here
+cookbook:roc/plants/find_retired_words/names.roc:6: retired_name: tilt_step: tilt is lean here
+cookbook:roc/plants/find_retired_words/names.roc:7: retired_name: tilt_step: tilt is lean here
+cookbook:roc/plants/find_retired_words/names.roc:9: retired_name: RideTour: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:9: retired_name: TourStop: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:11: retired_name: tour_stops: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:12: retired_name: tour_stops: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:14: retired_name: TourStop: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:16: retired_name: .tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/names_unseen.roc:3: retired_name: tilt_now: tilt is lean here
+cookbook:roc/plants/find_retired_words/names_unseen.roc:7: retired_name: tilt_of: tilt is lean here
+cookbook:roc/plants/find_retired_words/names_unseen.roc:12: retired_name: tilt_pair: tilt is lean here
+find_retired_words (Roc): 5 files; retired_name 22, retired_comment 13
+── stop: fail: find_retired_words (Roc): 5 files; retired_name 22, retired_comment 13
+=== edges.roc words=words_edges.txt (exit 1)
+find_retired_words (Roc): 1 files; retired_name 10, retired_comment 10
+cookbook:roc/plants/find_retired_words/edges.roc:1: retired_name: Tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:1: retired_name: tilt_2: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:3: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:3: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:4: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:5: retired_name: Tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:5: retired_name: TiltLeft: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:7: retired_name: tilt_2: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:8: retired_name: tilt_2: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:12: retired_name: tilt_tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:13: retired_name: tilt_tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:13: retired_name: x__tilt__y: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:14: retired_comment: journey is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:15: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:16: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:16: retired_name: x__tilt__y: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:18: retired_comment: journey is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:18: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:19: retired_comment: slant is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:19: retired_comment: trip is ride here
+find_retired_words (Roc): 1 files; retired_name 10, retired_comment 10
+── stop: fail: find_retired_words (Roc): 1 files; retired_name 10, retired_comment 10
+=== *.roc words=words_crlf.txt (exit 1)
+find_retired_words (Roc): 5 files; retired_name 22, retired_comment 11
+cookbook:roc/plants/find_retired_words/comments.roc:2: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/comments.roc:3: retired_comment: journey is ride here
+cookbook:roc/plants/find_retired_words/comments.roc:4: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:1: retired_name: Tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:1: retired_name: tilt_2: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:3: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:3: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:4: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:5: retired_name: Tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:5: retired_name: TiltLeft: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:7: retired_name: tilt_2: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:8: retired_name: tilt_2: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:12: retired_name: tilt_tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:13: retired_name: tilt_tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:13: retired_name: x__tilt__y: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:14: retired_comment: journey is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:15: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:16: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:16: retired_name: x__tilt__y: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:18: retired_comment: journey is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:18: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/names.roc:3: retired_name: lib.Journey: journey is ride here
+cookbook:roc/plants/find_retired_words/names.roc:6: retired_name: tilt_step: tilt is lean here
+cookbook:roc/plants/find_retired_words/names.roc:7: retired_name: tilt_step: tilt is lean here
+cookbook:roc/plants/find_retired_words/names.roc:9: retired_name: RideTour: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:9: retired_name: TourStop: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:11: retired_name: tour_stops: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:12: retired_name: tour_stops: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:14: retired_name: TourStop: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:16: retired_name: .tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/names_unseen.roc:3: retired_name: tilt_now: tilt is lean here
+cookbook:roc/plants/find_retired_words/names_unseen.roc:7: retired_name: tilt_of: tilt is lean here
+cookbook:roc/plants/find_retired_words/names_unseen.roc:12: retired_name: tilt_pair: tilt is lean here
+find_retired_words (Roc): 5 files; retired_name 22, retired_comment 11
+── stop: fail: find_retired_words (Roc): 5 files; retired_name 22, retired_comment 11
+=== edges.roc words=words_crlf.txt (exit 1)
+find_retired_words (Roc): 1 files; retired_name 10, retired_comment 8
+cookbook:roc/plants/find_retired_words/edges.roc:1: retired_name: Tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:1: retired_name: tilt_2: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:3: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:3: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:4: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:5: retired_name: Tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:5: retired_name: TiltLeft: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:7: retired_name: tilt_2: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:8: retired_name: tilt_2: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:12: retired_name: tilt_tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:13: retired_name: tilt_tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:13: retired_name: x__tilt__y: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:14: retired_comment: journey is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:15: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:16: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:16: retired_name: x__tilt__y: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:18: retired_comment: journey is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:18: retired_comment: tilt is lean here
+find_retired_words (Roc): 1 files; retired_name 10, retired_comment 8
+── stop: fail: find_retired_words (Roc): 1 files; retired_name 10, retired_comment 8
+=== *.roc words=words_empty.txt (exit 0)
+find_retired_words (Roc): 5 files; retired_name 0, retired_comment 0
+=== edges.roc words=words_empty.txt (exit 0)
+find_retired_words (Roc): 1 files; retired_name 0, retired_comment 0
+=== **/*.roc words=words.txt (exit 1)
+find_retired_words (Roc): 7 files; retired_name 23, retired_comment 11
+cookbook:roc/plants/find_retired_words/broken/read.roc:2: retired_name: tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/comments.roc:2: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/comments.roc:3: retired_comment: journey is ride here
+cookbook:roc/plants/find_retired_words/comments.roc:4: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:1: retired_name: Tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:1: retired_name: tilt_2: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:3: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:3: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:4: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:5: retired_name: Tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:5: retired_name: TiltLeft: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:7: retired_name: tilt_2: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:8: retired_name: tilt_2: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:12: retired_name: tilt_tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:13: retired_name: tilt_tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:13: retired_name: x__tilt__y: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:14: retired_comment: journey is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:15: retired_comment: tour is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:16: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:16: retired_name: x__tilt__y: tilt is lean here
+cookbook:roc/plants/find_retired_words/edges.roc:18: retired_comment: journey is ride here
+cookbook:roc/plants/find_retired_words/edges.roc:18: retired_comment: tilt is lean here
+cookbook:roc/plants/find_retired_words/names.roc:3: retired_name: lib.Journey: journey is ride here
+cookbook:roc/plants/find_retired_words/names.roc:6: retired_name: tilt_step: tilt is lean here
+cookbook:roc/plants/find_retired_words/names.roc:7: retired_name: tilt_step: tilt is lean here
+cookbook:roc/plants/find_retired_words/names.roc:9: retired_name: RideTour: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:9: retired_name: TourStop: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:11: retired_name: tour_stops: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:12: retired_name: tour_stops: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:14: retired_name: TourStop: tour is ride here
+cookbook:roc/plants/find_retired_words/names.roc:16: retired_name: .tilt: tilt is lean here
+cookbook:roc/plants/find_retired_words/names_unseen.roc:3: retired_name: tilt_now: tilt is lean here
+cookbook:roc/plants/find_retired_words/names_unseen.roc:7: retired_name: tilt_of: tilt is lean here
+cookbook:roc/plants/find_retired_words/names_unseen.roc:12: retired_name: tilt_pair: tilt is lean here
+find_retired_words (Roc): 7 files; retired_name 23, retired_comment 11
+refused: cookbook:roc/plants/find_retired_words/broken/refused.roc: 4 parse problem(s): a file that does not parse has no tree to hunt
+── stop: fail: find_retired_words: roc-ast refused 1 files (named above), which have no tree to judge; every other file was judged
+=== nothing_here/*.roc words=words.txt (exit 0)
+find_retired_words (Roc): 0 files; retired_name 0, retired_comment 0
+=== a glob Shale refuses (exit 1)
+── stop: argument: `exists`: "/etc" is absolute: paths are relative to the data root, or a mount's, `name:path` (`shale --help` lists this box's mounts)
+=== a glob Shale refuses, no words (exit 1)
+── stop: fail: find_retired_words: give words=<the project's file of decided words>
+=== a bad words file and a glob Shale refuses (exit 1)
+── stop: fail: find_retired_words: cookbook:roc/plants/find_retired_words/words_malformed.txt:2: expected `kept: retired, retired`, in lower case
+=== self_test=1 (exit 0)
+ok   cookbook:roc/plants/find_retired_words/names.roc
+ok   cookbook:roc/plants/find_retired_words/names_unseen.roc
+ok   cookbook:roc/plants/find_retired_words/comments.roc
+ok   cookbook:roc/plants/find_retired_words/clean.roc
+ok   cookbook:roc/plants/find_retired_words/broken/*.roc
+ok   cookbook:roc/plants/find_retired_words/clean.roc
+ok   cookbook:roc/plants/find_retired_words/clean.roc
+ok   cookbook:roc/plants/find_retired_words/clean.roc
+ok   cookbook:roc/plants/find_retired_words/clean.roc
+ok   cookbook:roc/plants/find_retired_words/clean.roc
+find_retired_words self_test: PASS (10 rows: each plant gives its findings and a nonzero exit, each clean case none and exit 0)

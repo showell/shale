@@ -484,7 +484,7 @@ end
 
 -- The value the node `i` names: an identifier's name, or a punned record
 -- field's, as `still_shapes` in `{ still_shapes }`, which roc-ast keeps as a
--- `field` with no identifier under it (check_boundaries.shale reads it so too).
+-- `field` with no identifier under it (find_functions_and_parameters_that_dont_earn_their_keep.shale reads it so too).
 -- Any other node names none, "".
 function value_named(tree, i)
   local n = tree[i]

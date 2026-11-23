@@ -1,0 +1,1230 @@
+=== glob=Rewrite.roc types=0 apply=1 (exit 0)
+files 1, candidates 2, rewritten 2, left 0, peer_receiver 0, programs 7 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 0
+--- Rewrite.roc
+## A call that must be rewritten: its first argument's type is its module's.
+Rewrite := [].{
+	count : List(U64) -> U64
+	count = |xs| xs.len()
+
+	joined : Str, Str -> Str
+	joined = |a, b| a.concat(b)
+}
+
+expect Rewrite.count([1, 2]) == 2
+expect Rewrite.joined("a", "b") == "ab"
+=== glob=Rewrite.roc types=0 (exit 0)
+dry run: files 1, candidates 2, rewritten 2, left 0, peer_receiver 0, programs 5 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 0
+=== glob=Chained.roc types=0 apply=1 (exit 0)
+files 1, candidates 2, rewritten 2, left 0, peer_receiver 0, programs 7 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 0
+--- Chained.roc
+## A chained call, turned from the inside out.
+Chained := [].{
+	big : List(U64) -> U64
+	big = |xs| xs.keep_if(|x| x > 1).len()
+}
+
+expect Chained.big([1, 2, 3]) == 2
+=== glob=FunctionValue.roc types=0 apply=1 (exit 0)
+files 1, candidates 1, rewritten 1, left 0, peer_receiver 0, programs 7 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 0
+--- FunctionValue.roc
+## A call passed as a function value: the outer call turns, `Str.trim` stays.
+FunctionValue := [].{
+	trimmed : List(Str) -> List(Str)
+	trimmed = |xs| xs.map(Str.trim)
+}
+
+expect FunctionValue.trimmed([" a "]) == ["a"]
+=== glob=Pipe.roc types=0 apply=1 (exit 0)
+files 1, candidates 1, rewritten 0, left 1, peer_receiver 0, programs 1 (checks: 0 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+Pipe.roc:4: List.concat: the right of a `|>`, whose first argument the pipe gives
+files 1, candidates 1, rewritten 0, left 1, peer_receiver 0, programs 1 (checks: 0 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+=== glob=Own.roc types=0 apply=1 (exit 0)
+files 1, candidates 0, rewritten 0, left 0, peer_receiver 0, programs 1 (checks: 0 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+=== glob=OtherType.roc types=0 apply=1 (exit 0)
+files 1, candidates 2, rewritten 1, left 1, peer_receiver 0, programs 8 (checks: 0 confirming proven calls, 2 in trial rounds), made_unused_import 0, made_long_line 0
+OtherType.roc:8: Str.from_utf8: roc check: missing method
+files 1, candidates 2, rewritten 1, left 1, peer_receiver 0, programs 8 (checks: 0 confirming proven calls, 2 in trial rounds), made_unused_import 0, made_long_line 0
+--- OtherType.roc
+## A first argument of another type (a list, for `Str`) must stay, the
+## compiler saying why; the file's other call is still turned.
+OtherType := [].{
+	size : List(U8) -> U64
+	size = |bytes| bytes.len()
+
+	text : List(U8) -> Str
+	text = |bytes| Str.from_utf8(bytes) ?? ""
+}
+
+expect OtherType.size([1]) == 1
+expect OtherType.text([97]) == "a"
+=== glob=Decode.roc root=Breaks.roc types=0 apply=1 (exit 0)
+files 1, candidates 1, rewritten 0, left 1, peer_receiver 0, programs 5 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 0
+Decode.roc:7: Str.from_utf8: roc check: missing method at Breaks.roc:6, on no rewritten call; the file is put back
+files 1, candidates 1, rewritten 0, left 1, peer_receiver 0, programs 5 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 0
+=== glob=Breaks.roc types=0 apply=1 (exit 0)
+files 1, candidates 1, rewritten 0, left 1, peer_receiver 0, programs 5 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 0
+Breaks.roc:6: Decode.decoded: roc check: missing method
+files 1, candidates 1, rewritten 0, left 1, peer_receiver 0, programs 5 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 0
+=== glob=Matched.roc types=0 apply=1 (exit 0)
+files 1, candidates 2, rewritten 1, left 1, peer_receiver 0, programs 6 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 0
+Matched.roc:6: Str.concat: an argument with no span in the tree (e-match), whose text cannot be moved
+files 1, candidates 2, rewritten 1, left 1, peer_receiver 0, programs 6 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 0
+--- Matched.roc
+## A call whose first argument is a `match`, which the compiler's tree gives
+## no span: its text cannot be moved, so the call stays, named, and the
+## file's other call is still turned.
+Matched := [].{
+	word : U64 -> Str
+	word = |n| Str.concat(match n { 0 => "none", _ => "some" }, "!")
+
+	size : List(U8) -> U64
+	size = |bytes| bytes.len()
+}
+
+expect Matched.word(0) == "none!"
+expect Matched.size([1]) == 1
+=== glob=Literal.roc types=0 apply=1 (exit 0)
+files 1, candidates 14, rewritten 6, left 8, peer_receiver 0, programs 7 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 0
+Literal.roc:16: U64.to_str: a number literal's type would default as a receiver (`(5).to_str()` is no longer a U64)
+Literal.roc:19: U64.to_str: a number literal's type would default as a receiver (`(2 + 3).to_str()` is no longer a U64)
+Literal.roc:24: U64.to_str: a number literal's type would default as a receiver (`n` takes its type from a number literal, unannotated, and `n.to_str()` is no longer a U64)
+Literal.roc:35: U64.to_str: a number literal's type would default as a receiver (`top` takes its type from a number literal, unannotated, and `top.to_str()` is no longer a U64)
+Literal.roc:47: I64.to_str: a number literal's type would default as a receiver (`steps` takes its type from a number literal, unannotated, and `steps.to_str()` is no longer a I64)
+Literal.roc:65: U64.to_str: a number literal's type would default as a receiver (`k` takes its type from a number literal, unannotated, and `k.to_str()` is no longer a U64)
+Literal.roc:76: I64.to_str: a number literal's type would default as a receiver (`$bad` takes its type from a number literal, unannotated, and `$bad.to_str()` is no longer a I64)
+Literal.roc:91: U64.to_str: a number literal's type would default as a receiver (`r.a` takes its type from a number literal, unannotated, and `r.a.to_str()` is no longer a U64)
+files 1, candidates 14, rewritten 6, left 8, peer_receiver 0, programs 7 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 0
+--- Literal.roc
+## A call whose first argument is a constant numeric expression stays:
+## `U64.to_str(5)` fixes the literal's type, and `(5).to_str()` leaves it
+## to default (to `Dec`, "5.0"); so does `(2 + 3).to_str()`, and so does a
+## name bound to one without an annotation, in a block (`n = 5`) or at the
+## top (`top = 7`). Both forms check; only the expects tell them apart. A
+## name annotated (`m : U64`) or a sum with a parameter in it (`n + 1`, n a
+## U64) has its type, and the file's other calls are still turned. A loop
+## variable over a list of literals or a range of them (`steps`, `k`), a
+## `var` a literal starts (`$bad`, whatever it is reassigned) and a field
+## of a record literal (`r.a`) default the same way, and stay; each typed
+## by a suffix (`10.I64`, `0.I64`, `5.U64`) is turned.
+Literal := [].{
+	top = 7
+
+	five : Str
+	five = U64.to_str(5)
+
+	sum : Str
+	sum = U64.to_str(2 + 3)
+
+	bound : Str
+	bound = {
+		n = 5
+		U64.to_str(n)
+	}
+
+	annotated : Str
+	annotated = {
+		m : U64
+		m = 5
+		m.to_str()
+	}
+
+	seven : Str
+	seven = U64.to_str(top)
+
+	next : U64 -> Str
+	next = |n| (n + 1).to_str()
+
+	shout : Str -> Str
+	shout = |name| name.concat("!")
+
+	looped : Str
+	looped = {
+		var $out = ""
+		for steps in [10, 1000] {
+			$out = $out.concat(I64.to_str(steps))
+		}
+		$out
+	}
+
+	typed_loop : Str
+	typed_loop = {
+		var $out = ""
+		for steps in [10.I64, 1000] {
+			$out = $out.concat(steps.to_str())
+		}
+		$out
+	}
+
+	ranged : Str
+	ranged = {
+		var $out = ""
+		for k in 0..<2 {
+			$out = $out.concat(U64.to_str(k))
+		}
+		$out
+	}
+
+	counted : Str
+	counted = {
+		var $bad = 0
+		for _s in ["a", "b"] {
+			$bad = $bad + 1
+		}
+		I64.to_str($bad)
+	}
+
+	typed_counted : Str
+	typed_counted = {
+		var $bad = 0.I64
+		for _s in ["a", "b"] {
+			$bad = $bad + 1
+		}
+		$bad.to_str()
+	}
+
+	field : Str
+	field = {
+		r = { a: 5 }
+		U64.to_str(r.a)
+	}
+
+	typed_field : Str
+	typed_field = {
+		r = { a: 5.U64 }
+		r.a.to_str()
+	}
+}
+
+expect Literal.five == "5"
+expect Literal.sum == "5"
+expect Literal.bound == "5"
+expect Literal.annotated == "5"
+expect Literal.seven == "7"
+expect Literal.next(4) == "5"
+expect Literal.shout("a") == "a!"
+expect Literal.looped == "101000"
+expect Literal.typed_loop == "101000"
+expect Literal.ranged == "01"
+expect Literal.counted == "2"
+expect Literal.typed_counted == "2"
+expect Literal.field == "5"
+expect Literal.typed_field == "5"
+=== glob=Ref.roc types=0 apply=1 (exit 0)
+files 1, candidates 0, rewritten 0, left 0, peer_receiver 0, programs 1 (checks: 0 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+=== glob=Scrutinee.roc types=0 apply=1 (exit 0)
+files 1, candidates 2, rewritten 1, left 1, peer_receiver 0, programs 8 (checks: 0 confirming proven calls, 2 in trial rounds), made_unused_import 0, made_long_line 0
+Scrutinee.roc:12: Ref.from_str: roc check: missing method (on `text`'s definition)
+files 1, candidates 2, rewritten 1, left 1, peer_receiver 0, programs 8 (checks: 0 confirming proven calls, 2 in trial rounds), made_unused_import 0, made_long_line 0
+--- Scrutinee.roc
+## A turned call that is a `match`'s scrutinee, its argument a local Str
+## (roc-chat's `Topics.ref_text`): `text.from_str()` asks a Str for Ref's
+## method, and the compiler puts the error on the line defining `text`, not
+## on the call. It is that call's error: the call stays, and the file's
+## other call is still turned.
+import Ref
+
+Scrutinee := [].{
+	label : U64 -> Str
+	label = |n| {
+		text = "R${n.to_str()}"
+		match Ref.from_str(text) {
+			Ok(r) => r.to_str()
+			Err(NotAReference) => crash "Scrutinee.label: R<n> is a reference"
+		}
+	}
+
+	size : List(U8) -> U64
+	size = |bytes| bytes.len()
+}
+
+expect Scrutinee.label(3) == "R3"
+expect Scrutinee.size([1]) == 1
+=== glob=Knock.roc types=0 apply=1 (exit 0)
+files 1, candidates 3, rewritten 1, left 2, peer_receiver 0, programs 8 (checks: 0 confirming proven calls, 2 in trial rounds), made_unused_import 0, made_long_line 0
+Knock.roc:12: Header.read!: roc check: missing method
+Knock.roc:12: Str.to_utf8: roc check: missing method
+files 1, candidates 3, rewritten 1, left 2, peer_receiver 0, programs 8 (checks: 0 confirming proven calls, 2 in trial rounds), made_unused_import 0, made_long_line 0
+--- Knock.roc
+## A refused call whose error makes trouble on another line (roc-chat's
+## `Topics.stream!`): `"last".to_utf8().read!()` asks a list for Header's
+## method, and the compiler, taking the refused value as known, also warns
+## on the `if` (`unconditional condition`), a line no call is on. That
+## warning is the refused call's, not a stray: the line's two calls stay,
+## and the file's other call is still turned.
+import Header
+
+Knock := [].{
+	later! : U64 => U64
+	later! = |n| {
+		values = Header.read!(Str.to_utf8("last"))
+		after =
+			match values {
+				[only] => only.count_utf8_bytes()
+				_ => 0
+			}
+		if (after > 0) after else n
+	}
+
+	size : List(U8) -> U64
+	size = |bytes| bytes.len()
+}
+
+expect Knock.size([1]) == 1
+=== glob=Knock.roc types=0 (exit 0)
+dry run: files 1, candidates 3, rewritten 1, left 2, peer_receiver 0, programs 6 (checks: 0 confirming proven calls, 2 in trial rounds), made_unused_import 0, made_long_line 0
+Knock.roc:12: Header.read!: roc check: missing method
+Knock.roc:12: Str.to_utf8: roc check: missing method
+dry run: files 1, candidates 3, rewritten 1, left 2, peer_receiver 0, programs 6 (checks: 0 confirming proven calls, 2 in trial rounds), made_unused_import 0, made_long_line 0
+=== glob=Header.roc types=0 apply=1 (exit 0)
+files 1, candidates 0, rewritten 0, left 0, peer_receiver 0, programs 1 (checks: 0 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+=== glob=MadeUnused.roc types=0 apply=1 (exit 0)
+files 1, candidates 1, rewritten 1, left 0, peer_receiver 0, programs 7 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 1, made_long_line 0
+MadeUnused.roc:4: made_unused_import: `Ref` was used only by the calls the rewrite turned: delete the line
+files 1, candidates 1, rewritten 1, left 0, peer_receiver 0, programs 7 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 1, made_long_line 0
+--- MadeUnused.roc
+## A rewrite that leaves an import unused: `Ref` is named only by the call
+## it turns, so the run reports `import Ref` as made unused, for the sweep
+## to delete.
+import Ref
+
+MadeUnused := [].{
+	shown = |r| r.to_str()
+}
+=== glob=KeptImport.roc types=0 apply=1 (exit 0)
+files 1, candidates 1, rewritten 1, left 0, peer_receiver 0, programs 7 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 0
+--- KeptImport.roc
+## The near miss of MadeUnused: the call turns, and the annotation still
+## names `Ref`, so the import is still used and nothing is reported.
+import Ref
+
+KeptImport := [].{
+	shown : Ref -> Str
+	shown = |r| r.to_str()
+}
+=== glob=MadeLong.roc types=0 apply=1 (exit 0)
+files 1, candidates 3, rewritten 3, left 0, peer_receiver 0, programs 7 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 1
+MadeLong.roc:11: made_long_line: 108 columns after the rewrite joined a call's lines: stack it (wrap_long_lines_with_trailing_commas.shale): first_part_of_the_long_text.concat(second_part_of_the_long_text.concat(third_part_of_the_long_text))
+files 1, candidates 3, rewritten 3, left 0, peer_receiver 0, programs 7 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 1
+--- MadeLong.roc
+## A rewrite that pushes a line past 100 columns: the stacked call's
+## arguments join one line, which the run reports for the sweep to stack.
+## The banner was past 100 before, and the short call turns and stays short,
+## so neither is reported.
+MadeLong := [].{
+	banner : Str
+	banner = "a banner that was already wider than one hundred columns before any rewrite came along"
+
+	joined : Str, Str, Str -> Str
+	joined = |first_part_of_the_long_text, second_part_of_the_long_text, third_part_of_the_long_text|
+		first_part_of_the_long_text.concat(second_part_of_the_long_text.concat(third_part_of_the_long_text))
+
+	size : List(U8) -> U64
+	size = |bytes| bytes.len()
+}
+
+expect MadeLong.joined("a", "b", "c") == "abc"
+expect MadeLong.size([1]) == 1
+=== glob=TestChanged.roc types=0 apply=1 (exit 0)
+files 1, candidates 2, rewritten 0, left 2, peer_receiver 0, programs 7 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 0
+TestChanged.roc:10: Loud.with_ascii_uppercased: roc test changed:     0 compiler errors (exit 1), was All (3) tests passed (exit 0); the file is put back
+TestChanged.roc:13: List.len: roc test changed:     0 compiler errors (exit 1), was All (3) tests passed (exit 0); the file is put back
+files 1, candidates 2, rewritten 0, left 2, peer_receiver 0, programs 7 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 0
+=== glob=TestChanged.roc types=0 (exit 0)
+dry run: files 1, candidates 2, rewritten 0, left 2, peer_receiver 0, programs 5 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 0
+TestChanged.roc:10: Loud.with_ascii_uppercased: roc test changed:     0 compiler errors (exit 1), was All (3) tests passed (exit 0); the file is put back
+TestChanged.roc:13: List.len: roc test changed:     0 compiler errors (exit 1), was All (3) tests passed (exit 0); the file is put back
+dry run: files 1, candidates 2, rewritten 0, left 2, peer_receiver 0, programs 5 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 0
+=== glob=Unformatted.roc types=0 apply=1 (exit 0)
+files 1, candidates 2, rewritten 2, left 0, peer_receiver 0, programs 6 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 0
+--- Unformatted.roc
+## A file `roc fmt` would lay out otherwise (the blank lines below its two
+## declarations): its calls turn, and it is not formatted after, so the
+## rewrite changes nothing but the calls.
+Unformatted := [].{
+	size : List(U8) -> U64
+	size = |bytes| bytes.len()
+
+
+
+	shout : Str -> Str
+	shout = |s| s.with_ascii_uppercased()
+}
+
+expect Unformatted.size([1]) == 1
+expect Unformatted.shout("a") == "A"
+=== glob=LastSegment.roc types=0 apply=1 (exit 0)
+files 1, candidates 2, rewritten 0, left 2, peer_receiver 0, programs 5 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 0
+LastSegment.roc:13: Book.heading: roc check: missing method
+LastSegment.roc:16: Shelf.count: roc check: missing method
+files 1, candidates 2, rewritten 0, left 2, peer_receiver 0, programs 5 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 0
+=== glob=Rewrite.roc,Knock.roc,Pipe.roc,Rewrite.roc types=0 apply=1 (exit 0)
+files 3, candidates 6, rewritten 3, left 3, peer_receiver 0, programs 14 (checks: 0 confirming proven calls, 3 in trial rounds), made_unused_import 0, made_long_line 0
+Knock.roc:12: Header.read!: roc check: missing method
+Knock.roc:12: Str.to_utf8: roc check: missing method
+Pipe.roc:4: List.concat: the right of a `|>`, whose first argument the pipe gives
+files 3, candidates 6, rewritten 3, left 3, peer_receiver 0, programs 14 (checks: 0 confirming proven calls, 3 in trial rounds), made_unused_import 0, made_long_line 0
+--- Knock.roc
+## A refused call whose error makes trouble on another line (roc-chat's
+## `Topics.stream!`): `"last".to_utf8().read!()` asks a list for Header's
+## method, and the compiler, taking the refused value as known, also warns
+## on the `if` (`unconditional condition`), a line no call is on. That
+## warning is the refused call's, not a stray: the line's two calls stay,
+## and the file's other call is still turned.
+import Header
+
+Knock := [].{
+	later! : U64 => U64
+	later! = |n| {
+		values = Header.read!(Str.to_utf8("last"))
+		after =
+			match values {
+				[only] => only.count_utf8_bytes()
+				_ => 0
+			}
+		if (after > 0) after else n
+	}
+
+	size : List(U8) -> U64
+	size = |bytes| bytes.len()
+}
+
+expect Knock.size([1]) == 1
+--- Rewrite.roc
+## A call that must be rewritten: its first argument's type is its module's.
+Rewrite := [].{
+	count : List(U64) -> U64
+	count = |xs| xs.len()
+
+	joined : Str, Str -> Str
+	joined = |a, b| a.concat(b)
+}
+
+expect Rewrite.count([1, 2]) == 2
+expect Rewrite.joined("a", "b") == "ab"
+=== glob=Rewrite.roc,Chained.roc,Pipe.roc types=0 apply=1 from=2 (exit 0)
+files 2, candidates 3, rewritten 2, left 1, peer_receiver 0, programs 7 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 0
+Pipe.roc:4: List.concat: the right of a `|>`, whose first argument the pipe gives
+files 2, candidates 3, rewritten 2, left 1, peer_receiver 0, programs 7 (checks: 0 confirming proven calls, 1 in trial rounds), made_unused_import 0, made_long_line 0
+--- Chained.roc
+## A chained call, turned from the inside out.
+Chained := [].{
+	big : List(U64) -> U64
+	big = |xs| xs.keep_if(|x| x > 1).len()
+}
+
+expect Chained.big([1, 2, 3]) == 2
+=== glob=nothing_here/*.roc types=0 (exit 0)
+dry run: files 0, candidates 0, rewritten 0, left 0, peer_receiver 0, programs 1 (checks: 0 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+=== glob=Typed.roc root=TypedApp.roc apply=1 (exit 0)
+files 1, candidates 2, rewritten 1, left 1, peer_receiver 0, programs 8 (checks: 1 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+Typed.roc:9: Str.from_utf8: the first argument is a List, not a Str
+types: the first arguments of the candidates the types judged: another type 1, the module's type 1
+files 1, candidates 2, rewritten 1, left 1, peer_receiver 0, programs 8 (checks: 1 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+--- Typed.roc
+## Under the types (root TypedApp, an app, as `roc-types` takes one): a first
+## argument whose type is another module's (a list, for `Str`) is left
+## untried, the type the reason; one whose type is the module's is turned.
+Typed := [].{
+	size : List(U8) -> U64
+	size = |bytes| bytes.len()
+
+	text : List(U8) -> Str
+	text = |bytes| Str.from_utf8(bytes) ?? ""
+
+	answer : Str
+	answer = text([104, 105])
+}
+
+expect Typed.size([1]) == 1
+expect Typed.text([97]) == "a"
+=== glob=Typed.roc root=TypedApp.roc (exit 0)
+dry run: files 1, candidates 2, rewritten 1, left 1, peer_receiver 0, programs 6 (checks: 1 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+Typed.roc:9: Str.from_utf8: the first argument is a List, not a Str
+types: the first arguments of the candidates the types judged: another type 1, the module's type 1
+dry run: files 1, candidates 2, rewritten 1, left 1, peer_receiver 0, programs 6 (checks: 1 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+=== glob=Proven.roc root=TypedApp.roc apply=1 (exit 0)
+files 1, candidates 2, rewritten 2, left 0, peer_receiver 0, programs 8 (checks: 1 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+types: the first arguments of the candidates the types judged: the module's type 2
+files 1, candidates 2, rewritten 2, left 0, peer_receiver 0, programs 8 (checks: 1 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+--- Proven.roc
+## Under the types (root TypedApp): each call's first argument is the
+## module's own type, so the calls are proven, written together with every
+## other file's proven calls, and confirmed by one `roc check`: no round.
+Proven := [].{
+	size : List(U8) -> U64
+	size = |bytes| bytes.len()
+
+	shout : Str -> Str
+	shout = |s| s.with_ascii_uppercased()
+}
+
+expect Proven.size([1]) == 1
+expect Proven.shout("a") == "A"
+=== glob=NoCalls.roc root=TypedApp.roc apply=1 (exit 0)
+files 1, candidates 0, rewritten 0, left 0, peer_receiver 0, programs 1 (checks: 0 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+types: the first arguments of the candidates the types judged: 
+files 1, candidates 0, rewritten 0, left 0, peer_receiver 0, programs 1 (checks: 0 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+=== glob=ProvenFails.roc root=TypedApp.roc apply=1 (exit 0)
+files 1, candidates 3, rewritten 1, left 2, peer_receiver 0, programs 10 (checks: 1 confirming proven calls, 2 in trial rounds), made_unused_import 0, made_long_line 0
+ProvenFails.roc:13: Iter.fold: roc check: type mismatch
+ProvenFails.roc:13: U8.to: roc check: type mismatch
+types: the first arguments of the candidates the types judged: the module's type 3
+files 1, candidates 3, rewritten 1, left 2, peer_receiver 0, programs 10 (checks: 1 confirming proven calls, 2 in trial rounds), made_unused_import 0, made_long_line 0
+--- ProvenFails.roc
+## Under the types (root TypedApp): `U8.to(start, 3)`'s first argument is a
+## U8 by the checker (`start` an `if` of literals, which the call makes
+## one), and `Iter.fold`'s an Iter, so all three calls are proven; but
+## `start.to(3).fold(...)` leaves `start`'s type to default, and the one
+## confirm fails. (A constant numeric expression, or a name bound to one, is
+## no candidate; a name bound to an `if` of them is, and only the compiler
+## or an expect sees it.) The file goes back to rounds: the line's two calls
+## stay, with the compiler's reason, and the other is still turned.
+ProvenFails := [].{
+	bytes : List(U8)
+	bytes = {
+		start = if 1 > 2 1 else 0
+		Iter.fold(U8.to(start, 3), [], |acc, b| acc.append(b))
+	}
+
+	size : List(U8) -> U64
+	size = |b| b.len()
+}
+
+expect ProvenFails.size(ProvenFails.bytes) == 4
+=== glob=ProvenFails.roc root=TypedApp.roc (exit 0)
+dry run: files 1, candidates 3, rewritten 1, left 2, peer_receiver 0, programs 8 (checks: 1 confirming proven calls, 2 in trial rounds), made_unused_import 0, made_long_line 0
+ProvenFails.roc:13: Iter.fold: roc check: type mismatch
+ProvenFails.roc:13: U8.to: roc check: type mismatch
+types: the first arguments of the candidates the types judged: the module's type 3
+dry run: files 1, candidates 3, rewritten 1, left 2, peer_receiver 0, programs 8 (checks: 1 confirming proven calls, 2 in trial rounds), made_unused_import 0, made_long_line 0
+=== glob=LastSegment.roc root=TypedApp.roc apply=1 (exit 0)
+files 1, candidates 2, rewritten 0, left 2, peer_receiver 0, programs 2 (checks: 0 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+LastSegment.roc:13: Book.heading: the first argument is a Shelf.Book, not a Book
+LastSegment.roc:16: Shelf.count: the first argument is a Shelf.Shelf, not a Shelf
+types: the first arguments of the candidates the types judged: another type 2
+files 1, candidates 2, rewritten 0, left 2, peer_receiver 0, programs 2 (checks: 0 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+=== glob=Peers.roc root=TypedApp.roc apply=1 (exit 0)
+files 1, candidates 11, rewritten 5, left 6, peer_receiver 0, programs 8 (checks: 1 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+Peers.roc:15: U64.max: peers: `max` is symmetric and both arguments are U64s, so neither is the subject
+Peers.roc:18: Str.concat: peers: `concat` is symmetric and both arguments are Strs, so neither is the subject
+Peers.roc:21: Hues.max: peers: `max` is symmetric and both arguments are Huess, so neither is the subject
+Peers.roc:24: U64.max: peers: `max` is symmetric and both arguments are U64s, so neither is the subject
+Peers.roc:27: List.map2: peers: `map2` is symmetric and both arguments are Lists, so neither is the subject
+Peers.roc:30: U64.bitwise_and: peers: `bitwise_and` is symmetric and both arguments are U64s, so neither is the subject
+types: the first arguments of the candidates the types judged: peers 6, the module's type 5
+files 1, candidates 11, rewritten 5, left 6, peer_receiver 0, programs 8 (checks: 1 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+--- Peers.roc
+## Under the types (root TypedApp): a call of a symmetric function
+## (symmetric_functions.txt) whose first two arguments are of one type stays
+## a module call, since neither is the subject: `max` of two U64s, two Strs'
+## `concat`, the app's own Hues' `max`, a Tint's `max` with a U64 (the
+## alias read through to U64), `map2` of two lists, and `bitwise_and`.
+## Off the list, each call turns, whatever its arguments: `List.get`,
+## `List.fold`, `Str.starts_with`, Hues' `relative` (its first argument the
+## subject) and Hues' `plus` (a unit's arithmetic, read as infix).
+import Hues
+
+Peers := [].{
+	Tint : U64
+
+	biggest : U64, U64 -> U64
+	biggest = |a, b| U64.max(a, b)
+
+	glued : Str, Str -> Str
+	glued = |a, b| Str.concat(a, b)
+
+	brighter : Hues, Hues -> Hues
+	brighter = |a, b| Hues.max(a, b)
+
+	tinted : Tint, U64 -> U64
+	tinted = |tint, n| U64.max(tint, n)
+
+	labels : List(U64), List(Str) -> List(Str)
+	labels = |xs, ys| List.map2(xs, ys, |x, y| "${x.to_str()}${y}")
+
+	masked : U64, U64 -> U64
+	masked = |a, b| U64.bitwise_and(a, b)
+
+	item : List(U64), U64 -> U64
+	item = |xs, i| xs.get(i) ?? 0
+
+	copied : List(U64) -> List(U64)
+	copied = |xs| xs.fold([], |acc, x| acc.append(x))
+
+	prefixed : Str, Str -> Bool
+	prefixed = |a, b| a.starts_with(b)
+
+	apart : Hues, Hues -> I64
+	apart = |a, b| a.relative(b)
+
+	mixed : Hues, Hues -> Hues
+	mixed = |a, b| a.plus(b)
+}
+
+expect Peers.biggest(1, 2) == 2
+expect Peers.glued("a", "b") == "ab"
+expect Peers.brighter(Hues.red, Hues.blue) == Hues.red
+expect Peers.tinted(3, 4) == 4
+expect Peers.labels([1], ["a"]) == ["1a"]
+expect Peers.masked(6, 3) == 2
+expect Peers.item([5], 0) == 5
+expect Peers.copied([5]) == [5]
+expect Peers.prefixed("ab", "a")
+expect Peers.apart(Hues.red, Hues.blue) == 2
+expect Peers.mixed(Hues.red, Hues.blue).relative(Hues.blue) == 3
+=== glob=PeerMethods.roc root=TypedApp.roc apply=1 (exit 0)
+files 1, candidates 0, rewritten 0, left 0, peer_receiver 6, programs 2 (checks: 0 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+PeerMethods.roc:15: peer_receiver: `.max` is symmetric and its receiver and first argument are both U64s, so neither is the subject: U64.max(...)
+PeerMethods.roc:18: peer_receiver: `.concat` is symmetric and its receiver and first argument are both Strs, so neither is the subject: Str.concat(...)
+PeerMethods.roc:21: peer_receiver: `.max` is symmetric and its receiver and first argument are both Huess, so neither is the subject: Hues.max(...)
+PeerMethods.roc:24: peer_receiver: `.max` is symmetric and its receiver and first argument are both U64s, so neither is the subject: U64.max(...)
+PeerMethods.roc:27: peer_receiver: `.map2` is symmetric and its receiver and first argument are both Lists, so neither is the subject: List.map2(...)
+PeerMethods.roc:30: peer_receiver: `.bitwise_and` is symmetric and its receiver and first argument are both U64s, so neither is the subject: U64.bitwise_and(...)
+types: the first arguments of the candidates the types judged: 
+files 1, candidates 0, rewritten 0, left 0, peer_receiver 6, programs 2 (checks: 0 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+=== glob=PeerMethods.roc root=TypedApp.roc peers=undo apply=1 (exit 0)
+peers=undo, files 1, candidates 6, rewritten 6, left 0, peer_receiver 0, programs 8 (checks: 1 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+types: the first arguments of the candidates the types judged: 
+peers=undo, files 1, candidates 6, rewritten 6, left 0, peer_receiver 0, programs 8 (checks: 1 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+--- PeerMethods.roc
+## Under the types (root TypedApp), with `peers=undo`: a method call of a
+## symmetric function whose receiver and first argument are of one type
+## turns back into a module call, `a.max(b)` to `U64.max(a, b)`: two Strs'
+## `concat`, the app's own Hues' `max`, a Tint's `max` with a U64 (the
+## alias read through), `map2` of two lists, and `bitwise_and`. Without
+## it, each is a peer_receiver finding. Off the list, each method call
+## stays: `xs.get(i)`, `xs.fold([], f)`, `a.starts_with(b)`, Hues'
+## `relative` and Hues' `plus`.
+import Hues
+
+PeerMethods := [].{
+	Tint : U64
+
+	biggest : U64, U64 -> U64
+	biggest = |a, b| U64.max(a, b)
+
+	glued : Str, Str -> Str
+	glued = |a, b| Str.concat(a, b)
+
+	brighter : Hues, Hues -> Hues
+	brighter = |a, b| Hues.max(a, b)
+
+	tinted : Tint, U64 -> U64
+	tinted = |tint, n| U64.max(tint, n)
+
+	labels : List(U64), List(Str) -> List(Str)
+	labels = |xs, ys| List.map2(xs, ys, |x, y| "${x.to_str()}${y}")
+
+	masked : U64, U64 -> U64
+	masked = |a, b| U64.bitwise_and(a, b)
+
+	item : List(U64), U64 -> U64
+	item = |xs, i| xs.get(i) ?? 0
+
+	copied : List(U64) -> List(U64)
+	copied = |xs| xs.fold([], |acc, x| acc.append(x))
+
+	prefixed : Str, Str -> Bool
+	prefixed = |a, b| a.starts_with(b)
+
+	apart : Hues, Hues -> I64
+	apart = |a, b| a.relative(b)
+
+	mixed : Hues, Hues -> Hues
+	mixed = |a, b| a.plus(b)
+}
+
+expect PeerMethods.biggest(1, 2) == 2
+expect PeerMethods.glued("a", "b") == "ab"
+expect PeerMethods.brighter(Hues.red, Hues.blue) == Hues.red
+expect PeerMethods.tinted(3, 4) == 4
+expect PeerMethods.labels([1], ["a"]) == ["1a"]
+expect PeerMethods.masked(6, 3) == 2
+expect PeerMethods.item([5], 0) == 5
+expect PeerMethods.copied([5]) == [5]
+expect PeerMethods.prefixed("ab", "a")
+expect PeerMethods.apart(Hues.red, Hues.blue) == 2
+expect PeerMethods.mixed(Hues.red, Hues.blue).relative(Hues.blue) == 3
+=== glob=PeerMethods.roc root=TypedApp.roc peers=undo (exit 0)
+peers=undo, dry run: files 1, candidates 6, rewritten 6, left 0, peer_receiver 0, programs 6 (checks: 1 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+types: the first arguments of the candidates the types judged: 
+peers=undo, dry run: files 1, candidates 6, rewritten 6, left 0, peer_receiver 0, programs 6 (checks: 1 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+=== glob=Packaged.roc root=PkgApp.roc apply=1 (exit 0)
+files 1, candidates 1, rewritten 1, left 0, peer_receiver 0, programs 8 (checks: 1 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+types: the first arguments of the candidates the types judged: the module's type 1
+files 1, candidates 1, rewritten 1, left 0, peer_receiver 0, programs 8 (checks: 1 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+--- Packaged.roc
+## Under the types (root PkgApp): `m`'s type is Meter, the type module of
+## the package `pk` (PlantPkg), imported as `pk.Meter`. roc-types writes a
+## type by its own module's name, never its package's, so the type's head is
+## `Meter`, the module called, and the call is proven: a package-qualified
+## real match.
+import pk.Meter
+
+Packaged :: [].{
+	twice : Meter -> Meter
+	twice = |m| m.add(m)
+}
+
+expect Packaged.twice(Meter.two).count() == 4
+=== glob=Second.roc root=TypedApp.roc,SecondApp.roc apply=1 (exit 0)
+files 1, candidates 1, rewritten 1, left 0, peer_receiver 0, programs 9 (checks: 1 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+types: the first arguments of the candidates the types judged: the module's type 1
+files 1, candidates 1, rewritten 1, left 0, peer_receiver 0, programs 9 (checks: 1 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+--- Second.roc
+## Reached only through the second root (`SecondApp`): its call is proven
+## by that root's types and confirmed on it.
+Second := [].{
+	size : List(U8) -> U64
+	size = |bytes| bytes.len()
+}
+
+expect Second.size([1]) == 1
+=== glob=Proven.roc,NoCalls.roc root=TypedApp.roc apply=1 (exit 0)
+files 2, candidates 2, rewritten 2, left 0, peer_receiver 0, programs 8 (checks: 1 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+types: the first arguments of the candidates the types judged: the module's type 2
+files 2, candidates 2, rewritten 2, left 0, peer_receiver 0, programs 8 (checks: 1 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+--- Proven.roc
+## Under the types (root TypedApp): each call's first argument is the
+## module's own type, so the calls are proven, written together with every
+## other file's proven calls, and confirmed by one `roc check`: no round.
+Proven := [].{
+	size : List(U8) -> U64
+	size = |bytes| bytes.len()
+
+	shout : Str -> Str
+	shout = |s| s.with_ascii_uppercased()
+}
+
+expect Proven.size([1]) == 1
+expect Proven.shout("a") == "A"
+=== glob=Proven.roc,Unreached.roc root=TypedApp.roc,SecondApp.roc apply=1 (exit 1)
+files 1, candidates 2, rewritten 2, left 0, peer_receiver 0, programs 9 (checks: 1 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+types: the first arguments of the candidates the types judged: the module's type 2
+files 1, candidates 2, rewritten 2, left 0, peer_receiver 0, programs 9 (checks: 1 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+not reached by TypedApp.roc,SecondApp.roc: Unreached.roc
+── stop: fail: rewrite_module_calls_as_method_calls: no root reaches 1 file(s) with a call to try, listed above: their calls were left untried
+--- Proven.roc
+## Under the types (root TypedApp): each call's first argument is the
+## module's own type, so the calls are proven, written together with every
+## other file's proven calls, and confirmed by one `roc check`: no round.
+Proven := [].{
+	size : List(U8) -> U64
+	size = |bytes| bytes.len()
+
+	shout : Str -> Str
+	shout = |s| s.with_ascii_uppercased()
+}
+
+expect Proven.size([1]) == 1
+expect Proven.shout("a") == "A"
+=== glob=Typed.roc,Proven.roc,ProvenFails.roc,Peers.roc,LastSegment.roc,NoCalls.roc root=TypedApp.roc apply=1 (exit 0)
+files 6, candidates 20, rewritten 9, left 11, peer_receiver 0, programs 18 (checks: 2 confirming proven calls, 2 in trial rounds), made_unused_import 0, made_long_line 0
+Typed.roc:9: Str.from_utf8: the first argument is a List, not a Str
+ProvenFails.roc:13: Iter.fold: roc check: type mismatch
+ProvenFails.roc:13: U8.to: roc check: type mismatch
+Peers.roc:15: U64.max: peers: `max` is symmetric and both arguments are U64s, so neither is the subject
+Peers.roc:18: Str.concat: peers: `concat` is symmetric and both arguments are Strs, so neither is the subject
+Peers.roc:21: Hues.max: peers: `max` is symmetric and both arguments are Huess, so neither is the subject
+Peers.roc:24: U64.max: peers: `max` is symmetric and both arguments are U64s, so neither is the subject
+Peers.roc:27: List.map2: peers: `map2` is symmetric and both arguments are Lists, so neither is the subject
+Peers.roc:30: U64.bitwise_and: peers: `bitwise_and` is symmetric and both arguments are U64s, so neither is the subject
+LastSegment.roc:13: Book.heading: the first argument is a Shelf.Book, not a Book
+LastSegment.roc:16: Shelf.count: the first argument is a Shelf.Shelf, not a Shelf
+types: the first arguments of the candidates the types judged: another type 3, peers 6, the module's type 11
+files 6, candidates 20, rewritten 9, left 11, peer_receiver 0, programs 18 (checks: 2 confirming proven calls, 2 in trial rounds), made_unused_import 0, made_long_line 0
+--- Peers.roc
+## Under the types (root TypedApp): a call of a symmetric function
+## (symmetric_functions.txt) whose first two arguments are of one type stays
+## a module call, since neither is the subject: `max` of two U64s, two Strs'
+## `concat`, the app's own Hues' `max`, a Tint's `max` with a U64 (the
+## alias read through to U64), `map2` of two lists, and `bitwise_and`.
+## Off the list, each call turns, whatever its arguments: `List.get`,
+## `List.fold`, `Str.starts_with`, Hues' `relative` (its first argument the
+## subject) and Hues' `plus` (a unit's arithmetic, read as infix).
+import Hues
+
+Peers := [].{
+	Tint : U64
+
+	biggest : U64, U64 -> U64
+	biggest = |a, b| U64.max(a, b)
+
+	glued : Str, Str -> Str
+	glued = |a, b| Str.concat(a, b)
+
+	brighter : Hues, Hues -> Hues
+	brighter = |a, b| Hues.max(a, b)
+
+	tinted : Tint, U64 -> U64
+	tinted = |tint, n| U64.max(tint, n)
+
+	labels : List(U64), List(Str) -> List(Str)
+	labels = |xs, ys| List.map2(xs, ys, |x, y| "${x.to_str()}${y}")
+
+	masked : U64, U64 -> U64
+	masked = |a, b| U64.bitwise_and(a, b)
+
+	item : List(U64), U64 -> U64
+	item = |xs, i| xs.get(i) ?? 0
+
+	copied : List(U64) -> List(U64)
+	copied = |xs| xs.fold([], |acc, x| acc.append(x))
+
+	prefixed : Str, Str -> Bool
+	prefixed = |a, b| a.starts_with(b)
+
+	apart : Hues, Hues -> I64
+	apart = |a, b| a.relative(b)
+
+	mixed : Hues, Hues -> Hues
+	mixed = |a, b| a.plus(b)
+}
+
+expect Peers.biggest(1, 2) == 2
+expect Peers.glued("a", "b") == "ab"
+expect Peers.brighter(Hues.red, Hues.blue) == Hues.red
+expect Peers.tinted(3, 4) == 4
+expect Peers.labels([1], ["a"]) == ["1a"]
+expect Peers.masked(6, 3) == 2
+expect Peers.item([5], 0) == 5
+expect Peers.copied([5]) == [5]
+expect Peers.prefixed("ab", "a")
+expect Peers.apart(Hues.red, Hues.blue) == 2
+expect Peers.mixed(Hues.red, Hues.blue).relative(Hues.blue) == 3
+--- Proven.roc
+## Under the types (root TypedApp): each call's first argument is the
+## module's own type, so the calls are proven, written together with every
+## other file's proven calls, and confirmed by one `roc check`: no round.
+Proven := [].{
+	size : List(U8) -> U64
+	size = |bytes| bytes.len()
+
+	shout : Str -> Str
+	shout = |s| s.with_ascii_uppercased()
+}
+
+expect Proven.size([1]) == 1
+expect Proven.shout("a") == "A"
+--- ProvenFails.roc
+## Under the types (root TypedApp): `U8.to(start, 3)`'s first argument is a
+## U8 by the checker (`start` an `if` of literals, which the call makes
+## one), and `Iter.fold`'s an Iter, so all three calls are proven; but
+## `start.to(3).fold(...)` leaves `start`'s type to default, and the one
+## confirm fails. (A constant numeric expression, or a name bound to one, is
+## no candidate; a name bound to an `if` of them is, and only the compiler
+## or an expect sees it.) The file goes back to rounds: the line's two calls
+## stay, with the compiler's reason, and the other is still turned.
+ProvenFails := [].{
+	bytes : List(U8)
+	bytes = {
+		start = if 1 > 2 1 else 0
+		Iter.fold(U8.to(start, 3), [], |acc, b| acc.append(b))
+	}
+
+	size : List(U8) -> U64
+	size = |b| b.len()
+}
+
+expect ProvenFails.size(ProvenFails.bytes) == 4
+--- Typed.roc
+## Under the types (root TypedApp, an app, as `roc-types` takes one): a first
+## argument whose type is another module's (a list, for `Str`) is left
+## untried, the type the reason; one whose type is the module's is turned.
+Typed := [].{
+	size : List(U8) -> U64
+	size = |bytes| bytes.len()
+
+	text : List(U8) -> Str
+	text = |bytes| Str.from_utf8(bytes) ?? ""
+
+	answer : Str
+	answer = text([104, 105])
+}
+
+expect Typed.size([1]) == 1
+expect Typed.text([97]) == "a"
+=== glob=Typed.roc,Proven.roc,ProvenFails.roc,Peers.roc,PeerMethods.roc,LastSegment.roc root=TypedApp.roc trials=0 (exit 0)
+count: files 6, candidates 20, proven 11, unsettled 0, left 9, peer_receiver 6, programs 2 (no trials: the types alone decide), made_unused_import 0, made_long_line 0
+Typed.roc:9: Str.from_utf8: the first argument is a List, not a Str
+Peers.roc:15: U64.max: peers: `max` is symmetric and both arguments are U64s, so neither is the subject
+Peers.roc:18: Str.concat: peers: `concat` is symmetric and both arguments are Strs, so neither is the subject
+Peers.roc:21: Hues.max: peers: `max` is symmetric and both arguments are Huess, so neither is the subject
+Peers.roc:24: U64.max: peers: `max` is symmetric and both arguments are U64s, so neither is the subject
+Peers.roc:27: List.map2: peers: `map2` is symmetric and both arguments are Lists, so neither is the subject
+Peers.roc:30: U64.bitwise_and: peers: `bitwise_and` is symmetric and both arguments are U64s, so neither is the subject
+PeerMethods.roc:15: peer_receiver: `.max` is symmetric and its receiver and first argument are both U64s, so neither is the subject: U64.max(...)
+PeerMethods.roc:18: peer_receiver: `.concat` is symmetric and its receiver and first argument are both Strs, so neither is the subject: Str.concat(...)
+PeerMethods.roc:21: peer_receiver: `.max` is symmetric and its receiver and first argument are both Huess, so neither is the subject: Hues.max(...)
+PeerMethods.roc:24: peer_receiver: `.max` is symmetric and its receiver and first argument are both U64s, so neither is the subject: U64.max(...)
+PeerMethods.roc:27: peer_receiver: `.map2` is symmetric and its receiver and first argument are both Lists, so neither is the subject: List.map2(...)
+PeerMethods.roc:30: peer_receiver: `.bitwise_and` is symmetric and its receiver and first argument are both U64s, so neither is the subject: U64.bitwise_and(...)
+LastSegment.roc:13: Book.heading: the first argument is a Shelf.Book, not a Book
+LastSegment.roc:16: Shelf.count: the first argument is a Shelf.Shelf, not a Shelf
+types: the first arguments of the candidates the types judged: another type 3, peers 6, the module's type 11
+count: files 6, candidates 20, proven 11, unsettled 0, left 9, peer_receiver 6, programs 2 (no trials: the types alone decide), made_unused_import 0, made_long_line 0
+=== glob=Packaged.roc root=PkgApp.roc trials=0 (exit 0)
+count: files 1, candidates 1, proven 1, unsettled 0, left 0, peer_receiver 0, programs 2 (no trials: the types alone decide), made_unused_import 0, made_long_line 0
+types: the first arguments of the candidates the types judged: the module's type 1
+count: files 1, candidates 1, proven 1, unsettled 0, left 0, peer_receiver 0, programs 2 (no trials: the types alone decide), made_unused_import 0, made_long_line 0
+=== glob=Proven.roc root=TypedApp.roc trials=0 types_from=root.types (exit 0)
+count: files 1, candidates 2, proven 2, unsettled 0, left 0, peer_receiver 0, programs 1 (no trials: the types alone decide), made_unused_import 0, made_long_line 0
+types: the first arguments of the candidates the types judged: the module's type 2
+count: files 1, candidates 2, proven 2, unsettled 0, left 0, peer_receiver 0, programs 1 (no trials: the types alone decide), made_unused_import 0, made_long_line 0
+=== glob=Proven.roc,Typed.roc root=TypedApp.roc apply=1 types_from=root.types (exit 0)
+files 2, candidates 4, rewritten 3, left 1, peer_receiver 0, programs 9 (checks: 1 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+Typed.roc:9: Str.from_utf8: the first argument is a List, not a Str
+types: the first arguments of the candidates the types judged: another type 1, the module's type 3
+files 2, candidates 4, rewritten 3, left 1, peer_receiver 0, programs 9 (checks: 1 confirming proven calls, 0 in trial rounds), made_unused_import 0, made_long_line 0
+--- Proven.roc
+## Under the types (root TypedApp): each call's first argument is the
+## module's own type, so the calls are proven, written together with every
+## other file's proven calls, and confirmed by one `roc check`: no round.
+Proven := [].{
+	size : List(U8) -> U64
+	size = |bytes| bytes.len()
+
+	shout : Str -> Str
+	shout = |s| s.with_ascii_uppercased()
+}
+
+expect Proven.size([1]) == 1
+expect Proven.shout("a") == "A"
+--- Typed.roc
+## Under the types (root TypedApp, an app, as `roc-types` takes one): a first
+## argument whose type is another module's (a list, for `Str`) is left
+## untried, the type the reason; one whose type is the module's is turned.
+Typed := [].{
+	size : List(U8) -> U64
+	size = |bytes| bytes.len()
+
+	text : List(U8) -> Str
+	text = |bytes| Str.from_utf8(bytes) ?? ""
+
+	answer : Str
+	answer = text([104, 105])
+}
+
+expect Typed.size([1]) == 1
+expect Typed.text([97]) == "a"
+=== glob=Proven.roc root=TypedApp.roc types_from=gone.types (exit 1)
+── stop: fail: `roc_types`: no gone.types, the types of TypedApp.roc to read
+=== glob=Unrooted.roc (exit 1)
+── stop: fail: rewrite_module_calls_as_method_calls: the types need root=, an app importing every file of the glob: roc-types reads an app, and a type module only through one. Give root=, or types=0 to run without them, every candidate tried
+=== glob=NotApp.roc root=Proven.roc (exit 1)
+── stop: fail: `roc_types`: roc-types Proven.roc exited 1, what it said:
+roc-types: <copy>/Proven.roc is not an app (NotAnAppHeader): read a type module through an app that imports it
+=== glob=Pin.roc root=TypedApp.roc (roc-version nightly-2026-11-07-ad3a5d2) (exit 1)
+── stop: fail: `roc_types`: roc-types reads Roc 0.1.0_RC1, and TypedApp.roc's tree is built with <tools>/roc-nightly-2026-11-07-ad3a5d2/roc: its types would be another compiler's. Install the roc-types of the tree's pin (https://github.com/showell/roc-types), or move the tree to 0.1.0_RC1
+=== glob=Rewrite.roc types=0 (no roc-version) (exit 1)
+── stop: fail: rewrite_module_calls_as_method_calls: no roc-version where the run starts: run it from the repository's root, whose roc-version pins its Roc
+=== glob=BadBase.roc types=0 apply=1 (exit 1)
+── stop: fail: rewrite_module_calls_as_method_calls: `roc check BadBase.roc` fails before any rewrite: fix it first
+=== glob=Rewrite.roc types=2 (exit 1)
+── stop: fail: rewrite_module_calls_as_method_calls: types=2: types must be 1 (the default) or 0
+=== glob=Rewrite.roc trials=2 (exit 1)
+── stop: fail: rewrite_module_calls_as_method_calls: trials=2: trials must be 1 (the default) or 0
+=== glob=Rewrite.roc trials=0 apply=1 (exit 1)
+── stop: fail: rewrite_module_calls_as_method_calls: trials=0 writes nothing, so not with apply=1
+=== glob=Rewrite.roc trials=0 types=0 (exit 1)
+── stop: fail: rewrite_module_calls_as_method_calls: trials=0 counts by the types, so not with types=0
+=== glob=Rewrite.roc peers=all (exit 1)
+── stop: fail: rewrite_module_calls_as_method_calls: peers=all: peers takes only `undo`
+=== glob=Rewrite.roc peers=undo trials=0 (exit 1)
+── stop: fail: rewrite_module_calls_as_method_calls: peers=undo judges peers by the types and turns them in trials, so not with trials=0 or types=0 (trials=0 counts them as peer_receiver)
+=== glob=Rewrite.roc peers=undo types=0 (exit 1)
+── stop: fail: rewrite_module_calls_as_method_calls: peers=undo judges peers by the types and turns them in trials, so not with trials=0 or types=0 (trials=0 counts them as peer_receiver)
+=== glob=Rewrite.roc plant=Rewrite (exit 1)
+── stop: fail: rewrite_module_calls_as_method_calls: plant= is for the self-test's child runs, and needs self_test=1
+=== glob=Rewrite.roc root=Rewrite.roc,Own.roc types=0 (exit 1)
+── stop: fail: rewrite_module_calls_as_method_calls: root=Rewrite.roc,Own.roc: several roots need the types, which say which root reaches a file; give one root, or run with the types
+=== glob=Proven.roc root=TypedApp.roc,SecondApp.roc types_from=root.types (exit 1)
+── stop: fail: rewrite_module_calls_as_method_calls: types_from= holds one root's types, and root= names 2
+=== self_test=1 (exit 0)
+ok    glob=: two globs and a repeat give Proven.roc, then NoCalls.roc, each once (cookbook:roc/plants/rewrite_module_calls_as_method_calls/Proven.roc, cookbook:roc/plants/rewrite_module_calls_as_method_calls/NoCalls.roc)
+ok    BadBase: stops, saying fails before any rewrite: fix it first
+ok    Beside: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    Beside: 0 not reached by a root, want 0 ()
+ok    Beside: 0 left, want 0
+ok    Beside: comes out as Proven.want
+ok    Beside: 1 confirm(s), want 1
+ok    Beside: 0 round(s), want 0
+ok    Beside: 1 roc-types run(s), want 1
+ok    Beside: NoCalls left as it was
+ok    Breaks: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    Breaks: 0 not reached by a root, want 0 ()
+ok    Breaks: 1 left, want 1 (scratch:methods.XXXXXX/Breaks.roc:6: Decode.decoded: roc check: missing method)
+ok    Breaks: left because roc check: missing method
+ok    Breaks: 0 confirm(s), want 0
+ok    Breaks: under types=0, no roc-types run
+ok    Breaks: put back as it was
+ok    Chained: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    Chained: 0 not reached by a root, want 0 ()
+ok    Chained: 0 left, want 0
+ok    Chained: comes out as Chained.want
+ok    Chained: 0 confirm(s), want 0
+ok    Chained: under types=0, no roc-types run
+ok    Decode: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    Decode: 0 not reached by a root, want 0 ()
+ok    Decode: 1 left, want 1 (scratch:methods.XXXXXX/Decode.roc:7: Str.from_utf8: roc check: missing method at Breaks.roc:6, on no rewritten call; the file is put back)
+ok    Decode: left because on no rewritten call; the file is put back
+ok    Decode: 0 confirm(s), want 0
+ok    Decode: under types=0, no roc-types run
+ok    Decode: put back as it was
+ok    FunctionValue: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    FunctionValue: 0 not reached by a root, want 0 ()
+ok    FunctionValue: 0 left, want 0
+ok    FunctionValue: comes out as FunctionValue.want
+ok    FunctionValue: 0 confirm(s), want 0
+ok    FunctionValue: under types=0, no roc-types run
+ok    Header: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    Header: 0 not reached by a root, want 0 ()
+ok    Header: 0 left, want 0
+ok    Header: 0 confirm(s), want 0
+ok    Header: under types=0, no roc-types run
+ok    KeptImport: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    KeptImport: 0 not reached by a root, want 0 ()
+ok    KeptImport: 0 left, want 0
+ok    KeptImport: 0 confirm(s), want 0
+ok    KeptImport: under types=0, no roc-types run
+ok    Knock: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    Knock: 0 not reached by a root, want 0 ()
+ok    Knock: 2 left, want 2 (scratch:methods.XXXXXX/Knock.roc:12: Header.read!: roc check: missing method; scratch:methods.XXXXXX/Knock.roc:12: Str.to_utf8: roc check: missing method)
+ok    Knock: left because roc check: missing method
+ok    Knock: comes out as Knock.want
+ok    Knock: 0 confirm(s), want 0
+ok    Knock: under types=0, no roc-types run
+ok    LastSegment: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    LastSegment: 0 not reached by a root, want 0 ()
+ok    LastSegment: 2 left, want 2 (scratch:methods.XXXXXX/LastSegment.roc:13: Book.heading: the first argument is a Shelf.Book, not a Book; scratch:methods.XXXXXX/LastSegment.roc:16: Shelf.count: the first argument is a Shelf.Shelf, not a Shelf)
+ok    LastSegment: left because the first argument is a Shelf.Book, not a Book
+ok    LastSegment: 0 confirm(s), want 0
+ok    LastSegment: 0 round(s), want 0
+ok    LastSegment: 1 roc-types run(s), want 1
+ok    LastSegment: put back as it was
+ok    LastSegmentCount: 0 proven, want 0
+ok    LastSegmentCount: 0 unsettled, want 0
+ok    LastSegmentCount: counted, and left as it was
+ok    LastSegmentCount: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    LastSegmentCount: 0 not reached by a root, want 0 ()
+ok    LastSegmentCount: 2 left, want 2 (scratch:methods.XXXXXX/LastSegment.roc:13: Book.heading: the first argument is a Shelf.Book, not a Book; scratch:methods.XXXXXX/LastSegment.roc:16: Shelf.count: the first argument is a Shelf.Shelf, not a Shelf)
+ok    LastSegmentCount: left because the first argument is a Shelf.Shelf, not a Shelf
+ok    LastSegmentCount: 0 confirm(s), want 0
+ok    LastSegmentCount: 1 roc-types run(s), want 1
+ok    LastSegmentCount: put back as it was
+ok    LastSegmentTried: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    LastSegmentTried: 0 not reached by a root, want 0 ()
+ok    LastSegmentTried: 2 left, want 2 (scratch:methods.XXXXXX/LastSegment.roc:13: Book.heading: roc check: missing method; scratch:methods.XXXXXX/LastSegment.roc:16: Shelf.count: roc check: missing method)
+ok    LastSegmentTried: left because roc check: missing method
+ok    LastSegmentTried: 0 confirm(s), want 0
+ok    LastSegmentTried: under types=0, no roc-types run
+ok    LastSegmentTried: put back as it was
+ok    Literal: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    Literal: 0 not reached by a root, want 0 ()
+ok    Literal: 8 left, want 8 (scratch:methods.XXXXXX/Literal.roc:16: U64.to_str: a number literal's type would default as a receiver (`(5).to_str()` is no longer a U64); scratch:methods.XXXXXX/Literal.roc:19: U64.to_str: a number literal's type would default as a receiver (`(2 + 3).to_str()` is no longer a U64); scratch:methods.XXXXXX/Literal.roc:24: U64.to_str: a number literal's type would default as a receiver (`n` takes its type from a number literal, unannotated, and `n.to_str()` is no longer a U64); scratch:methods.XXXXXX/Literal.roc:35: U64.to_str: a number literal's type would default as a receiver (`top` takes its type from a number literal, unannotated, and `top.to_str()` is no longer a U64); scratch:methods.XXXXXX/Literal.roc:47: I64.to_str: a number literal's type would default as a receiver (`steps` takes its type from a number literal, unannotated, and `steps.to_str()` is no longer a I64); scratch:methods.XXXXXX/Literal.roc:65: U64.to_str: a number literal's type would default as a receiver (`k` takes its type from a number literal, unannotated, and `k.to_str()` is no longer a U64); scratch:methods.XXXXXX/Literal.roc:76: I64.to_str: a number literal's type would default as a receiver (`$bad` takes its type from a number literal, unannotated, and `$bad.to_str()` is no longer a I64); scratch:methods.XXXXXX/Literal.roc:91: U64.to_str: a number literal's type would default as a receiver (`r.a` takes its type from a number literal, unannotated, and `r.a.to_str()` is no longer a U64))
+ok    Literal: left because a number literal's type would default as a receiver
+ok    Literal: comes out as Literal.want
+ok    Literal: 0 confirm(s), want 0
+ok    Literal: under types=0, no roc-types run
+ok    Loud: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    Loud: 0 not reached by a root, want 0 ()
+ok    Loud: 0 left, want 0
+ok    Loud: 0 confirm(s), want 0
+ok    Loud: under types=0, no roc-types run
+ok    MadeLong: 0 made_unused_import and 1 made_long_line, want 0 and 1 (scratch:methods.XXXXXX/MadeLong.roc:11: made_long_line: 108 columns after the rewrite joined a call's lines: stack it (wrap_long_lines_with_trailing_commas.shale): first_part_of_the_long_text.concat(second_part_of_the_long_text.concat(third_part_of_the_long_text)))
+ok    MadeLong: reports MadeLong.roc:11: made_long_line
+ok    MadeLong: 0 not reached by a root, want 0 ()
+ok    MadeLong: 0 left, want 0
+ok    MadeLong: 0 confirm(s), want 0
+ok    MadeLong: under types=0, no roc-types run
+ok    MadeUnused: 1 made_unused_import and 0 made_long_line, want 1 and 0 (scratch:methods.XXXXXX/MadeUnused.roc:4: made_unused_import: `Ref` was used only by the calls the rewrite turned: delete the line)
+ok    MadeUnused: reports MadeUnused.roc:4: made_unused_import: `Ref` was used only by the calls the rewrite turned
+ok    MadeUnused: 0 not reached by a root, want 0 ()
+ok    MadeUnused: 0 left, want 0
+ok    MadeUnused: 0 confirm(s), want 0
+ok    MadeUnused: under types=0, no roc-types run
+ok    Matched: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    Matched: 0 not reached by a root, want 0 ()
+ok    Matched: 1 left, want 1 (scratch:methods.XXXXXX/Matched.roc:6: Str.concat: an argument with no span in the tree (e-match), whose text cannot be moved)
+ok    Matched: left because an argument with no span
+ok    Matched: comes out as Matched.want
+ok    Matched: 0 confirm(s), want 0
+ok    Matched: under types=0, no roc-types run
+ok    NoCalls: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    NoCalls: 0 not reached by a root, want 0 ()
+ok    NoCalls: 0 left, want 0
+ok    NoCalls: 0 confirm(s), want 0
+ok    NoCalls: 0 round(s), want 0
+ok    NoCalls: 0 roc-types run(s), want 0
+ok    NotApp: stops, saying is not an app
+ok    OtherType: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    OtherType: 0 not reached by a root, want 0 ()
+ok    OtherType: 1 left, want 1 (scratch:methods.XXXXXX/OtherType.roc:8: Str.from_utf8: roc check: missing method)
+ok    OtherType: left because roc check: missing method
+ok    OtherType: comes out as OtherType.want
+ok    OtherType: 0 confirm(s), want 0
+ok    OtherType: under types=0, no roc-types run
+ok    Own: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    Own: 0 not reached by a root, want 0 ()
+ok    Own: 0 left, want 0
+ok    Own: comes out as Own.want
+ok    Own: 0 confirm(s), want 0
+ok    Own: under types=0, no roc-types run
+ok    Packaged: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    Packaged: 0 not reached by a root, want 0 ()
+ok    Packaged: 0 left, want 0
+ok    Packaged: comes out as Packaged.want
+ok    Packaged: 1 confirm(s), want 1
+ok    Packaged: 0 round(s), want 0
+ok    Packaged: 1 roc-types run(s), want 1
+ok    PackagedCount: 1 proven, want 1
+ok    PackagedCount: 0 unsettled, want 0
+ok    PackagedCount: counted, and left as it was
+ok    PackagedCount: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    PackagedCount: 0 not reached by a root, want 0 ()
+ok    PackagedCount: 0 left, want 0
+ok    PackagedCount: 0 confirm(s), want 0
+ok    PackagedCount: 1 roc-types run(s), want 1
+ok    PeerMethods: 0 peer_receiver, want 0
+ok    PeerMethods: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    PeerMethods: 0 not reached by a root, want 0 ()
+ok    PeerMethods: 0 left, want 0
+ok    PeerMethods: comes out as PeerMethods.want
+ok    PeerMethods: 1 confirm(s), want 1
+ok    PeerMethods: 0 round(s), want 0
+ok    PeerMethods: 1 roc-types run(s), want 1
+ok    PeerMethodsCount: 0 proven, want 0
+ok    PeerMethodsCount: 0 unsettled, want 0
+ok    PeerMethodsCount: counted, and left as it was
+ok    PeerMethodsCount: 6 peer_receiver, want 6
+ok    PeerMethodsCount: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    PeerMethodsCount: 0 not reached by a root, want 0 ()
+ok    PeerMethodsCount: 6 left, want 6 (scratch:methods.XXXXXX/PeerMethods.roc:15: peer_receiver: `.max` is symmetric and its receiver and first argument are both U64s, so neither is the subject: U64.max(...); scratch:methods.XXXXXX/PeerMethods.roc:18: peer_receiver: `.concat` is symmetric and its receiver and first argument are both Strs, so neither is the subject: Str.concat(...); scratch:methods.XXXXXX/PeerMethods.roc:21: peer_receiver: `.max` is symmetric and its receiver and first argument are both Huess, so neither is the subject: Hues.max(...); scratch:methods.XXXXXX/PeerMethods.roc:24: peer_receiver: `.max` is symmetric and its receiver and first argument are both U64s, so neither is the subject: U64.max(...); scratch:methods.XXXXXX/PeerMethods.roc:27: peer_receiver: `.map2` is symmetric and its receiver and first argument are both Lists, so neither is the subject: List.map2(...); scratch:methods.XXXXXX/PeerMethods.roc:30: peer_receiver: `.bitwise_and` is symmetric and its receiver and first argument are both U64s, so neither is the subject: U64.bitwise_and(...))
+ok    PeerMethodsCount: left because PeerMethods.roc:24: peer_receiver: `.max` is symmetric and its receiver and first argument are both U64s, so neither is the subject: U64.max(...)
+ok    PeerMethodsCount: 0 confirm(s), want 0
+ok    PeerMethodsCount: 1 roc-types run(s), want 1
+ok    Peers: 0 peer_receiver, want 0
+ok    Peers: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    Peers: 0 not reached by a root, want 0 ()
+ok    Peers: 6 left, want 6 (scratch:methods.XXXXXX/Peers.roc:15: U64.max: peers: `max` is symmetric and both arguments are U64s, so neither is the subject; scratch:methods.XXXXXX/Peers.roc:18: Str.concat: peers: `concat` is symmetric and both arguments are Strs, so neither is the subject; scratch:methods.XXXXXX/Peers.roc:21: Hues.max: peers: `max` is symmetric and both arguments are Huess, so neither is the subject; scratch:methods.XXXXXX/Peers.roc:24: U64.max: peers: `max` is symmetric and both arguments are U64s, so neither is the subject; scratch:methods.XXXXXX/Peers.roc:27: List.map2: peers: `map2` is symmetric and both arguments are Lists, so neither is the subject; scratch:methods.XXXXXX/Peers.roc:30: U64.bitwise_and: peers: `bitwise_and` is symmetric and both arguments are U64s, so neither is the subject)
+ok    Peers: left because Peers.roc:24: U64.max: peers: `max` is symmetric and both arguments are U64s, so neither is the subject
+ok    Peers: comes out as Peers.want
+ok    Peers: 1 confirm(s), want 1
+ok    Peers: 0 round(s), want 0
+ok    Peers: 1 roc-types run(s), want 1
+ok    PeersCount: 5 proven, want 5
+ok    PeersCount: 0 unsettled, want 0
+ok    PeersCount: counted, and left as it was
+ok    PeersCount: 0 peer_receiver, want 0
+ok    PeersCount: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    PeersCount: 0 not reached by a root, want 0 ()
+ok    PeersCount: 6 left, want 6 (scratch:methods.XXXXXX/Peers.roc:15: U64.max: peers: `max` is symmetric and both arguments are U64s, so neither is the subject; scratch:methods.XXXXXX/Peers.roc:18: Str.concat: peers: `concat` is symmetric and both arguments are Strs, so neither is the subject; scratch:methods.XXXXXX/Peers.roc:21: Hues.max: peers: `max` is symmetric and both arguments are Huess, so neither is the subject; scratch:methods.XXXXXX/Peers.roc:24: U64.max: peers: `max` is symmetric and both arguments are U64s, so neither is the subject; scratch:methods.XXXXXX/Peers.roc:27: List.map2: peers: `map2` is symmetric and both arguments are Lists, so neither is the subject; scratch:methods.XXXXXX/Peers.roc:30: U64.bitwise_and: peers: `bitwise_and` is symmetric and both arguments are U64s, so neither is the subject)
+ok    PeersCount: left because Peers.roc:24: U64.max: peers: `max` is symmetric
+ok    PeersCount: 0 confirm(s), want 0
+ok    PeersCount: 1 roc-types run(s), want 1
+ok    Pin: stops, saying roc-types reads Roc 0.1.0_RC1
+ok    Pipe: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    Pipe: 0 not reached by a root, want 0 ()
+ok    Pipe: 1 left, want 1 (scratch:methods.XXXXXX/Pipe.roc:4: List.concat: the right of a `|>`, whose first argument the pipe gives)
+ok    Pipe: left because the right of a `|>`
+ok    Pipe: 0 confirm(s), want 0
+ok    Pipe: under types=0, no roc-types run
+ok    Pipe: put back as it was
+ok    Proven: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    Proven: 0 not reached by a root, want 0 ()
+ok    Proven: 0 left, want 0
+ok    Proven: comes out as Proven.want
+ok    Proven: 1 confirm(s), want 1
+ok    Proven: 0 round(s), want 0
+ok    Proven: 1 roc-types run(s), want 1
+ok    ProvenFails: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    ProvenFails: 0 not reached by a root, want 0 ()
+ok    ProvenFails: 2 left, want 2 (scratch:methods.XXXXXX/ProvenFails.roc:13: Iter.fold: roc check: type mismatch; scratch:methods.XXXXXX/ProvenFails.roc:13: U8.to: roc check: type mismatch)
+ok    ProvenFails: left because roc check: type mismatch
+ok    ProvenFails: comes out as ProvenFails.want
+ok    ProvenFails: 1 confirm(s), want 1
+ok    ProvenFails: 2 round(s), want 2
+ok    ProvenFails: 1 roc-types run(s), want 1
+ok    ProvenFailsCount: 3 proven, want 3
+ok    ProvenFailsCount: 0 unsettled, want 0
+ok    ProvenFailsCount: counted, and left as it was
+ok    ProvenFailsCount: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    ProvenFailsCount: 0 not reached by a root, want 0 ()
+ok    ProvenFailsCount: 0 left, want 0
+ok    ProvenFailsCount: 0 confirm(s), want 0
+ok    ProvenFailsCount: 1 roc-types run(s), want 1
+ok    ProvenFrom: 2 proven, want 2
+ok    ProvenFrom: 0 unsettled, want 0
+ok    ProvenFrom: counted, and left as it was
+ok    ProvenFrom: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    ProvenFrom: the types read from a file, so roc-ast the one program (1)
+ok    ProvenFrom: 0 not reached by a root, want 0 ()
+ok    ProvenFrom: 0 left, want 0
+ok    ProvenFrom: 0 confirm(s), want 0
+ok    ProvenFrom: 1 roc-types run(s), want 1
+ok    Ref: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    Ref: 0 not reached by a root, want 0 ()
+ok    Ref: 0 left, want 0
+ok    Ref: 0 confirm(s), want 0
+ok    Ref: under types=0, no roc-types run
+ok    Rewrite: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    Rewrite: 0 not reached by a root, want 0 ()
+ok    Rewrite: 0 left, want 0
+ok    Rewrite: comes out as Rewrite.want
+ok    Rewrite: 0 confirm(s), want 0
+ok    Rewrite: under types=0, no roc-types run
+ok    Scrutinee: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    Scrutinee: 0 not reached by a root, want 0 ()
+ok    Scrutinee: 1 left, want 1 (scratch:methods.XXXXXX/Scrutinee.roc:12: Ref.from_str: roc check: missing method (on `text`'s definition))
+ok    Scrutinee: left because roc check: missing method (on `text`'s definition)
+ok    Scrutinee: comes out as Scrutinee.want
+ok    Scrutinee: 0 confirm(s), want 0
+ok    Scrutinee: under types=0, no roc-types run
+ok    Second: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    Second: 0 not reached by a root, want 0 ()
+ok    Second: 0 left, want 0
+ok    Second: comes out as Second.want
+ok    Second: 1 confirm(s), want 1
+ok    Second: 0 round(s), want 0
+ok    Second: 2 roc-types run(s), want 2
+ok    TestChanged: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    TestChanged: 0 not reached by a root, want 0 ()
+ok    TestChanged: 2 left, want 2 (scratch:methods.XXXXXX/TestChanged.roc:10: Loud.with_ascii_uppercased: roc test changed:     0 compiler errors (exit 1), was All (3) tests passed (exit 0); the file is put back; scratch:methods.XXXXXX/TestChanged.roc:13: List.len: roc test changed:     0 compiler errors (exit 1), was All (3) tests passed (exit 0); the file is put back)
+ok    TestChanged: left because roc test changed: 
+ok    TestChanged: 0 confirm(s), want 0
+ok    TestChanged: under types=0, no roc-types run
+ok    TestChanged: put back as it was
+ok    Typed: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    Typed: 0 not reached by a root, want 0 ()
+ok    Typed: 1 left, want 1 (scratch:methods.XXXXXX/Typed.roc:9: Str.from_utf8: the first argument is a List, not a Str)
+ok    Typed: left because the first argument is a List, not a Str
+ok    Typed: comes out as Typed.want
+ok    Typed: by type, {"the module's type":1,"another type":1}
+ok    Typed: 1 confirm(s), want 1
+ok    Typed: 0 round(s), want 0
+ok    Typed: 1 roc-types run(s), want 1
+ok    TypedCount: 1 proven, want 1
+ok    TypedCount: 0 unsettled, want 0
+ok    TypedCount: counted, and left as it was
+ok    TypedCount: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    TypedCount: 0 not reached by a root, want 0 ()
+ok    TypedCount: 1 left, want 1 (scratch:methods.XXXXXX/Typed.roc:9: Str.from_utf8: the first argument is a List, not a Str)
+ok    TypedCount: left because the first argument is a List, not a Str
+ok    TypedCount: 0 confirm(s), want 0
+ok    TypedCount: 1 roc-types run(s), want 1
+ok    Unformatted: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    Unformatted: 0 not reached by a root, want 0 ()
+ok    Unformatted: 0 left, want 0
+ok    Unformatted: comes out as Unformatted.want
+ok    Unformatted: 0 confirm(s), want 0
+ok    Unformatted: under types=0, no roc-types run
+ok    Unreached: 0 made_unused_import and 0 made_long_line, want 0 and 0
+ok    Unreached: 1 not reached by a root, want 1 (scratch:methods.XXXXXX/Unreached.roc)
+ok    Unreached: 0 left, want 0
+ok    Unreached: comes out as Proven.want
+ok    Unreached: 1 confirm(s), want 1
+ok    Unreached: 0 round(s), want 0
+ok    Unreached: 2 roc-types run(s), want 2
+ok    Unreached: Unreached left as it was
+ok    Unrooted: stops, saying the types need root=
+rewrite_module_calls_as_method_calls: self-test: every plant as it says
