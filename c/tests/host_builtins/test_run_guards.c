@@ -267,15 +267,20 @@ static void guards_git_bare(Ran *x, Str path) {
 }
 
 // The host's unconfined programs (Host's `unconfined_bin`) are the fakes in
-// the folder `rel`, with the system's own git linked in beside them when
-// they hold none: a test's stand-in for /usr/bin.
+// the folder `rel`, with a git beside them when they hold none: a script
+// that leaves a line in D/unconfined-git.log, then runs the system's own.
+// A test's stand-in for /usr/bin, which says it was the one that ran.
 static void guards_unconfined_bin(Ran *x, const char *rel) { // cstr: a test's literal
     Str dir = ran_at(x, rel);
     Buf g = buf_make(&x->host);
-    if (buf_str(&g, dir) != OK || buf_lit(&g, "/git") != OK) abort();
-    const char *git = arena_cstr(&x->host, os_str_own(buf_view(&g)));
-    if (git == NULL) abort();
-    if (access(git, F_OK) != 0 && symlink("/usr/bin/git", git) != 0) abort();
+    if (buf_str(&g, ran_cs(rel)) != OK || buf_lit(&g, "/git") != OK) abort();
+    Str git_rel = buf_view(&g);
+    Str got = S("");
+    if (!ran_file(x, arena_cstr(&x->host, os_str_own(git_rel)), &got)) {
+        const char *rel_c = arena_cstr(&x->host, os_str_own(git_rel)); // cstr: the arena's copy
+        guards_zig_fake(x, rel_c, "");
+        ran_write(x, rel_c, ran_d(x, "#!/bin/sh\necho ran >> D/unconfined-git.log 2>/dev/null\nexec /usr/bin/git \"$@\"\n"));
+    }
     x->lh.unconfined_bin = dir;
 }
 
@@ -505,6 +510,8 @@ TEST(an_unconfined_push_reaches_the_remotes_file_s_remotes_alone) {
     EXPECT(str_starts_with(at(x.lh.records, x.lh.records.len - 1), S("run git push -q origin --delete lane (unconfined: t: push) -> exit 0")));
     EXPECT_STR(guards_decoy(&x, "planted-git"), S("absent"));
     EXPECT_STR(guards_decoy(&x, "planted-ssh"), S("absent"));
+    Str git_ran = S("");
+    EXPECT(ran_file(&x, "unconfined-git.log", &git_ran));
     ran_free(&x);
 }
 // An unconfined fetch comes from a remote of a planted remotes file
