@@ -160,7 +160,8 @@ Text := [].{
 	sort_bytewise = |texts| texts.sort_with(Text.byte_order)
 
 	## Two texts in the order of their bytes, a text before every longer one
-	## it starts, as Shale's `sort` puts strings.
+	## it starts, as Shale's `sort` puts strings. Its one copy is
+	## cookbook/c/items' `Words.byte_order`, which says why.
 	byte_order : Str, Str -> [Before, Same, After]
 	byte_order = |first, second| {
 		pairs = List.map2(

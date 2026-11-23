@@ -95,7 +95,12 @@ Words := [].{
 	}
 
 	## Two texts in the order of their bytes, a text before every longer one
-	## it starts, as Shale's `sort` puts strings.
+	## it starts, as Shale's `sort` puts strings. A copy of the cookbook lib's
+	## `Text.byte_order`, the home of the rule, kept because `uses` (so
+	## Split.items) sorts with it and this package may not import lib: a
+	## script's package imports no package of its own (roc_platform/run.shale
+	## refuses one). The C recipes sort with this copy, so items stays their
+	## only package.
 	byte_order : Str, Str -> [Before, Same, After]
 	byte_order = |first, second| {
 		pairs = List.map2(first.to_utf8(), second.to_utf8(), |x, y| (x, y))
