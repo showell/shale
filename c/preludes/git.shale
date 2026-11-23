@@ -237,12 +237,15 @@ function git_commit(repo, msg, opts?)
   return git_head(repo)
 end
 
--- Whether a push URL of `remote` goes over ssh (`user@host:path`, or
--- `ssh://`), where git's ssh reads the user's key, which no confined
--- program may. A remote git cannot name (no repository, no such remote) is
--- not: the push itself then stops, saying why.
-function git_push_over_ssh(repo, remote)
-  local got = attempt(git_call, repo, {"remote", "get-url", "--push", "--all", remote}, nil, true, nil)
+-- Whether a URL of `remote` goes over ssh (`user@host:path`, or `ssh://`),
+-- a push URL when `pushing`, else a fetch URL: there git's ssh reads the
+-- user's key, which no confined program may. A remote git cannot name (no
+-- repository, no such remote) is not: the push or fetch itself then stops,
+-- saying why.
+function git_remote_over_ssh(repo, remote, pushing)
+  local args = {"remote", "get-url", "--all", remote}
+  if pushing then args = {"remote", "get-url", "--push", "--all", remote} end
+  local got = attempt(git_call, repo, args, nil, true, nil)
   if not got.ok then return false end
   for u in lines(got.value.out) do
     if starts_with(u, "ssh://") or re_find(u, "^[^/:]+@[^/:]+:") ~= nil then return true end
@@ -310,17 +313,48 @@ function git_push(repo, opts?)
     push(args, ref .. ":" .. ref)
   end
   local unconfined = nil
-  if git_push_over_ssh(repo, remote) then unconfined = "git_push: ssh reads the user's key, outside the mounts" end
+  if git_remote_over_ssh(repo, remote, true) then unconfined = "git_push: ssh reads the user's key, outside the mounts" end
   git_call(repo, args, opts, false, nil, unconfined)
   return nil
 end
 
--- Fetch: the upstream, or `{all = true}`.
+-- The remote a bare `git fetch` reads: the upstream's of the branch HEAD
+-- is on, else `origin`, as git picks it.
+function git_fetch_remote(repo)
+  local name = trim(git_call(repo, {"rev-parse", "--abbrev-ref", "HEAD"}, nil, true, nil).out)
+  if name ~= "HEAD" then
+    local up = trim(git_call(repo, {"for-each-ref", "--format=%(upstream:remotename)", "refs/heads/" .. name}, nil, true, nil).out)
+    if up ~= "" then return up end
+  end
+  return "origin"
+end
+
+-- Fetch: the remote a bare `git fetch` reads (git_fetch_remote), or
+-- `{remote}`, or `{all = true}`, each remote in turn; `{prune = true}`
+-- drops the remote-tracking branches gone there (`--prune`). **A fetch over
+-- ssh runs unconfined** (ssh reads the user's key, which no confined program
+-- may), so `run` holds it to the remotes file's remotes, with no hook,
+-- credential helper, submodule or upload-pack of the repository's own
+-- (`unconfined`, SHALE-AGENTS.md); a fetch from a local path runs confined.
 function git_fetch(repo, opts?)
-  git_opts("git_fetch", opts, {"all", "timeout_ms"})
-  local args = {"fetch", "-q"}
-  if opts ~= nil and get(opts, "all", false) then push(args, "--all") end
-  git_call(repo, args, opts, false, nil)
+  git_opts("git_fetch", opts, {"all", "remote", "prune", "timeout_ms"})
+  local remotes = {}
+  if opts ~= nil and get(opts, "all", false) then
+    if has_key(opts, "remote") then fail("`git_fetch` takes `all` or `remote`, not both") end
+    remotes = lines(trim(git_call(repo, {"remote"}, opts, true, nil).out))
+  elseif opts ~= nil and has_key(opts, "remote") then
+    remotes = {git_value("git_fetch", "remote", opts.remote)}
+  else
+    remotes = {git_fetch_remote(repo)}
+  end
+  for remote in remotes do
+    local args = {"fetch", "-q"}
+    if opts ~= nil and get(opts, "prune", false) then push(args, "--prune") end
+    push(args, remote)
+    local unconfined = nil
+    if git_remote_over_ssh(repo, remote, false) then unconfined = "git_fetch: ssh reads the user's key, outside the mounts" end
+    git_call(repo, args, opts, false, nil, unconfined)
+  end
   return nil
 end
 
@@ -364,9 +398,12 @@ function git_mv(repo, from, to, opts?)
   return nil
 end
 
--- Pull, fast-forward only.
+-- Pull, fast-forward only: git_fetch, then a fast-forward to the branch's
+-- upstream (`merge --ff-only @{upstream}`), so the fetch is git_fetch's,
+-- unconfined over ssh, and never `git pull`'s own.
 function git_pull_ff(repo)
-  git_call(repo, {"pull", "-q", "--ff-only"}, nil, false, nil)
+  git_fetch(repo)
+  git_call(repo, {"merge", "-q", "--ff-only", "@{upstream}"}, nil, false, nil)
   return nil
 end
 

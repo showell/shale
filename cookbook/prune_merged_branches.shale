@@ -68,12 +68,14 @@ function prefixed(name, prefixes)
   return false
 end
 
--- One repo's verdicts, a list of {act, repo, branch, why}: four programs
--- (fetch, set-head, symbolic-ref, one for-each-ref with each branch's
--- commits ahead of the default), whatever the branches.
-function judge(dir, label, prefixes)
+-- One repo's verdicts, `repo` a Shale path, a list of {act, repo, branch,
+-- why}: four programs (fetch, set-head, symbolic-ref, one for-each-ref with
+-- each branch's commits ahead of the default), whatever the branches. The
+-- fetch is git_fetch's, so one over ssh runs unconfined.
+function judge(repo, label, prefixes)
   local out = {}
-  git(dir, {"fetch", "-q", "--prune", "origin"})
+  local dir = real(repo)
+  git_fetch(repo, {remote = "origin", prune = true})
   local main = default_branch(dir)
   if main == nil then
     out[#out + 1] = {act = "skip", repo = label, branch = "", why = "origin's default branch is not known here"}
@@ -119,7 +121,7 @@ if SELF_TEST then
   git_push(T .. "/work", {to = "other/ignored"})
   git(w, {"remote", "set-head", "origin", "main"})
   local got = {}
-  for v in judge(w, "t", {"claude/", "box/"}) do got[v.branch] = v.act; say(v) end
+  for v in judge(T .. "/work", "t", {"claude/", "box/"}) do got[v.branch] = v.act; say(v) end
   if got["claude/merged"] ~= "delete" then fail("self_test: claude/merged should be delete, is " .. tostring(got["claude/merged"])) end
   if got["claude/ahead"] ~= "keep" then fail("self_test: claude/ahead (one commit more) should be keep") end
   if has_key(got, "other/ignored") then fail("self_test: a branch outside the prefixes was judged") end
@@ -128,7 +130,7 @@ if SELF_TEST then
   run({"git", "--git-dir", root .. "/origin.git", "symbolic-ref", "HEAD", "refs/heads/box/default"}, {timeout_ms = 30000, whole = 10000})
   git(w, {"remote", "set-head", "origin", "--auto"})
   got = {}
-  for v in judge(w, "t", {"claude/", "box/"}) do got[v.branch] = v.why end
+  for v in judge(T .. "/work", "t", {"claude/", "box/"}) do got[v.branch] = v.why end
   if got["box/default"] ~= "origin's default branch" then fail("self_test: the default branch box/default was not kept as the default") end
   remove_tree(T)
   print("prune_merged_branches self_test: PASS (merged deleted, one commit ahead kept, the default kept, other prefixes untouched)")
@@ -141,9 +143,8 @@ else
     if not exists("repos:" .. label .. "/.git") then
       print("skip\t" .. label .. "\t\tno checkout at repos:" .. label)
     else
-      local dir = real("repos:" .. label)
       local doomed = {}
-      for v in judge(dir, label, prefixes) do
+      for v in judge("repos:" .. label, label, prefixes) do
         say(v)
         if v.act == "delete" then doomed[#doomed + 1] = v.branch elseif v.act == "keep" then kept = kept + 1 end
       end

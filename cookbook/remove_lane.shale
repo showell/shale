@@ -13,8 +13,9 @@
 --
 -- In order:
 --
--- 1. **Fetch** the lane's origin (`git fetch --prune origin`, in the lane's
---    main checkout for a worktree, in the lane for a clone), so the checks
+-- 1. **Fetch** the lane's origin (`git_fetch(lane, {remote = "origin",
+--    prune = true})`, from the lane, whose refs a worktree shares with its
+--    main checkout, so a fetch over ssh runs unconfined), so the checks
 --    below see the remote as it is, not as the last fetch saw it.
 -- 2. **Run `retire_checkout.shale dir=<lane>`** as a child run from the
 --    same folder: its checks are its own, never copied here. Anything but a
@@ -183,7 +184,9 @@ function remove_lane(cfg)
     if ends_with(repo_os, "/.git") then repo_os = sub(repo_os, 1, #repo_os - 5) end
   end
   local branch = trim(git_ok(lane_os, {"branch", "--show-current"}).out)
-  git_ok(repo_os, {"fetch", "-q", "--prune", "origin"})
+  -- From the lane, whose refs are its main checkout's: git_fetch runs a
+  -- fetch over ssh unconfined, which a plain `run` of git cannot.
+  git_fetch(path, {remote = "origin", prune = true})
   print("remove_lane: fetched origin in " .. repo_os)
   require_clear(cfg.root, dir, cfg.env)
   local main = default_branch(repo_os)

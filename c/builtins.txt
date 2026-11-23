@@ -1180,7 +1180,7 @@ git_call(repo: Path, args: List(Str), opts: Opts | Nil, reading: Bool, stdin: St
   impl: prelude git
   kind: internal
 
-git_push_over_ssh(repo: Path, remote: Str) -> Bool
+git_remote_over_ssh(repo: Path, remote: Str, pushing: Bool) -> Bool
   impl: prelude git
   kind: internal
 
@@ -1258,12 +1258,16 @@ git_push(repo: Path, opts?: Opts) -> Nil
   doc: the branch pushed to its namesake upstream, HEAD to `to`, a tag alone, or a branch deleted; unconfined over ssh
   anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
 
+git_fetch_remote(repo: Path) -> Str
+  impl: prelude git
+  kind: internal
+
 git_fetch(repo: Path, opts?: Opts) -> Nil
   impl: prelude git
   kind: effect
-  stops: fail (git's error, named)
-  opts: all: Bool, timeout_ms: Int
-  doc: nothing: the remote fetched
+  stops: fail (git's error, named; over ssh, `run`'s refusals: a remote not the remotes file's)
+  opts: all: Bool, remote: Str, prune: Bool, timeout_ms: Int
+  doc: nothing: the remote fetched, unconfined over ssh
   anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
 
 git_tag(repo: Path, name: Str, opts?: Opts) -> Nil

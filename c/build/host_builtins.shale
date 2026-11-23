@@ -3,9 +3,9 @@
 -- host_write_gate.c, host_run_secrets.c, host_run.c, jobs.c, host_jobs.c).
 -- c/build.shale runs it, with the `build` mount that `use` below reads; see
 -- that file for the tiers and the blocks.
--- (steps, reads and read bytes: its plants, 52 with the Landlock lane's,
--- the unconfined gate's, secret_args', the push's, gh's and the scrubber's
--- parts', each copy c/, about 2M steps, 290 reads and 1.7 MB read a copy:
+-- (steps, reads and read bytes: its plants, 60 with the Landlock lane's,
+-- the unconfined gate's, secret_args', the push's, the fetch's, gh's and the
+-- scrubber's parts', each copy c/, about 2M steps, 290 reads and 1.7 MB read a copy:
 -- 34 of them stopped at 10,000 reads.)
 -- budget: steps=250000000 reads=30000 read_bytes=300000000 programs=600 arena_bytes=268435456 changes=30000 change_bytes=1610612736
 
@@ -21,7 +21,7 @@ use("build:lib.shale")
 -- faults below planted in a copy of c/ (`run_plants`), each caught by its
 -- `aim` tests.
 
-const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 15, ["c/tests/host_builtins/test_run_guards.c"] = 21, ["c/tests/host_builtins/test_run_secret_args.c"] = 2}
+const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 15, ["c/tests/host_builtins/test_run_guards.c"] = 22, ["c/tests/host_builtins/test_run_secret_args.c"] = 2}
 const HOST_BUILTINS_PLANTS = {
   {name = "an unconfined run is any program", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
@@ -125,6 +125,30 @@ const HOST_BUILTINS_PLANTS = {
   {name = "an unconfined push takes any protocol", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "an_unconfined_push_reaches_the_remotes_file_s_remotes_alone",
    old = "os_str_own(S(\"GIT_ALLOW_PROTOCOL=ssh\"));", new = "os_str_own(S(\"GIT_ALLOW_PROTOCOL_NOT=ssh\"));"},
+  {name = "an unconfined fetch is held to its push URLs", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_fetch_comes_from_the_remotes_file_s_remotes_alone",
+   old = "    spec.argv.ptr = push ? push_all : fetch_all;\n    spec.argv.len = push ? 8 : 7;", new = "    spec.argv.ptr = push_all;\n    spec.argv.len = 8;"},
+  {name = "an unconfined fetch takes --upload-pack", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_fetch_comes_from_the_remotes_file_s_remotes_alone",
+   old = "        if (str_starts_with(w, S(\"--upload-pack\"))) return", new = "        if (0) return"},
+  {name = "an unconfined fetch takes any option", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_fetch_comes_from_the_remotes_file_s_remotes_alone",
+   old = "        if (!host_unconfined_named(fetch_flags, w)) return", new = "        if (0) return"},
+  {name = "an unconfined git takes any -c", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_fetch_comes_from_the_remotes_file_s_remotes_alone",
+   old = "        } else if (str_starts_with(w, S(\"-c\"))) {\n            return host_fail_plain(", new = "        } else if (str_eq(w, S(\"-c\")) && i + 1 < n) {\n            i += 2;\n        } else if (0) {\n            return host_fail_plain("},
+  {name = "an unconfined fetch asks the host for its remote's upload-pack", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_fetch_comes_from_the_remotes_file_s_remotes_alone",
+   old = "os_str_own(S(\"--upload-pack=git-upload-pack\"))", new = "os_str_own(S(\"--no-tags\"))"},
+  {name = "an unconfined fetch runs the repository's hooks", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_fetch_comes_from_the_remotes_file_s_remotes_alone",
+   old = "HOST_UNCONFINED_GIT_FETCH[] = {\"-c\", \"core.hooksPath=/dev/null\",", new = "HOST_UNCONFINED_GIT_FETCH[] = {\"-c\", \"color.ui=never\","},
+  {name = "an unconfined fetch forces a refspec", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_fetch_comes_from_the_remotes_file_s_remotes_alone",
+   old = "            if (positional > 0 && !whole) return", new = "            if (0) return"},
+  {name = "an unconfined fetch names a URL for its remote", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "an_unconfined_fetch_comes_from_the_remotes_file_s_remotes_alone",
+   old = "    if (!host_unconfined_remote_name(*remote)) return", new = "    if (0) return"},
   {name = "gh auth runs", file = "host_refusals.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "gh_reads_no_configuration_and_never_says_its_token",
    old = "        if (str_eq(w, S(\"auth\"))) return", new = "        if (0) return"},

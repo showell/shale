@@ -362,8 +362,8 @@ TEST(an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone) {
     EXPECT_EQ(unsetenv("SHALE_HOSTS"), 0);
     EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("0\t0\t0\ntrue\n"
-                                     "`run`'s `unconfined` (t: past the mounts) is for a `git push`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts\n"
-                                     "`run`'s `unconfined` (t: past the mounts) is for a `git push`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts\n"
+                                     "`run`'s `unconfined` (t: past the mounts) is for a `git push` or `git fetch`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts\n"
+                                     "`run`'s `unconfined` (t: past the mounts) is for a `git push` or `git fetch`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts\n"
                                      "`run`'s `unconfined` ssh goes only to a host of the hosts file (~/.config/shale/hosts, or SHALE_HOSTS's), not `steve@example.org`\n"
                                      "`run`'s `unconfined` ssh takes `-o` for BatchMode=yes and LogLevel=QUIET alone, not `ProxyCommand=x`: another setting could name a program, a file or a hop\n"
                                      "`run`'s `unconfined` ssh takes no option but `-o`, not -F: an option could name a program, a config or a hop\n"
@@ -377,7 +377,7 @@ TEST(an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone) {
                                      "fake ssh deploy@example.com true\n\n"
                                      "fake scp -q where.txt deploy@example.com:/tmp/x\n\n"
                                      "fake rsync -rlt --delete --chmod=D755,F644 -e ssh where.txt deploy@example.com:/tmp/\n\n"
-                                     "`run`'s `unconfined` push takes no `-c` but `color.ui=never`: a setting could name a program git starts outside the confinement\n"
+                                     "`run`'s `unconfined` git takes no `-c` but `color.ui=never`: a setting could name a program git starts outside the confinement\n"
                                      "`run`'s `unconfined` push takes no `--receive-pack` or `--exec`: each names a program it would start outside the confinement\n"
                                      "`run`'s `unconfined` git takes no `env` (git: but GIT_TERMINAL_PROMPT), not GIT_SSH_COMMAND: a variable could name a program it starts\n"));
     ran_free(&x);
@@ -476,6 +476,91 @@ TEST(an_unconfined_push_reaches_the_remotes_file_s_remotes_alone) {
     EXPECT(guards_holds(said, "git@github.com git-receive-pack 'showell/t.git' allow=ssh\n"));
     EXPECT(x.lh.records.len > 0);
     EXPECT(str_starts_with(at(x.lh.records, x.lh.records.len - 1), S("run git push -q origin --delete lane (unconfined: t: push) -> exit 0")));
+    ran_free(&x);
+}
+// An unconfined fetch comes from a remote of a planted remotes file
+// (SHALE_REMOTES) alone, by every fetch URL git reads for it (an `insteadOf`
+// among them, never a `pushurl`), over ssh alone to the file's host, asking
+// the host for git's own upload-pack whatever the remote's `uploadpack`
+// says, and with no hook of the repository's: a plain fetch of a remote runs,
+// and an `--upload-pack`, a `-c`, `--all`, `--recurse-submodules`, no remote,
+// a URL for a remote, a forced refspec, another remote, a remote whose
+// `pushurl` alone is in the file, and another git command are each refused.
+// `ssh` is a fake first on PATH that says how git called it and hands the
+// push that fills the remote, then each fetch, to a bare repository outside
+// every mount, so nothing is reached; the record says the fetch was
+// unconfined.
+TEST(an_unconfined_fetch_comes_from_the_remotes_file_s_remotes_alone) {
+    static Ran x;
+    guards_ran_with(&x, "", false);
+    guards_zig_fake(&x, "fakebin/ssh", "");
+    ran_write(&x, "fakebin/ssh", ran_d(&x, "#!/bin/sh\necho \"$* allow=$GIT_ALLOW_PROTOCOL\" >> D/ssh.log\ncase \"$*\" in *git-receive-pack*) exec git receive-pack D/github.git;; esac\nexec git upload-pack D/github.git\n"));
+    guards_zig_fake(&x, "hooks/reference-transaction", "");
+    ran_write(&x, "hooks/reference-transaction", ran_d(&x, "#!/bin/sh\necho hooked >> D/hooked.log\n"));
+    static OsStr path_env[1];
+    SLICE_TYPE(EnvRoom, OsStr);
+    EnvRoom room = {path_env, 1};
+    Buf pb = buf_make(&x.host);
+    EXPECT_EQ(buf_lit(&pb, "PATH="), OK);
+    EXPECT_EQ(buf_str(&pb, ran_at(&x, "fakebin")), OK);
+    EXPECT_EQ(buf_lit(&pb, ":/usr/bin:/bin"), OK);
+    at(room, 0) = os_str_own(buf_view(&pb));
+    x.lh.env = (SpawnStrs){path_env, 1};
+    ran_put(&x, "remotes", "git@github.com:showell/\n");
+    FileSystemCPath remotes_cp;
+    const char *remotes_c = NULL;
+    EXPECT_EQ(file_system_cstr(&remotes_cp, os_str_own(ran_at(&x, "remotes")), &remotes_c), FILE_SYSTEM_OK);
+    EXPECT_EQ(setenv("SHALE_REMOTES", remotes_c, 1), 0);
+    guards_git_bare(&x, ran_at(&x, "github.git"));
+    ran_put(&x, "root/where.txt", "w\n");
+    // The hooks' path comes from a file: the source holds capital Ds.
+    ran_write(&x, "root/hooks.txt", ran_at(&x, "hooks"));
+    ran_run(&x, S("function c(a, o) return host(\"run\", a, o) end\n"
+                  "function g(args)\n  local argv = {\"git\", \"-c\", \"user.name=t\", \"-c\", \"user.email=t@t\"}\n  for a in args do push(argv, a) end\n  return c(argv, {timeout_ms = 10000, tail = 3}).code\nend\n"
+                  "function f(args)\n  local argv = {\"git\"}\n  for a in args do push(argv, a) end\n  return c(argv, {timeout_ms = 10000, tail = 3, unconfined = \"t: fetch\"}).code\nend\n"
+                  "function no(args)\n  local argv = {\"git\"}\n  for a in args do push(argv, a) end\n  return attempt(c, argv, {timeout_ms = 10000, tail = 3, unconfined = \"t: fetch\"}).error\nend\n"
+                  "print(g({\"init\", \"-q\", \"-b\", \"main\"}), g({\"add\", \"where.txt\"}), g({\"commit\", \"-q\", \"-m\", \"m1\"}))\n"
+                  "print(g({\"remote\", \"add\", \"origin\", \"git@github.com:showell/t.git\"}), g({\"remote\", \"add\", \"other\", \"git@github.com:someone/t.git\"}), g({\"remote\", \"add\", \"split\", \"git@github.com:someone/t.git\"}), g({\"config\", \"remote.split.pushurl\", \"git@github.com:showell/t.git\"}), g({\"remote\", \"add\", \"short\", \"git@gh:showell/t.git\"}), g({\"config\", \"url.git@github.com:showell/.insteadOf\", \"git@gh:showell/\"}))\n"
+                  "print(f({\"push\", \"-q\", \"origin\", \"main\"}), g({\"update-ref\", \"-d\", \"refs/remotes/origin/main\"}), g({\"config\", \"remote.origin.uploadpack\", \"evil-pack\"}), g({\"config\", \"core.hooksPath\", read(\"hooks.txt\")}))\n"
+                  "print(no({\"fetch\", \"--upload-pack=x\", \"origin\"}))\n"
+                  "print(no({\"fetch\", \"--upload-pack\", \"x\", \"origin\"}))\n"
+                  "print(no({\"-c\", \"core.sshCommand=x\", \"fetch\", \"origin\"}))\n"
+                  "print(no({\"fetch\", \"--all\"}))\n"
+                  "print(no({\"fetch\", \"--recurse-submodules\", \"origin\"}))\n"
+                  "print(no({\"fetch\", \"-q\"}))\n"
+                  "print(no({\"fetch\", \"git@github.com:showell/t.git\"}))\n"
+                  "print(no({\"fetch\", \"origin\", \"+main:refs/heads/x\"}))\n"
+                  "print(no({\"fetch\", \"other\"}))\n"
+                  "print(no({\"fetch\", \"split\"}))\n"
+                  "print(no({\"clone\", \"git@github.com:showell/t.git\", \"x\"}))\n"
+                  "print(f({\"-C\", \".\", \"-c\", \"color.ui=never\", \"fetch\", \"-q\", \"--prune\", \"origin\"}), f({\"fetch\", \"-q\", \"short\"}))\n"),
+           ran_budgets());
+    EXPECT_EQ(unsetenv("SHALE_REMOTES"), 0);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("0\t0\t0\n0\t0\t0\t0\t0\t0\n0\t0\t0\t0\n"
+                                     "`run`'s `unconfined` fetch takes no `--upload-pack`: it names the program the fetch starts\n"
+                                     "`run`'s `unconfined` fetch takes no `--upload-pack`: it names the program the fetch starts\n"
+                                     "`run`'s `unconfined` git takes no `-c` but `color.ui=never`: a setting could name a program git starts outside the confinement\n"
+                                     "`run`'s `unconfined` fetch does not take --all: its options are HOST_UNCONFINED_FETCH_FLAGS' (c/host/host_unconfined.c)\n"
+                                     "`run`'s `unconfined` fetch does not take --recurse-submodules: its options are HOST_UNCONFINED_FETCH_FLAGS' (c/host/host_unconfined.c)\n"
+                                     "`run`'s `unconfined` fetch names its remote (`git fetch origin`): a fetch by the branch's own settings could come from a remote nobody checked\n"
+                                     "`run`'s `unconfined` fetch names a remote, not git@github.com:showell/t.git: its URL is held to the remotes file\n"
+                                     "`run`'s `unconfined` fetch names each ref whole and forces none, not +main:refs/heads/x\n"
+                                     "`run`'s `unconfined` fetch comes only from a remote of the remotes file (~/.config/shale/remotes, or SHALE_REMOTES's), `<user@host:owner/><repo>.git`: `other` fetches from git@github.com:someone/t.git\n"
+                                     "`run`'s `unconfined` fetch comes only from a remote of the remotes file (~/.config/shale/remotes, or SHALE_REMOTES's), `<user@host:owner/><repo>.git`: `split` fetches from git@github.com:someone/t.git\n"
+                                     "`run`'s `unconfined` (t: fetch) is for a `git push` or `git fetch`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts\n"
+                                     "0\t0\n"));
+    Str ref = S("");
+    EXPECT(ran_file(&x, "root/.git/refs/remotes/origin/main", &ref));
+    EXPECT(ran_file(&x, "root/.git/refs/remotes/short/main", &ref));
+    EXPECT_STR(guards_decoy(&x, "hooked.log"), S("absent"));
+    Str said = S("");
+    EXPECT(ran_file(&x, "ssh.log", &said));
+    EXPECT(guards_holds(said, "-o HostName=github.com "));
+    EXPECT(guards_holds(said, "git@github.com git-upload-pack 'showell/t.git' allow=ssh\n"));
+    EXPECT(!guards_holds(said, "evil-pack"));
+    EXPECT(x.lh.records.len > 0);
+    EXPECT(str_starts_with(at(x.lh.records, x.lh.records.len - 1), S("run git fetch -q short (unconfined: t: fetch) -> exit 0")));
     ran_free(&x);
 }
 
@@ -665,7 +750,7 @@ TEST(an_unconfined_deploy_s_host_may_be_a_secret_and_is_never_shown) {
                                      "`run`'s `unconfined` ssh takes `-o` for BatchMode=yes and LogLevel=QUIET alone, not `<secret OPT>`: another setting could name a program, a file or a hop\n"
                                      "`run`'s `unconfined` ssh takes `-o` for BatchMode=yes and LogLevel=QUIET alone, not `LogLevel=DEBUG`: another setting could name a program, a file or a hop\n"
                                      "`run`'s `unconfined` rsync takes `-e ssh` alone of a remote shell, with `-o BatchMode=yes` and `-o LogLevel=QUIET` after it: any other is a program it would start\n"
-                                     "`run`'s `unconfined` (t: deploy) is for a `git push`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts\n"
+                                     "`run`'s `unconfined` (t: deploy) is for a `git push` or `git fetch`, or `ssh`, `scp` or `rsync` to a host of the hosts file; every other program runs confined to the mounts\n"
                                      "fake ssh <secret PROD> true\n21\nsealed\n\n"
                                      "true\tfalse\n"));
     EXPECT(!guards_holds(buf_view(&x.r.out), "192.0.2"));
@@ -877,4 +962,5 @@ TEST_PART(run_guards, TEST_CASE(a_program_writes_and_reads_only_where_the_mounts
           TEST_CASE(zig_ast_s_stderr_is_drained_while_it_answers_and_a_hung_one_stops_at_the_deadline), TEST_CASE(zig_ast_runs_confined_to_the_mounts),
           TEST_CASE(ssh_reads_its_known_hosts_and_no_key_and_the_caches_are_the_build_mount_s), TEST_CASE(an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone), TEST_CASE(an_unconfined_copy_s_hosts_are_the_hosts_file_s_and_none_without_one),
           TEST_CASE(an_unconfined_deploy_s_host_may_be_a_secret_and_is_never_shown),
-          TEST_CASE(an_unconfined_push_reaches_the_remotes_file_s_remotes_alone), TEST_CASE(gh_reads_no_configuration_and_never_says_its_token));
+          TEST_CASE(an_unconfined_push_reaches_the_remotes_file_s_remotes_alone),
+          TEST_CASE(an_unconfined_fetch_comes_from_the_remotes_file_s_remotes_alone), TEST_CASE(gh_reads_no_configuration_and_never_says_its_token));

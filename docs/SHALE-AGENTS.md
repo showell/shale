@@ -162,6 +162,7 @@ Each has a Shale form, most of them one launch:
 | `git log`, `git diff --stat`, `git show rev:path`, `git status` | the git prelude: `git_log`, `git_diff`, `git_show`, `git_status`, `git_is_clean` (below) |
 | `git commit -m ... && git push` | `git_commit(repo, msg, {add})`, `git_push(repo)`; `git_worktree_add`, `git_merge_ff` |
 | `git push origin HEAD:main`, `git push origin --delete lane`, `git push --force-with-lease` | `git_push(repo, {to = "main"})`, `git_push(repo, {delete = "lane"})`, `git_push(repo, {lease = true})`: a plain `run` of `git push` over ssh cannot read the key |
+| `git fetch --prune origin`, `git pull --ff-only` | `git_fetch(repo, {remote = "origin", prune = true})`, `git_pull_ff(repo)`: a plain `run` of `git fetch` over ssh cannot read the key either |
 | a script you would write in python | a heredoc, `shale <<'TAG'`: `edit`'s list form, `walk_all`, `grep`, `re_lines`, `run` |
 
 A script is named through a mount too (`shale cookbook:look.shale`, once
@@ -260,10 +261,11 @@ has none of it):
   `PLAYWRIGHT_BROWSERS_PATH`, as roc-apps' do. ssh
   reads `~/.ssh/known_hosts` and `~/.ssh/config`, and no key file: a
   confined ssh authenticates only through an agent (`SSH_AUTH_SOCK` is
-  passed on). **`run`'s `unconfined = "tag: why"`** runs four shapes past
+  passed on). **`run`'s `unconfined = "tag: why"`** runs five shapes past
   the rules, each recorded as `(unconfined: ...)`
-  (`c/host/host_unconfined.c`): a `git push`, and a deploy's `ssh`, `scp`
-  and `rsync` to a host of the hosts file. **The push** is `git [-C dir]
+  (`c/host/host_unconfined.c`): a `git push` and a `git fetch`, and a
+  deploy's `ssh`, `scp` and `rsync` to a host of the hosts file; no other
+  git command (a `clone`, an `ls-remote`, a `pull`). **The push** is `git [-C dir]
   [-c color.ui=never] push [options] <remote> <refspec>...`, its options
   HOST_UNCONFINED_PUSH_FLAGS' alone (`-q`, `-u`, `--delete`,
   `--force-with-lease`, ...; no `--receive-pack` or `--exec`), a remote
@@ -278,8 +280,21 @@ has none of it):
   `git@github.com:showell/`; Shale ships none, so no file is no remote.
   It runs with its hooks, fsmonitor, credential helpers, submodule pushes
   and signing off, over ssh alone (`GIT_ALLOW_PROTOCOL=ssh`), ssh's
-  `HostName` that line's host. The git prelude's `git_push` runs every
-  push over ssh so (below). **The deploy's** `ssh`, `scp` and `rsync` go to a host of the
+  `HostName` that line's host. **The fetch** is `git [-C dir] [-c
+  color.ui=never] fetch [options] <remote> [<refspec>...]`, its options
+  HOST_UNCONFINED_FETCH_FLAGS' alone (`-q`, `--prune`, `--tags`, ...; no
+  `--upload-pack`, `--all`, `--multiple` or `--recurse-submodules`), a
+  remote by its name (letters, digits, `.`, `_`, `-`) and refspecs that
+  name each ref whole and force none (no `+`, `*` or `^`). Every fetch URL
+  of the remote (`git remote get-url --all`, run confined: an `insteadOf`
+  counts, a `pushurl` does not) is a remotes file's, as a push's. It runs
+  with its hooks, fsmonitor, credential helpers, submodule fetches,
+  automatic gc and maintenance, bundle URIs and commit graph off, an
+  alternate's refs command `true`, the host asked for git's own
+  `git-upload-pack` whatever the remote's `uploadpack` says, and the same
+  ssh. A `-c` but `color.ui=never` is refused before either. The git
+  prelude's `git_push` and `git_fetch` run every push and fetch over ssh
+  so (below). **The deploy's** `ssh`, `scp` and `rsync` go to a host of the
   **hosts file** alone: `~/.config/shale/hosts`, beside the mounts file (or
   the file `SHALE_HOSTS` names), one `user@host` a line, `#` lines and blank
   ones skipped (`deploy@example.com`). Shale ships no host: no file, or no
@@ -576,8 +591,13 @@ or `"."` for the root and `repos:roc-chat` for a mount.
     remotes file's remotes, and refuses any force but a lease to a branch
     other than main and master, and a deletion of either (`unconfined`,
     above); a push to a local path runs confined.
-  - `git_fetch(repo, {all})`, `git_pull_ff(repo)` and `git_merge_ff(repo,
-    ref)`.
+  - `git_fetch(repo, {remote, all, prune})` fetches the remote a bare
+    `git fetch` reads (the upstream's, else `origin`), `remote`, or every
+    remote in turn; **a fetch over ssh runs unconfined**, held to the
+    remotes file's remotes as a push is (`unconfined`, above), and one from
+    a local path runs confined. `git_pull_ff(repo)` is `git_fetch` and a
+    fast-forward to the upstream (never `git pull`'s own fetch), and
+    `git_merge_ff(repo, ref)` a fast-forward to `ref`.
   - `git_merge(repo, ref)` makes a merge commit when one is needed and
     gives the new head. On a conflict it undoes the merge (`merge
     --abort`) and stops, naming the conflicted paths, so the checkout is
