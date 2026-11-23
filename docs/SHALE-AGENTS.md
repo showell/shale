@@ -336,7 +336,26 @@ has none of it):
   GITHUB_TOKEN or an enterprise one is refused), as
   `cookbook/build_on_github.shale` does; `gh auth` (`status` prints the
   token's first characters, `token` and `git-credential` all of it) and
-  `gh alias` are refused, want or not. A `want` never widens it. A program it
+  `gh alias` are refused, want or not. **One secret is fenced to one
+  program:** `github-pr-token`, a classic token with `public_repo` that
+  writes every public repository its owner may reach, goes to `gh pr
+  create`, `gh pr view` and `gh pr close` alone
+  (`c/host/host_run_secrets.c`'s HOST_SECRET_FENCED). `run` refuses any
+  other use of it before it reads the secret: another program (`curl`, and
+  so `http`'s `bearer`), another gh command (`gh pr merge`, `gh api -X
+  POST`), and any option those three commands' lists don't name (`--web`,
+  `--editor`). Each value is held to its shape: `--repo OWNER/NAME` with no
+  host, `--head OWNER:BRANCH` whose owner is a github.com owner of the
+  remotes file (below), and a pull request by its number. A create names
+  `--repo`, `--head`, `--title` and `--body-file`, so gh never asks, forks
+  or pushes. The token goes in `secrets = {GH_TOKEN =
+  "keys:github-pr-token"}` alone, the run's only secret, with no `env`,
+  `want`, `unconfined` or `stdout_secret`, and never in `secret_args`. It
+  runs as the system's own gh, `/usr/bin/gh`, with `PATH=/usr/bin:/bin`,
+  never one planted on PATH, and stays confined.
+  `cookbook/open_pull_request.shale` is its one user. `remote_owners()`
+  gives the remotes file's lines as `{host, owner}`, so a script can check
+  a head before it runs gh. A `want` never widens it. A program it
   refuses gets EACCES from the call it made, so a script sees the
   program's own words, `Permission denied`, and its exit code: a refusal
   is a gap to name in host_confine.c on purpose. A kernel without Landlock

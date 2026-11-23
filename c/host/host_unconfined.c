@@ -455,6 +455,63 @@ static STATUS_MUST_USE Status host_unconfined_remotes(Run *r, Pos pos, Str *out)
     return host_unconfined_list(r, pos, "SHALE_REMOTES", S("remotes"), host_unconfined_remote_line, S("a remote owner's: one `user@host:owner/` a line"), out);
 }
 
+// The owner and host of a remotes file's line, `user@host:owner/` (held to
+// that shape by host_unconfined_remote_line).
+static void host_remote_owner_of(Str line, Str *host, Str *owner) {
+    *host = host_unconfined_remote_host(line);
+    const char *colon = str_find_byte(line, ':');
+    *owner = str_sub(line, (size_t)(colon - line.ptr) + 1, line.len - 1);
+}
+
+// Whether `owner` is the owner of a github.com line of the remotes file's
+// text `remotes`: a fenced pull request's head (host_run_secrets.c).
+static bool host_remote_owner_listed(Str remotes, Str owner) {
+    size_t from = 0;
+    while (from <= remotes.len) {
+        size_t to = path_part_end_at(remotes, from, '\n');
+        Str line = mounts_trim(str_sub(remotes, from, to), true);
+        from = to + 1;
+        if (line.len == 0 || str_byte(line, 0) == '#') continue;
+        Str host = S("");
+        Str o = S("");
+        host_remote_owner_of(line, &host, &o);
+        if (str_eq(host, S("github.com")) && str_eq(o, owner)) return true;
+    }
+    return false;
+}
+
+// `host("remote_owners")`: the remotes file's lines as `{host, owner}`, in
+// its order, `{}` with no file; a script's view of the one list a push, a
+// fetch and a fenced pull request's head are held to.
+static STATUS_MUST_USE Status host_remote_owners(Run *r, Pos pos, ConstValues args, Value *out) {
+    if (args.len != 0) return host_fail(r, pos, CLASS_ARGUMENT, S("`remote_owners` takes nothing, given {d} arguments"), MESSAGE_ARGS(MESSAGE_FROM_HOST(run_unum(r, args.len))));
+    Str remotes = S("");
+    TRY(host_unconfined_remotes(r, pos, &remotes));
+    Table *list = NULL;
+    TRY(run_new_table(r, pos, &list));
+    list->kind = TABLE_LIST;
+    size_t from = 0;
+    while (from <= remotes.len) {
+        size_t to = path_part_end_at(remotes, from, '\n');
+        Str line = mounts_trim(str_sub(remotes, from, to), true);
+        from = to + 1;
+        if (line.len == 0 || str_byte(line, 0) == '#') continue;
+        Str host = S("");
+        Str owner = S("");
+        host_remote_owner_of(line, &host, &owner);
+        Table *m = NULL;
+        TRY(run_new_table(r, pos, &m));
+        m->kind = TABLE_MAP;
+        TRY(run_map_put_str(r, pos, m, S("host"), host));
+        TRY(run_map_put_str(r, pos, m, S("owner"), owner));
+        Value mv;
+        value_table(&mv, m);
+        TRY(run_list_push(r, pos, list, &mv));
+    }
+    value_table(out, list);
+    return OK;
+}
+
 // Whether `url` is `<line><repo>.git` for a line of the remotes file's text
 // `remotes`, the repo a name of letters, digits, `.`, `_` and `-` that does
 // not start with `.` or `-`; that line's host into `*host`.

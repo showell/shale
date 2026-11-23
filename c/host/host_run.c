@@ -572,6 +572,10 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     HostProgram prog = {S("run"), argv, &o->cwd, &o->env, &o->secrets, host_given(&o->want)};
     Str cwd = S("");
     TRY(host_guard_program(h, r, pos, &prog, &cwd));
+    // The fenced secret's shapes, before any secret is read: the DRAGON at
+    // HOST_SECRET_FENCED.
+    bool fenced = false;
+    TRY(host_secret_fence(h, r, pos, argv, &o->env, &o->secrets, &o->secret_args, host_given(&o->want), host_given(&o->unconfined), host_given(&o->stdout_secret), &fenced));
 
     Buf shown_env = buf_make(a);
     SpawnStrs env = {NULL, 0};
@@ -623,6 +627,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     if (host_given(&o->unconfined)) {
         TRY(host_run_unconfined(h, r, pos, argv, filled, &o->env, o->unconfined.as.string, cwd, &spec.argv, &spec.env));
     } else {
+        if (fenced) TRY(host_secret_fence_pin(h, r, pos, argv, &spec.argv, &spec.env));
         TRY(host_confine_open(h, r, pos, S("run"), &held->confine_fd));
     }
     spec.confine_fd = held->confine_fd;

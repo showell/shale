@@ -595,6 +595,210 @@ static STATUS_MUST_USE Status host_secret_args_fill(Host *h, Run *r, Pos pos, Sp
     return OK;
 }
 
+// ── a fenced secret: one program's few commands alone ──
+
+// The fenced secret's file name, in a secrets mount (or a folder of one):
+// the box's classic GitHub token with `public_repo`, which opens a pull
+// request from a fork (cookbook/open_pull_request.shale).
+// DRAGON: the secrets rule. `secrets` hands any secret to any program, and
+// this token writes every public repository its owner may reach: a script
+// could hand it to `gh pr merge`, `gh api -X POST`, `gh repo delete`, curl
+// (`http`'s `bearer` among them) or a `gh` planted first on PATH.
+// REMEDY: a run that names it is held to HOST_SECRET_FENCE_USES' shapes
+// (host_secret_fence), each option by name and each value by its shape, a
+// head's owner one of the remotes file's; it is the only secret, with no
+// `env`, `want`, `unconfined`, `secret_args` or `stdout_secret`, and it runs
+// as the system's own gh (host_unconfined_program) with HOST_UNCONFINED_PATH;
+// in `secret_args` it is refused. It is checked before any secret is read.
+// test_run_guards' a_fenced_secret_goes_to_gh_pr_create_view_and_close_alone
+// plants each refusal. What is left: a file of the same bytes under another
+// name, which only the secrets folder's owner can make.
+#define HOST_SECRET_FENCED "github-pr-token"
+
+#define HOST_FENCE_LEN(a) (sizeof(a) / sizeof *(a))
+
+// One command the fenced secret may go to, `gh pr <command>`: its options
+// that take the next word as their value, its options that take none, and
+// whether it takes one positional word, a pull request's number. Every
+// command needs `--repo`; `create` needs `--head`, `--title` and
+// `--body-file` too, so gh never asks, forks or pushes.
+typedef struct {
+    const char *command; // cstr: a literal
+    HostConfineArgs values;
+    HostConfineArgs flags;
+    bool number;
+} HostFenceUse;
+
+SLICE_TYPE(HostFenceUses, const HostFenceUse);
+
+static const char *const HOST_FENCE_CREATE_VALUES[] = {"--repo", "--base", "--head", "--title", "--body-file"};
+static const char *const HOST_FENCE_CREATE_FLAGS[] = {"--draft"};
+static const char *const HOST_FENCE_VIEW_VALUES[] = {"--repo", "--json"};
+static const char *const HOST_FENCE_CLOSE_VALUES[] = {"--repo"};
+
+static const HostFenceUse HOST_SECRET_FENCE_USES[] = {
+    {"create", {HOST_FENCE_CREATE_VALUES, HOST_FENCE_LEN(HOST_FENCE_CREATE_VALUES)}, {HOST_FENCE_CREATE_FLAGS, HOST_FENCE_LEN(HOST_FENCE_CREATE_FLAGS)}, false},
+    {"view", {HOST_FENCE_VIEW_VALUES, HOST_FENCE_LEN(HOST_FENCE_VIEW_VALUES)}, {NULL, 0}, true},
+    {"close", {HOST_FENCE_CLOSE_VALUES, HOST_FENCE_LEN(HOST_FENCE_CLOSE_VALUES)}, {NULL, 0}, true},
+};
+
+static bool host_fence_word_byte(uint8_t c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-';
+}
+
+// Whether `s` is a name GitHub gives an owner or a repository: letters,
+// digits, `.`, `_` and `-`, not first `.` or `-`.
+static bool host_fence_name(Str s) {
+    if (s.len == 0 || str_byte(s, 0) == '.' || str_byte(s, 0) == '-') return false;
+    for (size_t i = 0; i < s.len; i++) {
+        if (!host_fence_word_byte(str_byte(s, i))) return false;
+    }
+    return true;
+}
+
+// Whether `s` is a branch's name as the fence takes it: name bytes and `/`,
+// not first `-`, `.` or `/`, and no `..`.
+static bool host_fence_branch(Str s) {
+    if (s.len == 0 || str_byte(s, 0) == '-' || str_byte(s, 0) == '.' || str_byte(s, 0) == '/') return false;
+    if (mem_find(s.ptr, s.len, "..", 2) != SIZE_MAX) return false;
+    for (size_t i = 0; i < s.len; i++) {
+        uint8_t c = str_byte(s, i);
+        if (!host_fence_word_byte(c) && c != '/') return false;
+    }
+    return true;
+}
+
+// Whether `s` is `OWNER/NAME` with no host before it: gh sends GH_TOKEN to
+// github.com alone, and a `HOST/OWNER/NAME` names another host.
+static bool host_fence_repo(Str s) {
+    const char *slash = str_find_byte(s, '/');
+    if (slash == NULL) return false;
+    size_t at = (size_t)(slash - s.ptr);
+    return host_fence_name(str_sub(s, 0, at)) && host_fence_name(str_sub(s, at + 1, s.len));
+}
+
+// Whether the script's secret path `given` is the fenced secret's file: its
+// OS path's last name, so any mount's name or folder for it is the same.
+static STATUS_MUST_USE Status host_secret_is_fenced(Host *h, Run *r, Pos pos, Str given, bool *out) {
+    OsStr path;
+    TRY(host_secret_os_path(h, r, pos, given, false, &path));
+    *out = str_eq(host_base_name(path.s), S(HOST_SECRET_FENCED));
+    return OK;
+}
+
+static STATUS_MUST_USE Status host_fence_refused(Run *r, Pos pos, Str why) {
+    return host_fail(r, pos, CLASS_REFUSED, S("`run`: the secret " HOST_SECRET_FENCED " goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: {s}"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(why)));
+}
+
+// A refusal that names a word of the script's argv.
+static STATUS_MUST_USE Status host_fence_refused_word(Run *r, Pos pos, const char *what, Str word) { // cstr: a literal
+    Buf b = buf_make(r->ctx.values);
+    if (buf_str(&b, (Str){what, strlen(what)}) != OK || buf_str(&b, word) != OK) return run_values_oom(r, pos);
+    return host_fence_refused(r, pos, buf_view(&b));
+}
+
+// Holds a fenced command's words after `gh pr <command>` to `use`.
+static STATUS_MUST_USE Status host_fence_command(Run *r, Pos pos, SpawnStrs argv, const HostFenceUse *use) {
+    bool seen[8] = {false};
+    SLICE_TYPE(Seen, bool);
+    Seen s = {seen, 8};
+    size_t positional = 0;
+    for (size_t i = 3; i < argv.len; i++) {
+        Str w = at(argv, i).s;
+        if (!str_starts_with(w, S("-"))) {
+            if (!use->number) return host_fence_refused_word(r, pos, "`gh pr create` takes no word but its options' values, not ", w);
+            bool digits = w.len > 0 && w.len <= 12;
+            for (size_t k = 0; k < w.len && digits; k++) digits = str_byte(w, k) >= '0' && str_byte(w, k) <= '9';
+            if (!digits || positional > 0) return host_fence_refused_word(r, pos, "it names one pull request by its number, not ", w);
+            positional++;
+            continue;
+        }
+        bool flag = false;
+        for (size_t k = 0; k < use->flags.len; k++) flag = flag || str_eq(w, (Str){at(use->flags, k), strlen(at(use->flags, k))});
+        if (flag) continue;
+        size_t which = use->values.len;
+        for (size_t k = 0; k < use->values.len; k++) {
+            if (str_eq(w, (Str){at(use->values, k), strlen(at(use->values, k))})) which = k;
+        }
+        if (which == use->values.len) return host_fence_refused_word(r, pos, "an option it does not name: ", w);
+        if (at(s, which)) return host_fence_refused_word(r, pos, "an option given twice: ", w);
+        at(s, which) = true;
+        if (i + 1 >= argv.len) return host_fence_refused_word(r, pos, "an option with no value: ", w);
+        Str v = at(argv, ++i).s;
+        bool ok = v.len > 0;
+        if (str_eq(w, S("--repo"))) ok = host_fence_repo(v);
+        if (str_eq(w, S("--base"))) ok = host_fence_branch(v);
+        if (str_eq(w, S("--json"))) {
+            for (size_t k = 0; k < v.len && ok; k++) {
+                uint8_t c = str_byte(v, k);
+                ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == ',';
+            }
+        }
+        if (str_eq(w, S("--head"))) {
+            const char *colon = str_find_byte(v, ':');
+            ok = colon != NULL && host_fence_name(str_sub(v, 0, (size_t)(colon - v.ptr))) && host_fence_branch(str_sub(v, (size_t)(colon - v.ptr) + 1, v.len));
+            if (ok) {
+                Str remotes = S("");
+                TRY(host_unconfined_remotes(r, pos, &remotes));
+                if (!host_remote_owner_listed(remotes, str_sub(v, 0, (size_t)(colon - v.ptr)))) return host_fence_refused_word(r, pos, "a head's owner is a github.com owner of the remotes file (~/.config/shale/remotes, or SHALE_REMOTES's), not the one in ", v);
+            }
+        }
+        if (!ok) return host_fence_refused_word(r, pos, "a value not of its option's shape (`--repo OWNER/NAME`, `--head OWNER:BRANCH`, `--base BRANCH`, `--json a,b`, no other empty): ", v);
+    }
+    // `--repo` is the first value of each; `create` needs all but `--base`.
+    if (!at(s, 0)) return host_fence_refused(r, pos, S("it names its repository, `--repo OWNER/NAME`"));
+    if (str_eq((Str){use->command, strlen(use->command)}, S("create")) && (!at(s, 2) || !at(s, 3) || !at(s, 4))) return host_fence_refused(r, pos, S("`gh pr create` names its `--head`, `--title` and `--body-file`, so gh never asks, forks or pushes"));
+    if (use->number && positional == 0) return host_fence_refused(r, pos, S("it names one pull request by its number"));
+    return OK;
+}
+
+// Whether this run hands the fenced secret over, into `*fenced`, and if so
+// holds it to the DRAGON at HOST_SECRET_FENCED. `env`, `secrets` and
+// `secret_args` are the run's; `want`, `unconfined` and `stdout_secret` say
+// whether each was given.
+static STATUS_MUST_USE Status host_secret_fence(Host *h, Run *r, Pos pos, SpawnStrs argv, const HostEnvOpt *env, const HostEnvOpt *secrets, const HostEnvOpt *secret_args, bool want, bool unconfined, bool stdout_secret, bool *fenced) {
+    *fenced = false;
+    for (size_t j = 0; j < secret_args->names.len; j++) {
+        bool is = false;
+        TRY(host_secret_is_fenced(h, r, pos, at(secret_args->values, j), &is));
+        if (is) return host_fence_refused(r, pos, S("it goes in `secrets`, never `secret_args`"));
+    }
+    for (size_t j = 0; j < secrets->names.len; j++) {
+        bool is = false;
+        TRY(host_secret_is_fenced(h, r, pos, at(secrets->values, j), &is));
+        *fenced = *fenced || is;
+    }
+    if (!*fenced) return OK;
+    if (secrets->names.len != 1 || secret_args->names.len != 0) return host_fence_refused(r, pos, S("it is the run's only secret"));
+    if (!str_eq(at(secrets->names, 0), S("GH_TOKEN"))) return host_fence_refused(r, pos, S("it goes to gh as GH_TOKEN"));
+    if (env->names.len > 0 || want || unconfined || stdout_secret) return host_fence_refused(r, pos, S("its run takes no `env`, `want`, `unconfined` or `stdout_secret`"));
+    if (!str_eq(at(argv, 0).s, S("gh"))) return host_fence_refused_word(r, pos, "its program is `gh`, named bare (the system's own), not ", at(argv, 0).s);
+    if (argv.len < 3 || !str_eq(at(argv, 1).s, S("pr"))) return host_fence_refused(r, pos, S("its command is `gh pr create`, `gh pr view` or `gh pr close`"));
+    HostFenceUses uses = {HOST_SECRET_FENCE_USES, HOST_FENCE_LEN(HOST_SECRET_FENCE_USES)};
+    for (size_t k = 0; k < uses.len; k++) {
+        const HostFenceUse *use = &at(uses, k);
+        if (str_eq(at(argv, 2).s, (Str){use->command, strlen(use->command)})) return host_fence_command(r, pos, argv, use);
+    }
+    return host_fence_refused_word(r, pos, "its command is `gh pr create`, `gh pr view` or `gh pr close`, not gh pr ", at(argv, 2).s);
+}
+
+// A fenced run's argv and environment: the system's own gh by its path, and
+// HOST_UNCONFINED_PATH for the PATH (gh runs git along it). It stays
+// confined.
+static STATUS_MUST_USE Status host_secret_fence_pin(Host *h, Run *r, Pos pos, SpawnStrs argv, SpawnStrs *out, SpawnStrs *env) {
+    Str program = S("");
+    TRY(host_unconfined_program(h, r, pos, at(argv, 0).s, S("gh"), &program));
+    OsStr *copy = ARENA_ARRAY(r->ctx.values, OsStr, argv.len);
+    if (copy == NULL) return run_values_oom(r, pos);
+    SLICE_TYPE(CopyRoom, OsStr);
+    CopyRoom words = {copy, argv.len};
+    at(words, 0) = os_str_own(program);
+    for (size_t i = 1; i < argv.len; i++) at(words, i) = at(argv, i);
+    out->ptr = copy;
+    out->len = argv.len;
+    return host_unconfined_env(r, pos, env, S(""), false);
+}
+
 // ── `stdout_secret`'s file ──
 
 // The file a program's stdout goes to while it runs: a temporary file beside
