@@ -217,10 +217,9 @@ c/check_discipline.shale holds Shale's C to a shape a line reader can trust
 declaration a line, `//` comments), and the build fails when a file breaks
 it. So the dialect is the parser's contract: `c/items/` splits a file
 into its items on it, and stops, naming the file and line, at a line it
-can't account for. It is a Roc package the C finders share: map_file,
-list_long_functions, list_deep_nesting, find_clones, find_dead_code and
-find_awkward_names are written in Roc on Shale's platform (`roc_platform/`), each
-its folder's app, held to its Shale original's goldens by that folder's
+can't account for. It is a Roc package the C finders below share: each is
+written in Roc on Shale's platform (`roc_platform/`), its folder's app,
+held to its Shale original's goldens by that folder's
 `check_goldens.shale`. Its Shale original, a second copy of the splitting
 logic, is the fast tier's, `c/build/c_items.shale` beside the cookbook,
 since that tier builds no Roc.
