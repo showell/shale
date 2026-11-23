@@ -31,7 +31,7 @@
 -- or an answer is read as JSON in Roc, and over a 180 MB transcript Roc's
 -- dev build took 6.6 s of CPU where the Shale original, whose `json_read` is
 -- C, took 1.9 s; the speed build takes 1.6 to 1.8 s, for about 30 s of build
--- once, then cached. Its goldens, the Shale original's output on the
+-- once, then cached (measured on Roc nightly-2026-11-03-34bd006). Its goldens, the Shale original's output on the
 -- plants, are held by cookbook/count_shale_stops/check_goldens.shale.
 -- budget: programs=10
 

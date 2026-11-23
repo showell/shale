@@ -29,7 +29,8 @@
 -- `dir` and `files` are this root's paths. It is built with `opt=speed`:
 -- the recipe looks at each byte of each comment line, and Roc's dev build
 -- runs it about 60 times slower (3 s against 50 ms over Shale's legacy Zig
--- source), while the speed build costs about 7 s once, then is cached. Its
+-- source, measured on Roc nightly-2026-11-03-34bd006), while the speed build
+-- costs about 7 s once, then is cached. Its
 -- goldens, the Shale original's
 -- output on the plants, are held by
 -- cookbook/zig/count_comments/check_goldens.shale.

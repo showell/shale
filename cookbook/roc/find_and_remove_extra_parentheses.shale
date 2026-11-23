@@ -41,8 +41,11 @@
 --
 -- With `write=1`, the recipe makes each of these edits by the parser's spans,
 -- runs `roc fmt` on the files it changed, and repeats until a pass changes
--- nothing, because taking off one pair can show the next. A comment inside a
--- bracket stays, so it can leave a line a reader tidies. It runs the Roc the
+-- nothing, because taking off one pair can show the next. A file with no
+-- finding is read no more after its first parse, since Roc's arena frees
+-- nothing and a large tree parsed again each pass would not fit (the
+-- Rewriting module). A comment inside a bracket stays, so it can leave a
+-- line a reader tidies. It runs the Roc the
 -- tree is built with (cookbook/roc/pinned.shale), from the repository's root.
 --
 -- `self_test=1` checks the plants in `cookbook/roc/plants/find_and_remove_extra_parentheses/`. A plant

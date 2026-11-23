@@ -53,7 +53,7 @@
 -- `opt=speed`: Roc's dev build took 5.0 s of CPU over roc-apps (a words
 -- file retiring common words, 5,523 findings) where the Shale original took
 -- 3.7 s, and the speed build takes 2.1 s, for about 14 s of build once, then
--- cached. Its goldens, the Shale original's output on
+-- cached (measured on Roc nightly-2026-11-03-34bd006). Its goldens, the Shale original's output on
 -- the plants, are held by cookbook/roc/find_retired_words/check_goldens.shale.
 -- budget: programs=10 output_bytes=8000000
 

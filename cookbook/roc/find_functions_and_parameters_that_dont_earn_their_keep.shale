@@ -157,7 +157,8 @@
 -- is built from, one a line (run.shale's header), for a caller's cache key.
 -- It is built with `opt=speed`: Roc's dev build took 1.9 times the Shale
 -- original's CPU over roc-apps (8.6 s against 4.5 s), and the speed build
--- takes 0.7 times it (3.1 s), for a build of a few minutes once. Its
+-- takes 0.7 times it (3.1 s), for a build of a few minutes once (measured
+-- on Roc nightly-2026-11-03-34bd006). Its
 -- goldens, the Shale original's output on the plants and edges, are held by
 -- cookbook/roc/find_functions_and_parameters_that_dont_earn_their_keep/check_goldens.shale.
 -- budget: programs=10 output_bytes=8000000

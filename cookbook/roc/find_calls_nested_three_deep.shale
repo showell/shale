@@ -62,7 +62,7 @@
 -- header), for a caller's cache key. It is built with `opt=speed`: Roc's dev
 -- build took 2.7 s of CPU over roc-apps where the Shale original took 1.7 s,
 -- and the speed build takes 1.6 s, for about 14 s of build once, then
--- cached. Its goldens, the Shale original's output
+-- cached (measured on Roc nightly-2026-11-03-34bd006). Its goldens, the Shale original's output
 -- on the plants, are held by cookbook/roc/find_calls_nested_three_deep/check_goldens.shale.
 -- The house rule lives twice: in Roc here, and in cookbook/roc/house.shale,
 -- which the other Shale recipes still read.
