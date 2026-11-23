@@ -22,10 +22,10 @@ there to stay safe is what an agent wants on Linux too:**
   reaches past them only by running a program (`run`). **A root is never
   the home:** one that is the home folder, holds `~/.ssh`, `~/.config` or
   `~/.claude`, or lies inside `~/.ssh` or `~/.config` is refused before the
-  run starts (`c/host/mounts.c`'s `mounts_root_kept_out`); run from
+  run starts (the list of those folders is in `c/host/mounts.c`); run from
   `~/showell_repos`, a folder below it, or a mount's folder. The gate
-  passes a `cd DIR && ` into those alone (`c/gate/gate.c`'s
-  `gate_cd_ok`): an absolute path, `~/...`, or one from the shell's folder.
+  passes a `cd DIR && ` into those alone (its rule is in
+  `c/gate/gate.c`): an absolute path, `~/...`, or one from the shell's folder.
 
 `shale` is terse: past half of any budget, or on a stop, it says what the
 run used of four, steps, reads, read bytes and output bytes (`── used:
@@ -1195,7 +1195,7 @@ for every case of its golden cases (`c/build/gate_golden.shale`). It passes
 exactly:
 
 - **a launch:** `[cd DIR && ]shale` (DIR `~/showell_repos`, a folder below
-  it, or a mount's folder: `gate_cd_ok`), or an absolute path ending `/shale`,
+  it, or a mount's folder), or an absolute path ending `/shale`,
   then any of `--verbose`, `--undo-on-stop`, `--args-stdin`, `--budget
   NAME=N`, and plain words (a FILE, `mount:path` included, and
   `NAME=VALUE`s), every word plain (no quotes, `$`, backticks, `\`, a tab,
