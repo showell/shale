@@ -2,7 +2,8 @@
 ## (Roc's own checker, https://github.com/showell/roc-types) run on each app
 ## of `root=`, its pin held to the tree's Roc. Reading and joining its output
 ## is cookbook/roc/lib/'s RocTypes; this file is the same in check_how_failure_is_reported,
-## find_awkward_names and find_functions_and_parameters_that_dont_earn_their_keep, since a package reaches no effect.
+## find_awkward_names, find_functions_and_parameters_that_dont_earn_their_keep and
+## find_uses_after_a_consume, since a package reaches no effect.
 import pf.Shale
 import lib.RocTypes
 import lib.Text

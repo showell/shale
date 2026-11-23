@@ -162,6 +162,10 @@ checkouts, and `<lanes>` the one that holds your lanes.
   table of exceptions; the launcher of a Roc script (`roc/find_floats_outside_unit_types/`,
   on `roc_platform/`, held to its goldens by that folder's
   `check_goldens.shale`). `shale cookbook:roc/find_floats_outside_unit_types.shale table=bare_floats.txt`
+- `roc/find_uses_after_a_consume.shale`: finds a value read after a write took it, within
+  one function, which makes the write copy; the launcher of a Roc script
+  (`roc/find_uses_after_a_consume/`, on `roc_platform/`, its plants roc-apps' copy
+  shapes). `shale cookbook:roc/find_uses_after_a_consume.shale glob=basic/roc/*.roc`
 - `roc/find_calls_nested_three_deep.shale`: finds calls nested three or more deep; the
   launcher of a Roc script (`roc/find_calls_nested_three_deep/`, on `roc_platform/`,
   held to its goldens by that folder's `check_goldens.shale`).

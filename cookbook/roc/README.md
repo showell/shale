@@ -71,6 +71,16 @@ question):
   with its passes and checks in the modules beside it;
   [check_goldens.shale](find_functions_and_parameters_that_dont_earn_their_keep/check_goldens.shale) holds it to
   its goldens.
+- [find_uses_after_a_consume.shale](find_uses_after_a_consume.shale): a value read after a
+  write took it, within one function, which makes the write copy the
+  whole list, string or dict: a read of the old list, a closure called
+  after, a record read whole while its field is written, a value got from
+  a container and written while the container holds it. Each check's
+  plants are a pair of roc-apps' copy shapes (its tools/copy_shapes/), the
+  one that writes in place clean and the one that copies found. It is
+  written in Roc, a root,
+  [find_uses_after_a_consume/find_uses_after_a_consume.roc](find_uses_after_a_consume/find_uses_after_a_consume.roc),
+  with its rule in `Consume.roc` beside it.
 - [find_calls_nested_three_deep.shale](find_calls_nested_three_deep.shale): calls nested three or
   more deep, like `f(g(h(x)))`, which read inside out. It is written in
   Roc, a root,
@@ -153,12 +163,12 @@ ordered and printed) and `RocTypes` (roc-types' output read, and a node's
 type found), among others its main.roc lists. A recipe's app names it in
 its header, `lib: "../lib/main.roc"`, and imports `lib.Tree`.
 
-`find_awkward_names`, `check_how_failure_is_reported` and `find_functions_and_parameters_that_dont_earn_their_keep` can also ask Roc's type
+`find_awkward_names`, `check_how_failure_is_reported`, `find_functions_and_parameters_that_dont_earn_their_keep` and `find_uses_after_a_consume` can also ask Roc's type
 checker for types: add `types=1 root=<app>`, where the app imports the
 files read, or several apps separated by commas. A file that no app
 imports is checked without types, listed at the end, and fails the run.
 Each runs roc-types from a small `Types.roc` of its own, the same file in
-all three, since a package reaches no effect; what reads the output is
+all four, since a package reaches no effect; what reads the output is
 `lib/RocTypes.roc`.
 
     cd <repo> && shale <shale>/cookbook/roc/check_how_failure_is_reported.shale glob='app/**/*.roc' types=1 root=app/main.roc,app/Specs.roc
