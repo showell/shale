@@ -48,8 +48,8 @@ Consume := [].{
 	checks = ["after_consume", "whole_record", "closure", "held", "restored_refcounted"]
 
 	## Whether a builtin consumes its first argument (or its receiver):
-	## `owner` is `List`, `Str`, `Dict` or `Set` for a module call, `""` for
-	## a method, which may be any of them.
+	## `owner` is `List`, `Str`, `Dict`, `Set` or `Unique` for a module call,
+	## `""` for a method, which may be any of them.
 	consumes : Str, Str -> Bool
 	consumes = |owner, name|
 		match owner {
@@ -57,6 +57,7 @@ Consume := [].{
 			"Str" => str_consumers.contains(name)
 			"Dict" => dict_consumers.contains(name)
 			"Set" => dict_consumers.contains(name)
+			"Unique" => unique_writes.contains(name)
 			"" => list_consumers.contains(name) or str_consumers.contains(name) or dict_consumers.contains(name) or unique_consumers.contains(name)
 			_ => Bool.False
 		}
@@ -100,7 +101,12 @@ str_consumers = ["concat", "trim", "trim_start", "trim_end", "with_ascii_lowerca
 dict_consumers : List(Str)
 dict_consumers = ["insert", "remove", "update"]
 
-## roc-apps' opt-in marker's writes (`Unique.roc`): each takes its value.
+## roc-apps' opt-in marker's writes (tools/copy_shapes/Unique.roc): each
+## takes its value. Its reads, `len` and `get`, take nothing.
+unique_writes : List(Str)
+unique_writes = ["set", "append", "update", "take_from", "unwrap"]
+
+## The marker's writes a method call can't be told from by the tables above.
 unique_consumers : List(Str)
 unique_consumers = ["unwrap", "take_from"]
 
