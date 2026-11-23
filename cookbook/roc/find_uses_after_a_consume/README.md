@@ -66,10 +66,11 @@ found, and the in-place member must stay clean.
 Its findings are checked against what actually happens at run time.
 roc-apps holds 36 copy shapes in
 [tools/copy_shapes](https://github.com/showell/roc-apps/tree/master/tools/copy_shapes),
-each counted by allocation in release, dev and boxy builds, and an oracle
-([count_copies.c](https://github.com/showell/roc-apps/blob/master/tools/count_copies.c))
-that catches real copies with breakpoints on the builtins and names the Roc
-function that made each one.
+each counted by allocation in release, dev and boxy builds. The oracle is
+[roc-alloc-trace](https://github.com/showell/roc-alloc-trace), a standalone
+tool whose `where` mode catches real copies with breakpoints on the builtins
+and names the Roc function and line that made each one. Its `check` mode
+holds the copy shapes' counts in roc-apps' gate.
 
 Scored against that oracle on 2026-11-23:
 
