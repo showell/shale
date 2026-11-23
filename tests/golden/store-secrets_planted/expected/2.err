@@ -1,4 +1,4 @@
-── stopped at the Linux prelude:11:10 (in `the Linux prelude's run`): refused: `run`: a secrets mount's folder is inside the root or another mount, which a program may read, and Landlock cannot hide a folder below one it allows: move the secrets folder out, and then programs run (817 steps)
+── stopped at the Linux prelude:11:10 (in `the Linux prelude's run`): refused: `run`: a secrets mount's folder is inside the root or another mount, which a program may read, and Landlock cannot hide a folder below one it allows: move the secrets folder out, and then programs run (818 steps)
    called from {base}/case/secrets_planted.shale:19:11
-── used: 817 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 621 of 65536 output bytes
-── steps: 817 in all; the most 748 (91%): script; 27 (3%): read, 2 calls; 13 (1%): walk, 1 call
+── used: 818 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 621 of 65536 output bytes
+── steps: 818 in all; the most 748 (91%): script; 27 (3%): read, 2 calls; 14 (1%): run, 1 call

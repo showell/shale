@@ -1,1 +1,1 @@
-{"id":"docs-SHALE-AGENTS-08def61f","source":"docs","origin":"docs/SHALE-AGENTS.md:759","files":["script.shale"],"steps":[{"argv":["{case}/script.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}
+{"id":"docs-SHALE-AGENTS-08def61f","source":"docs","origin":"docs/SHALE-AGENTS.md:793","files":["script.shale"],"steps":[{"argv":["{case}/script.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}
