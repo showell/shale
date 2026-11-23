@@ -35,7 +35,8 @@ and walks each loop body twice. There are five checks:
 | `held` | a value got from a container (`get`, `first`, `last`, a `match`) and written while the container is still used |
 | `restored_refcounted` | with `types=1`, `?? xs` handing back a list whose entries hold reference counts (`List(Str)`) |
 
-Which builtins consume their argument is a table in `Consume.roc`, taken
+Which builtins consume their argument is a table in
+`cookbook/roc/find_uses_after_a_consume/Consume.roc`, taken
 from the builtins RC1's compiler checks for uniqueness at run time. The
 table's comments name them. Two rules keep it from crying wolf:
 
@@ -93,7 +94,8 @@ Scored against that oracle on 2026-11-23:
   Several shapes copy only in dev builds, and roc-apps' notes list them.
 - **It can't tell `len` from `get`.** A list's length read after its write
   doesn't copy on RC1, but a `get` there does. The checker reports both. The
-  plant `over_reports.roc` records this on purpose.
+  plant `cookbook/roc/plants/find_uses_after_a_consume/over_reports.roc`
+  records this on purpose.
 - **What it can't see:** the inside of Builtin's own Dict code (two boxy-only
   copies come from there), opaque types from packages whose source it
   doesn't read, and anything a host does with a value between calls.
