@@ -1,7 +1,8 @@
 ## The checks of what a `??` falls back to:
 ##
 ## - `set_fallback`: `List.set(l, i, v) ?? l`, or `l.set(i, v) ?? l`, where
-##   the fallback is the list being stored into, so every store copies.
+##   the fallback is the list being stored into: a placeholder, and on a
+##   list of strings a copy on every store in the dev build.
 ## - `placeholder`: a fallback that is a string literal with nothing
 ##   interpolated (`?? "bogus"`, `?? ""`).
 ## - `number_fallback`: a fallback that is a number after a lookup by index
@@ -63,8 +64,8 @@ judge_pair! = |forest, typing, pair| {
 	var $findings = []
 	target = list_stored_into(forest, pair.lookup)
 	if target > 0 and is_same(forest, target, pair.fallback) {
-		why = "the fallback names `l`, so every store copies; write `?? crash \"...\"` instead"
-		cited = "(roc-apps CLAUDE.md, \"Six shapes copy\")"
+		why = "the fallback names `l`, an answer no store means (and on a list of strings a copy on every store in the dev build); write `?? crash \"...\"` instead"
+		cited = "(roc-apps CLAUDE.md, \"Performance: know what copies\")"
 		$findings = $findings.append(at_fallback("set_fallback", "`List.set(l, i, v) ?? l`: ${why} ${cited}"))
 	}
 	style = "(roc-apps docs/roc-style.md, \"Errors and failure\")"

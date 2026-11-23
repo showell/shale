@@ -27,8 +27,10 @@
 --                 `NoneChosen` is not `None`.
 --   set_fallback  `List.set(l, i, v) ?? l`, or `l.set(i, v) ?? l`, where the
 --                 fallback is the list being stored into. Naming `l` there
---                 makes every store copy the list (roc-apps CLAUDE.md, "Six
---                 shapes copy").
+--                 is a placeholder, an answer no store means, and on a list
+--                 of strings it copies the list on every store in the dev
+--                 build (roc-apps CLAUDE.md, "Performance: know what
+--                 copies"; on a list of numbers RC1 writes in place).
 --   placeholder   A `??` whose fallback is a string literal with nothing
 --                 interpolated (`?? "bogus"`, `?? ""`). The style guide asks
 --                 for a `crash` with a reason when the lookup can't fail, and
