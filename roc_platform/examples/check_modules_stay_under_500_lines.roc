@@ -10,9 +10,10 @@
 ## `tests` (`*Spec.roc,test/`), `exempt` (an exemptions file, `path --
 ## reason` a line), `limit` (500) and `all` (`all=1` lists every module).
 ## budget: steps=50000000 reads=100000
-app [main!] { pf: platform "../platform/main.roc" }
+app [main!] { lib: "../../cookbook/roc/lib/main.roc", pf: platform "../platform/main.roc" }
 
 import pf.Shale
+import lib.Text
 
 main! : {} => {}
 main! = |{}| {
@@ -156,42 +157,6 @@ count_lines = |text| {
 	}
 }
 
-## Bytewise order, as Shale's `sort` puts strings.
-byte_order : Str, Str -> [Before, Same, After]
-byte_order = |a, b| {
-	x = Str.to_utf8(a)
-	y = Str.to_utf8(b)
-	var $k = 0
-	var $answer = Same
-	var $going = Bool.True
-	while $going {
-		match (List.get(x, $k), List.get(y, $k)) {
-			(Ok(p), Ok(q)) =>
-				if p < q {
-					$answer = Before
-					$going = Bool.False
-				} else if p > q {
-					$answer = After
-					$going = Bool.False
-				} else {
-					$k = $k + 1
-				}
-			(Err(_), Ok(_)) => {
-				$answer = Before
-				$going = Bool.False
-			}
-			(Ok(_), Err(_)) => {
-				$answer = After
-				$going = Bool.False
-			}
-			(Err(_), Err(_)) => {
-				$going = Bool.False
-			}
-		}
-	}
-	$answer
-}
-
 ## The paths the globs name, each once, sorted, build output left out.
 module_paths! : Str => List(Str)
 module_paths! = |globs| {
@@ -203,7 +168,7 @@ module_paths! = |globs| {
 			}
 		}
 	}
-	List.sort_with($seen, byte_order)
+	Text.sort_bytewise($seen)
 }
 
 module_sizes! : { glob : Str, tests : Str, exempt : Str, limit : U64 } => { summary : Str, found : List(Str), listing : List(Str) }

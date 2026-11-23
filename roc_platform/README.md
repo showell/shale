@@ -127,7 +127,8 @@ recipe itself, with no `const SCRIPT` to read.
 
 The examples in `examples/`: `count_lines.roc`, the smallest app;
 `check_modules_stay_under_500_lines.roc`, a cookbook recipe in Roc, held line for line to
-its Shale original by `tools/compare.shale`; and `escape.roc`, which tries
+its Shale original by `tools/compare.shale`, which sorts with the
+cookbook's `lib` (`Text.sort_bytewise`); and `escape.roc`, which tries
 each guard and stops with Shale's own refusal. escape.roc is several files:
 `Reach.roc`, a module of its own that tries a guard too, and `kit/`, a
 package it names by a relative path.
