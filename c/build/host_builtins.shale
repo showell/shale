@@ -136,7 +136,7 @@ const HOST_BUILTINS_PLANTS = {
    old = "S(\"core.sshCommand=\"), h->unconfined_bin, S(\"/ssh -o HostName=\"), &ssh", new = "S(\"core.sshCommand=\"), S(\"\"), S(\"ssh -o HostName=\"), &ssh"},
   {name = "an unconfined scp copies a folder, its links followed", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
-   old = "HOST_UNCONFINED_SCP_FLAGS[] = {\"-q\", \"-p\"};", new = "HOST_UNCONFINED_SCP_FLAGS[] = {\"-q\", \"-r\", \"-p\"};"},
+   old = "HOST_UNCONFINED_SCP_FLAGS[] = {\"-q\", \"-p\", \"-O\"};", new = "HOST_UNCONFINED_SCP_FLAGS[] = {\"-q\", \"-r\", \"-p\", \"-O\"};"},
   {name = "a session's socket is inherited", file = "host_refusals.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "a_program_gets_no_session_socket_and_no_env_sets_one",
    old = "        if (host_env_dropped(name)) {", new = "        if (0) {"},

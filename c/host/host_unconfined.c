@@ -47,7 +47,10 @@ static const char *const HOST_UNCONFINED_GIT_FETCH[] = {"-c", "core.hooksPath=/d
 // the program git runs for ssh, or settings past HOST_UNCONFINED_GIT's.
 static const char *const HOST_UNCONFINED_GIT_ENV_DROPPED[] = {"GIT_SSH", "GIT_SSH_COMMAND", "GIT_SSH_VARIANT", "GIT_ALLOW_PROTOCOL", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT"};
 
-// The options an unconfined `scp` takes: quiet, times kept, and
+// The options an unconfined `scp` takes: quiet, times kept, the original
+// protocol (`-O`, under which the host runs `scp -t <path>`, a command a
+// forced command on the host can hold to its paths, where scp's default
+// SFTP is a subsystem that reads and writes any file), and
 // HOST_UNCONFINED_SSH_SETTINGS' `-o`s. Any other (`-F`, `-S`, `-J`, `-i`)
 // could name a program, a config or a hop.
 // DRAGON: the file system's boundaries. `scp -r` follows every symbolic
@@ -59,7 +62,7 @@ static const char *const HOST_UNCONFINED_GIT_ENV_DROPPED[] = {"GIT_SSH", "GIT_SS
 // (HOST_UNCONFINED_RSYNC_LETTERS holds no `L` or `k`). test_run_guards'
 // an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone plants
 // an `-r`.
-static const char *const HOST_UNCONFINED_SCP_FLAGS[] = {"-q", "-p"};
+static const char *const HOST_UNCONFINED_SCP_FLAGS[] = {"-q", "-p", "-O"};
 
 // The ssh settings an unconfined `ssh` or `scp` takes as `-o SETTING` (or
 // `-oSETTING`), and an rsync's `-e ssh` after it: no prompt, and none of
@@ -358,7 +361,7 @@ static STATUS_MUST_USE Status host_unconfined_scp(Host *h, Run *r, Pos pos, Str 
         bool taken = false;
         TRY(host_unconfined_ssh_o(r, pos, S("scp"), a, &i, &taken));
         if (taken) continue;
-        if (!host_unconfined_named(flags, host_unconfined_word(a, i))) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` scp takes -q, -p and `-o`, not {s}: `-r` follows the links in a folder, and another option could name a program, a config or a hop"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(host_unconfined_shown(a, i))));
+        if (!host_unconfined_named(flags, host_unconfined_word(a, i))) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` scp takes -q, -p, -O and `-o`, not {s}: `-r` follows the links in a folder, and another option could name a program, a config or a hop"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(host_unconfined_shown(a, i))));
         i++;
     }
     return host_unconfined_operands(h, r, pos, S("scp"), cwd, a, i, hosts);

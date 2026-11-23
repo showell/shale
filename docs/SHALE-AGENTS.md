@@ -320,7 +320,7 @@ has none of it):
   line, is no host allowed; a line that is not `user@host` stops the run
   naming it. A host is written as in the file (`user@host:path` in a
   copy): ssh with no option before its host but `-o BatchMode=yes` and `-o
-  LogLevel=QUIET`, scp with `-q`, `-p` and those two `-o`s alone (no `-r`, which follows every link in a folder: a folder goes by rsync, whose options here follow none),
+  LogLevel=QUIET`, scp with `-q`, `-p`, `-O` (the original protocol, so the host runs `scp -t <path>`, which a forced command can hold to its paths) and those two `-o`s alone (no `-r`, which follows every link in a folder: a folder goes by rsync, whose options here follow none),
   rsync with its listed options and `-e ssh` (those two `-o`s after it)
   alone of a shell, no daemon module, and each local path under the root or
   a mount (a written one under a writable mount). None takes an `env` (git
@@ -1194,7 +1194,8 @@ the Zig gate (`legacy_zig/tools/shale_gate.zig`, frozen), and the C build's tier
 for every case of its golden cases (`c/build/gate_golden.shale`). It passes
 exactly:
 
-- **a launch:** `[cd DIR && ]shale`, or an absolute path ending `/shale`,
+- **a launch:** `[cd DIR && ]shale` (DIR `~/showell_repos`, a folder below
+  it, or a mount's folder: `gate_cd_ok`), or an absolute path ending `/shale`,
   then any of `--verbose`, `--undo-on-stop`, `--args-stdin`, `--budget
   NAME=N`, and plain words (a FILE, `mount:path` included, and
   `NAME=VALUE`s), every word plain (no quotes, `$`, backticks, `\`, a tab,
@@ -1219,6 +1220,67 @@ c/install.shale` puts `shale` on `PATH` as a link to
 `~/tools/shale/bin/shale`, so an install is what every launch runs. The README's "Using Shale with Claude Code on your project" has the
 hook's settings, how to turn it off, a block for `<project>/CLAUDE.md`, and
 what the gate refuses with what to do instead.
+
+### A root-owned install (prepared, not yet the box's)
+
+The hook's wrapper, the gate and the runtime above all live where a
+session can write them: `tools/shale-gate.sh` in the checkout (the
+`repos` mount), `~/tools/shale/bin` (the `tools` mount) and the
+`~/.local/bin/shale` link (the `localbin` mount). A root install takes
+them out of reach. The owner of the box runs, from a clean checkout:
+
+    shale c/install.shale dry=1     # build and check c/out/release, writing nothing
+    sudo tools/install_root.sh      # install it root's, at /usr/local/lib/shale
+
+`tools/install_root.sh` (its header has the rest) puts the runtime and
+the gate in `/usr/local/lib/shale/bin`, `tools/shale-gate-root.sh` as
+`/usr/local/lib/shale/shale-gate.sh` (a wrapper that runs that gate alone:
+no `SHALE_GATE` or `HOME` picks it), and `/usr/local/bin/shale`. Then, by
+hand, once:
+
+- the hook's command in `~/.claude/settings.json` becomes
+  `/usr/local/lib/shale/shale-gate.sh`;
+- `rm ~/.local/bin/shale`, so PATH finds `/usr/local/bin/shale`;
+- in `~/.config/shale/mounts`, the two lines become read-only:
+
+      tools = ~/tools ro tools
+      localbin = ~/.local/bin ro
+
+**What changes in the install flow:** `shale c/install.shale` writes
+`tools:shale/bin` and `localbin:`, which a read-only mount refuses, so a
+Shale install is the two commands above; the other installers that write
+`tools:` (zig-ast's, roc-ast's, roc-types', `tools/go_ast/install.shale`)
+stop on the read-only mount too, so the owner adds a writable line for one
+(`toolsrw = ~/tools`, its `dest=` pointed there) and takes it out after,
+or installs those root's the same way. A program a `tools` mount holds
+still runs by path, as now.
+
+**Claude Code's own tools** pass by the gate (README, "Using Shale with
+Claude Code"), so the owner's `~/.claude/settings.json` holds them back
+with deny rules. `Edit(...)` covers Write, MultiEdit and NotebookEdit too
+(a `Write(path)` rule never matches); `~/` is the home and `//` the file
+system's root (a bare `/` in user settings is `~/.claude/`). A Read deny
+holds Read, Grep and Glob, and a Bash command only where Claude Code can
+see the file named, so the gate and the confinement remain the shell's
+guard:
+
+```json
+{"permissions": {"deny": [
+  "Edit(~/.claude/**)",
+  "Edit(~/showell_repos/.claude/**)",
+  "Edit(~/.local/bin/**)",
+  "Edit(~/tools/**)",
+  "Edit(~/showell_repos/shale/tools/shale-gate.sh)",
+  "Read(~/.ssh/**)"
+]}}
+```
+
+`Edit(~/.claude/**)` also holds back the memory folder
+(`~/.claude/projects/<project>/memory/`), which a session writes with
+Edit and Write; where it should, a narrower list keeps it:
+`Edit(~/.claude/settings.json)`, `Edit(~/.claude/settings.local.json)`,
+`Edit(~/.claude/CLAUDE.md)`, `Edit(~/.claude/agents/**)`,
+`Edit(~/.claude/skills/**)`. A deny rule wins over any allow.
 
 ## Where Shale is worse, said plainly
 
