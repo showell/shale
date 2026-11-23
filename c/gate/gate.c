@@ -241,7 +241,7 @@ static inline void gate_heredoc(Arena *a, Str rest, Str t, GateVerdict *v) {
 // refusals' order is Zig's: the escape, the words, `cd`, the heredoc's
 // opener, `shale`, its options, then the body.
 static inline void gate_classify(Arena *a, Str cmd, GateVerdict *v) {
-    GateVerdict none = {GATE_LAUNCH, {"", 0}, {"", 0}, {"", 0}, {"", 0}, false, {"", 0}};
+    GateVerdict none = {GATE_LAUNCH, {"", 0}, {"", 0}, {"", 0}, {"", 0}, false, {"", 0}, {"", 0}};
     *v = none;
     const char *nl = str_find_byte(cmd, '\n');
     size_t cut = nl == NULL ? cmd.len : (size_t)(nl - cmd.ptr);
@@ -693,7 +693,7 @@ static inline STATUS_MUST_USE Status gate_read_hook(Arena *a, Str json, GateHook
     TRY(gate_json_read(&j, ok));
     if (!*ok) return OK;
     *ok = false;
-    GateHook none = {{"", 0}, false, {"", 0}};
+    GateHook none = {{"", 0}, false, {"", 0}, {"", 0}};
     *h = none;
     if (j.session.kind == GATE_JSON_STRING) h->session = j.session.text;
     if (j.cwd.kind == GATE_JSON_STRING) h->cwd = j.cwd.text;
@@ -730,7 +730,7 @@ typedef struct {
 // The decision for the hook's input `input`, as Zig's `main` makes it before
 // any effect; `read_ok` false when the input could not be read.
 static inline void gate_decide(Arena *a, bool read_ok, Str input, GateDecision *d) {
-    GateDecision none = {0, {"", 0}, false, {GATE_LAUNCH, {"", 0}, {"", 0}, {"", 0}, {"", 0}, false, {"", 0}}, {{"", 0}, false, {"", 0}}, false, {"", 0}};
+    GateDecision none = {0, {"", 0}, false, {GATE_LAUNCH, {"", 0}, {"", 0}, {"", 0}, {"", 0}, false, {"", 0}, {"", 0}}, {{"", 0}, false, {"", 0}, {"", 0}}, false, {"", 0}, {"", 0}};
     *d = none;
     if (!read_ok) {
         d->code = 2;

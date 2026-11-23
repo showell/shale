@@ -188,7 +188,7 @@ SLICE_TYPE(HostEnvNames, Str);
 // out of its own environment too. The inherited `SSH_AUTH_SOCK=...` goes to
 // `*agent` (empty for none), for an unconfined program alone. False when
 // the arena refuses.
-static bool host_env_inherit(Arena *a, char **from, SpawnStrs *out, Str *agent, HostEnvNames *gone) {
+static inline bool host_env_inherit(Arena *a, char **from, SpawnStrs *out, Str *agent, HostEnvNames *gone) {
     size_t n = 0;
     for (char **p = from; *p != NULL; p++) n++; // cstr: the environment's, NULL-ended
     OsStr *env = ARENA_ARRAY(a, OsStr, n);

@@ -143,7 +143,7 @@ TEST(a_log_line_is_one_line_tabs_and_newlines_shown_the_commands_first_160_bytes
     Bytes cmd = {cmd_bytes, sizeof cmd_bytes};
     mem_copy(cmd_bytes, "# want: t: why\tnot\n", 19);
     for (size_t i = 19; i < cmd.len; i++) at(cmd, i) = 'x';
-    GateVerdict e = {GATE_ESCAPE, S("want"), S("t"), S("why\tnot"), S(""), false, S("")};
+    GateVerdict e = {GATE_ESCAPE, S("want"), S("t"), S("why\tnot"), S(""), false, S(""), S("")};
     Buf b = buf_make(&a);
     EXPECT(gate_log_line(&b, S("2026-10-17T12:00:00Z"), S("sess-1"), &e, (Str){cmd.ptr, cmd.len}) == OK);
     Str line = buf_view(&b);
@@ -158,7 +158,7 @@ TEST(a_log_line_is_one_line_tabs_and_newlines_shown_the_commands_first_160_bytes
     // A text past the line's room is cut, never the line.
     char long_bytes[5000];
     memset(long_bytes, 'y', sizeof long_bytes);
-    GateVerdict big = {GATE_ESCAPE, S("want"), S("t"), {long_bytes, sizeof long_bytes}, S(""), false, S("")};
+    GateVerdict big = {GATE_ESCAPE, S("want"), S("t"), {long_bytes, sizeof long_bytes}, S(""), false, S(""), S("")};
     Buf c = buf_make(&a);
     EXPECT(gate_log_line(&c, S("d"), S("s"), &big, S("c")) == OK);
     Str cut = buf_view(&c);
@@ -270,7 +270,7 @@ TEST(a_log_line_past_its_room_is_cut_at_4095_bytes_mid_escape) {
     Buf session = buf_make(&a);
     for (int i = 0; i < 4092; i++) EXPECT(buf_byte(&session, 's') == OK);
     EXPECT(buf_lit(&session, "\tzz") == OK);
-    GateVerdict e = {GATE_ESCAPE, S("want"), S("t"), S("x"), S(""), false, S("")};
+    GateVerdict e = {GATE_ESCAPE, S("want"), S("t"), S("x"), S(""), false, S(""), S("")};
     Buf b = buf_make(&a);
     EXPECT(gate_log_line(&b, S("d"), buf_view(&session), &e, S("c")) == OK);
     Str line = buf_view(&b);

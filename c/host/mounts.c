@@ -70,7 +70,7 @@ static const char *const MOUNTS_ROOT_KEPT_OUT[] = {"", "/.ssh", "/.config", "/.c
 // REMEDY: shale.c's root_guard refuses such a root before a prelude is
 // read, naming where to run from; test_paths'
 // a_root_that_is_or_holds_the_home_s_keys_is_refused plants each.
-static bool mounts_root_kept_out(Arena *a, Str home, Str root, Str *said) {
+static inline bool mounts_root_kept_out(Arena *a, Str home, Str root, Str *said) {
     *said = S("");
     SLICE_TYPE(MountsKeptOut, const char *const);
     MountsKeptOut kept_out = {MOUNTS_ROOT_KEPT_OUT, sizeof MOUNTS_ROOT_KEPT_OUT / sizeof *MOUNTS_ROOT_KEPT_OUT};
