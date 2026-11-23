@@ -265,3 +265,22 @@ function path_normal(p)
   end
   return mount .. join(parts, "/")
 end
+
+-- **WHERE A BEARER TOKEN GOES** (2026-11-23, after the cold security
+-- review): `token`, the Linux prelude's `http` and `http_get` `bearer`, when
+-- `url` begins with one of the prefixes below, else a stop naming the URL.
+-- They are GitHub's API and roc-chat's, the two the box's recipes send a
+-- key to. It is here, ahead of the Linux prelude, so that `curl_http` checks
+-- it on the line that hands the token over; metal has no `http`.
+-- DRAGON: the secrets rule. A token goes to whatever URL a script names,
+-- and the scrubber, which takes the token out of what curl prints, cannot
+-- see it leave in a request: a misspelled or pasted URL sent the key away.
+-- REMEDY: the prefixes are the one list of where a bearer may go, a mistake
+-- is a stop; a script that means to send a token elsewhere still can, by
+-- `run`'s `secrets`, which is a choice in the open, not an accident.
+function bearer_url_held(who, url, token)
+  for p in {"https://api.github.com/", "https://chat.lynrummy.com/"} do
+    if starts_with(url, p) then return token end
+  end
+  fail("`" .. who .. "`'s `bearer` goes only to https://api.github.com/ or https://chat.lynrummy.com/, not " .. url .. ": a token sent elsewhere is a token given away")
+end

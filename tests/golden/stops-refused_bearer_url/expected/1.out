@@ -1,0 +1,1 @@
+`http_get`'s `bearer` goes only to https://api.github.com/ or https://chat.lynrummy.com/, not http://127.0.0.1:9/x: a token sent elsewhere is a token given away

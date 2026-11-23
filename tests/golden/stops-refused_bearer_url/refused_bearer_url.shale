@@ -1,0 +1,5 @@
+-- A `bearer` goes only to a URL of the core prelude's bearer_url_held:
+-- another stops before curl starts, naming the URL, and so does one that
+-- only begins like a listed one.
+print(attempt(http_get, "http://127.0.0.1:9/x", {bearer = "k:t"}).error)
+http("POST", "https://api.github.com.example/x", {bearer = "k:t"})

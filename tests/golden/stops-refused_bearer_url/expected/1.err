@@ -1,0 +1,6 @@
+── stopped at the prelude:285:3 (in `the prelude's bearer_url_held`): fail: `http`'s `bearer` goes only to https://api.github.com/ or https://chat.lynrummy.com/, not https://api.github.com.example/x: a token sent elsewhere is a token given away (1075 steps)
+   called from the Linux prelude:115:37 (in `the Linux prelude's curl_http`)
+   called from the Linux prelude:199:10 (in `the Linux prelude's http`)
+   called from {base}/case/refused_bearer_url.shale:5:1
+── used: 1075 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 161 of 65536 output bytes
+── steps: 1.0K in all; the most 450 (41%): http, 1 call; 433 (40%): http_get, 1 call; 192 (17%): script

@@ -19,7 +19,13 @@ there to stay safe is what an agent wants on Linux too:**
   `git diff` shows what a run did and `git checkout --` takes it back.
 - **It reads only what it is rooted at** (`--root`, else `SHALE_ROOT`, else
   the working directory) and its mounts (`runs:x`): no `..`, no absolute paths. It
-  reaches past them only by running a program (`run`).
+  reaches past them only by running a program (`run`). **A root is never
+  the home:** one that is the home folder, holds `~/.ssh`, `~/.config` or
+  `~/.claude`, or lies inside `~/.ssh` or `~/.config` is refused before the
+  run starts (`c/host/mounts.c`'s `mounts_root_kept_out`); run from
+  `~/showell_repos`, a folder below it, or a mount's folder. The gate
+  passes a `cd DIR && ` into those alone (`c/gate/gate.c`'s
+  `gate_cd_ok`): an absolute path, `~/...`, or one from the shell's folder.
 
 `shale` is terse: past half of any budget, or on a stop, it says what the
 run used of four, steps, reads, read bytes and output bytes (`── used:
@@ -259,11 +265,20 @@ has none of it):
   npx playwright install chromium`, or an old `~/.cache/ms-playwright`
   moved there whole; a screenshot tool finds its Chromium by
   `PLAYWRIGHT_BROWSERS_PATH`, as roc-apps' do. ssh
-  reads `~/.ssh/known_hosts` and `~/.ssh/config`, and no key file: a
-  confined ssh authenticates only through an agent (`SSH_AUTH_SOCK` is
-  passed on). **`run`'s `unconfined = "tag: why"`** runs six shapes past
+  reads `~/.ssh/known_hosts` and `~/.ssh/config`, and no key file, so a
+  confined ssh does not authenticate. **No program gets the session's
+  sockets:** `SSH_AUTH_SOCK`, `DBUS_SESSION_BUS_ADDRESS`, `XDG_RUNTIME_DIR`
+  and Claude Code's `CLAUDE_CODE_MESSAGING_*` are left out of what every
+  program inherits, and an `env` (or `secrets`) that sets one is refused,
+  want or not: each names a socket to a service outside the confinement
+  (systemd's user manager starts any program it is asked to), and
+  Landlock's file rules do not hold a socket. **`run`'s `unconfined = "tag: why"`** runs six shapes past
   the rules, each recorded as `(unconfined: ...)`
-  (`c/host/host_unconfined.c`): a `git push`, a `git fetch` and a `git
+  (`c/host/host_unconfined.c`), each the system's own program, named bare
+  in the argv and run as `/usr/bin/git`, `/usr/bin/ssh`, `/usr/bin/scp` or
+  `/usr/bin/rsync` with `PATH=/usr/bin:/bin` (never one the inherited PATH
+  finds, whose `~/.local/bin` a script may write), and with ssh's agent
+  when the session has one: a `git push`, a `git fetch` and a `git
   ls-remote --symref <remote> HEAD`, and a deploy's `ssh`, `scp` and `rsync`
   to a host of the hosts file; no other git command (a `clone`, another
   `ls-remote`, a `pull`). **The push** is `git [-C dir]
@@ -305,7 +320,7 @@ has none of it):
   line, is no host allowed; a line that is not `user@host` stops the run
   naming it. A host is written as in the file (`user@host:path` in a
   copy): ssh with no option before its host but `-o BatchMode=yes` and `-o
-  LogLevel=QUIET`, scp with `-q`, `-r`, `-p` and those two `-o`s alone,
+  LogLevel=QUIET`, scp with `-q`, `-p` and those two `-o`s alone (no `-r`, which follows every link in a folder: a folder goes by rsync, whose options here follow none),
   rsync with its listed options and `-e ssh` (those two `-o`s after it)
   alone of a shell, no daemon module, and each local path under the root or
   a mount (a written one under a writable mount). None takes an `env` (git
@@ -1032,7 +1047,14 @@ the first two can give a quiet wrong answer, an empty list:
   `want`). Only `run`'s `secrets = {NAME = "keys:file"}` (and
   `secret_args`, below) takes one, the value in the program's environment and scrubbed from its output as
   `<secret NAME>`; `http_get`'s `bearer` and `cookbook:fetch_page.shale`'s
-  `bearer=keys:file` use it. **`run`'s `secret_args = {NAME = "keys:file"}`
+  `bearer=keys:file` use it, and a `bearer` goes only to a URL that begins
+  `https://api.github.com/` or `https://chat.lynrummy.com/` (the core
+  prelude's `bearer_url_held`), any other a stop. **The scrubber catches
+  accidents, not intent:** it takes a token out of what a program prints,
+  and nothing stops a script that means to send one elsewhere (by `run`'s
+  `secrets` to a program of its choosing); the mounts and the secrets
+  folder make the box's discipline plain, and a hostile agent is a threat
+  they do not answer. **`run`'s `secret_args = {NAME = "keys:file"}`
   puts one in an argument**, for a program that takes it there (ssh's
   destination, rsync's `HOST:/path`): each `<secret NAME>` in the argv,
   a whole argument or inside one, is the value in the argv the program

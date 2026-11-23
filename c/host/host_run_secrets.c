@@ -53,6 +53,8 @@ static STATUS_MUST_USE Status host_guard_program(Host *h, Run *r, Pos pos, const
     TRY(paths_refuse_secret_args(&h->paths, &rs->path, pos, p->who, argv, *cwd, p->env->names, p->env->values));
     if (!p->has_want) TRY(host_refuse_env(r, pos, p->who, p->env->names));
     TRY(host_refuse_gh_env(r, pos, p->who, p->env->names));
+    TRY(host_refuse_session_env(r, pos, p->who, p->env->names));
+    TRY(host_refuse_session_env(r, pos, p->who, p->secrets->names));
     TRY(host_refuse(h, r, pos, p->who, at(p->argv, 0), *cwd, p->has_want));
     return host_refuse_gh(h, r, pos, p->argv, *cwd);
 }

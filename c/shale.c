@@ -225,6 +225,24 @@ static int no_working_folder(Out *o, int e) {
     return flush_and_exit(o, EXIT_REFUSED);
 }
 
+// Stops a run whose root (`root_abs`, absolute) mounts_root_kept_out bars:
+// the refusal's exit, said, or -1 to go on. A HOME that is not absolute is
+// none, and bars nothing.
+static int root_guard(Out *o, Arena *a, Str root_abs) {
+    const char *home_c = getenv("HOME"); // cstr: the environment's
+    if (home_c == NULL || !str_starts_with(from_c(home_c), S("/"))) return -1;
+    Str home = S("");
+    if (real_or_same(a, from_c(home_c), &home) != OK) return out_of_memory(o, S("the home folder"));
+    while (home.len > 1 && str_byte(home, home.len - 1) == '/') home = str_sub(home, 0, home.len - 1);
+    Str said = S("");
+    if (!mounts_root_kept_out(a, home, root_abs, &said)) return out_of_memory(o, S("the home folder"));
+    if (said.len == 0) return -1;
+    say(o, S("shale: the root "));
+    say(o, said);
+    say(o, S(", which no run may have: run from ~/showell_repos, a folder below it, or a mount's folder (`cd ~/showell_repos && shale ...`)\n"));
+    return flush_and_exit(o, EXIT_REFUSED);
+}
+
 // ── `use`'s reader ──
 
 // Where a `use("./x.shale")` looks: beside the script's file, in a mount or
@@ -611,25 +629,21 @@ static void machine_stop(Stop *stop, bool *refused) {
     stop->function = S("");
 }
 
-// The environment a program inherits, `K=V` each, in `environ`'s order,
-// without `ZIG_PROGRESS`, or a `zig build` that `run` runs would write its
-// progress to the pipe of the build that ran `shale`.
-static STATUS_MUST_USE Status base_env(Arena *a, SpawnStrs *out) {
+// The environment a program inherits, host_env_inherit's of `environ`
+// (host_refusals.c), and HOST_ENV_DROPPED's names taken out of this
+// process's own environment too, so a program started from `environ` (the
+// run's zig-ast) never sees them either. The inherited `SSH_AUTH_SOCK=...`
+// goes to `*agent` (empty for none), for an unconfined program alone.
+static STATUS_MUST_USE Status base_env(Arena *a, SpawnStrs *out, Str *agent) {
     extern char **environ;
-    size_t n = 0;
-    for (char **p = environ; *p != NULL; p++) n++; // cstr: the environment's, NULL-ended
-    OsStr *env = ARENA_ARRAY(a, OsStr, n);
-    if (env == NULL && n > 0) return STOP;
-    SLICE_TYPE(EnvRoom, OsStr);
-    EnvRoom room = {env, n};
-    size_t k = 0;
-    for (char **p = environ; *p != NULL; p++) {
-        Str e = from_c(*p); // cstr: the environment's, NULL-ended
-        if (str_starts_with(e, S("ZIG_PROGRESS="))) continue;
-        at(room, k++) = os_str_own(e);
+    HostEnvNames gone = {NULL, 0};
+    if (!host_env_inherit(a, environ, out, agent, &gone)) return STOP;
+    // The names were copied first: unsetenv changes `environ` under the walk.
+    for (size_t i = 0; i < gone.len; i++) {
+        char *c = arena_cstr(a, os_str_own(at(gone, i)));
+        if (c == NULL) return STOP;
+        (void)unsetenv(c); // ignored: it fails only for a name with `=`, which a name before its `=` never holds
     }
-    out->ptr = env;
-    out->len = k;
     return OK;
 }
 
@@ -752,11 +766,13 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     paths_make(&lh.paths, &host_arena, where.root_abs, where.cwd_abs, mounts, mounts_from);
     lh.paths.undo = c->undo_on_stop;
     SpawnStrs env = {NULL, 0};
-    if (base_env(&host_arena, &env) != OK) return out_of_memory(o, S("an environment"));
+    Str agent = S("");
+    if (base_env(&host_arena, &env, &agent) != OK) return out_of_memory(o, S("an environment"));
     // The run's zig-ast, started at its first Zig call.
     HostZigProc zig;
     host_zig_init(&zig);
     host_make(&lh, env, &zig);
+    lh.agent = agent;
     // The jobs' reaper is this program, `shale --reap`.
     char exe[PATH_MAX];
     ssize_t exe_len = readlink("/proc/self/exe", exe, sizeof exe);
@@ -991,7 +1007,8 @@ static int run_main(Out *o, int argc, char **argv) {
     // environment is the job's.
     if (all.len > 1 && str_eq(at(all, 1), S("--reap"))) {
         SpawnStrs env = {NULL, 0};
-        if (base_env(a, &env) != OK) return 2;
+        Str agent = S("");
+        if (base_env(a, &env, &agent) != OK) return 2;
         return jobs_reap_main(a, argv + 2, (size_t)argc - 2, env);
     }
     if (all.len == 2 && (str_eq(at(all, 1), S("--help")) || str_eq(at(all, 1), S("-h")))) return help_main(o);
@@ -1099,6 +1116,8 @@ static int run_main(Out *o, int argc, char **argv) {
         if (getcwd(cwd, sizeof cwd) == NULL) return no_working_folder(o, errno);
         if (join(a, from_c(cwd), root, &root_abs) != OK) return out_of_memory(o, S("a root"));
     }
+    int guarded = root_guard(o, a, root_abs);
+    if (guarded >= 0) return guarded;
     Prelude preludes[4];
     size_t n_preludes = 0;
     int code = load_preludes(o, root_abs, preludes, &n_preludes);

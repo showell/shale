@@ -266,6 +266,19 @@ static void guards_git_bare(Ran *x, Str path) {
     if (spawn_run(&x->host, &s, sink, &o) != SPAWN_OK || o.ended != SPAWN_EXIT || o.code != 0) abort();
 }
 
+// The host's unconfined programs (Host's `unconfined_bin`) are the fakes in
+// the folder `rel`, with the system's own git linked in beside them when
+// they hold none: a test's stand-in for /usr/bin.
+static void guards_unconfined_bin(Ran *x, const char *rel) { // cstr: a test's literal
+    Str dir = ran_at(x, rel);
+    Buf g = buf_make(&x->host);
+    if (buf_str(&g, dir) != OK || buf_lit(&g, "/git") != OK) abort();
+    const char *git = arena_cstr(&x->host, os_str_own(buf_view(&g)));
+    if (git == NULL) abort();
+    if (access(git, F_OK) != 0 && symlink("/usr/bin/git", git) != 0) abort();
+    x->lh.unconfined_bin = dir;
+}
+
 // ssh reads its known hosts and its configuration from a decoy home, and no
 // key file there; gh's configuration stays closed; every program gets its
 // caches in the `build` mount's cache folder, Playwright's browsers there
@@ -326,6 +339,7 @@ TEST(an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone) {
     EXPECT_EQ(buf_lit(&pb, ":/usr/bin:/bin"), OK);
     at(room, 0) = os_str_own(buf_view(&pb));
     x.lh.env = (SpawnStrs){path_env, 1};
+    guards_unconfined_bin(&x, "fakebin");
     ran_put(&x, "hosts", "# the deploys' hosts\n\ndeploy@example.com\n");
     FileSystemCPath hosts_cp;
     const char *hosts_c = NULL;
@@ -346,6 +360,7 @@ TEST(an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone) {
                   "print(attempt(c, {\"ssh\", \"-o\", \"ProxyCommand=x\", \"deploy@example.com\"}, o).error)\n"
                   "print(attempt(c, {\"ssh\", \"-F\", \"f\", \"deploy@example.com\"}, o).error)\n"
                   "print(attempt(c, {\"scp\", \"-S\", \"x\", \"where.txt\", \"deploy@example.com:/tmp/x\"}, o).error)\n"
+                  "print(attempt(c, {\"scp\", \"-q\", \"-r\", \".\", \"deploy@example.com:/tmp/x\"}, o).error)\n"
                   "print(attempt(c, {\"scp\", \"where.txt\", \"other@example.com:/tmp/x\"}, o).error)\n"
                   "print(attempt(c, {\"scp\", \"deploy@example.com:/etc/hosts\", \"../x.txt\"}, o).error)\n"
                   "print(attempt(c, {\"rsync\", \"-e\", \"ssh -o ProxyCommand=x\", \"where.txt\", \"deploy@example.com:/tmp/\"}, o).error)\n"
@@ -367,13 +382,14 @@ TEST(an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone) {
                                      "`run`'s `unconfined` ssh goes only to a host of the hosts file (~/.config/shale/hosts, or SHALE_HOSTS's), not `steve@example.org`\n"
                                      "`run`'s `unconfined` ssh takes `-o` for BatchMode=yes and LogLevel=QUIET alone, not `ProxyCommand=x`: another setting could name a program, a file or a hop\n"
                                      "`run`'s `unconfined` ssh takes no option but `-o`, not -F: an option could name a program, a config or a hop\n"
-                                     "`run`'s `unconfined` scp takes -q, -r, -p and `-o`, not -S: another option could name a program, a config or a hop\n"
+                                     "`run`'s `unconfined` scp takes -q, -p and `-o`, not -S: `-r` follows the links in a folder, and another option could name a program, a config or a hop\n"
+                                     "`run`'s `unconfined` scp takes -q, -p and `-o`, not -r: `-r` follows the links in a folder, and another option could name a program, a config or a hop\n"
                                      "`run`'s `unconfined` scp goes only to a host of the hosts file (~/.config/shale/hosts, or SHALE_HOSTS's), not `other@example.com`\n"
                                      "`run`'s `unconfined` scp: its local path ../x.txt is under neither the root nor a mount\n"
                                      "`run`'s `unconfined` rsync takes `-e ssh` alone of a remote shell, with `-o BatchMode=yes` and `-o LogLevel=QUIET` after it: any other is a program it would start\n"
                                      "`run`'s `unconfined` rsync does not take --rsync-path=x: its options are HOST_UNCONFINED_RSYNC_LETTERS' and HOST_UNCONFINED_RSYNC_LONG's (c/host/host_unconfined.c)\n"
                                      "`run`'s `unconfined` rsync takes no rsync daemon's module (`host::module`), not deploy@example.com::mod\n"
-                                     "`run`'s `unconfined` ssh takes no `env` (git: but GIT_TERMINAL_PROMPT), not SSH_AUTH_SOCK: a variable could name a program it starts\n"
+                                     "`run`'s `env` SSH_AUTH_SOCK names a socket outside the confinement, even with a want: no program Shale starts gets the session's D-Bus, its runtime folder, ssh's agent or Claude Code's messaging\n"
                                      "fake ssh deploy@example.com true\n\n"
                                      "fake scp -q where.txt deploy@example.com:/tmp/x\n\n"
                                      "fake rsync -rlt --delete --chmod=D755,F644 -e ssh where.txt deploy@example.com:/tmp/\n\n"
@@ -399,15 +415,26 @@ TEST(an_unconfined_push_reaches_the_remotes_file_s_remotes_alone) {
     guards_ran_with(&x, "", false);
     guards_zig_fake(&x, "fakebin/ssh", "");
     ran_write(&x, "fakebin/ssh", ran_d(&x, "#!/bin/sh\necho \"$* allow=$GIT_ALLOW_PROTOCOL\" >> D/ssh.log\nexec git receive-pack D/github.git\n"));
+    // Decoys first on PATH, as a script could plant them in ~/.local/bin:
+    // each leaves a mark outside every mount, which only an unconfined one
+    // could write, and the git runs the system's after, so the confined
+    // calls work as before.
+    guards_zig_fake(&x, "decoy/git", "");
+    ran_write(&x, "decoy/git", ran_d(&x, "#!/bin/sh\necho planted > D/planted-git 2>/dev/null\nexec /usr/bin/git \"$@\"\n"));
+    guards_zig_fake(&x, "decoy/ssh", "");
+    ran_write(&x, "decoy/ssh", ran_d(&x, "#!/bin/sh\necho planted > D/planted-ssh 2>/dev/null\nexit 1\n"));
     static OsStr path_env[1];
     SLICE_TYPE(EnvRoom, OsStr);
     EnvRoom room = {path_env, 1};
     Buf pb = buf_make(&x.host);
     EXPECT_EQ(buf_lit(&pb, "PATH="), OK);
+    EXPECT_EQ(buf_str(&pb, ran_at(&x, "decoy")), OK);
+    EXPECT_EQ(buf_lit(&pb, ":"), OK);
     EXPECT_EQ(buf_str(&pb, ran_at(&x, "fakebin")), OK);
     EXPECT_EQ(buf_lit(&pb, ":/usr/bin:/bin"), OK);
     at(room, 0) = os_str_own(buf_view(&pb));
     x.lh.env = (SpawnStrs){path_env, 1};
+    guards_unconfined_bin(&x, "fakebin");
     ran_put(&x, "remotes", "# the box's\n\ngit@github.com:showell/\n");
     FileSystemCPath remotes_cp;
     const char *remotes_c = NULL;
@@ -476,6 +503,8 @@ TEST(an_unconfined_push_reaches_the_remotes_file_s_remotes_alone) {
     EXPECT(guards_holds(said, "git@github.com git-receive-pack 'showell/t.git' allow=ssh\n"));
     EXPECT(x.lh.records.len > 0);
     EXPECT(str_starts_with(at(x.lh.records, x.lh.records.len - 1), S("run git push -q origin --delete lane (unconfined: t: push) -> exit 0")));
+    EXPECT_STR(guards_decoy(&x, "planted-git"), S("absent"));
+    EXPECT_STR(guards_decoy(&x, "planted-ssh"), S("absent"));
     ran_free(&x);
 }
 // An unconfined fetch comes from a remote of a planted remotes file
@@ -506,6 +535,7 @@ TEST(an_unconfined_fetch_comes_from_the_remotes_file_s_remotes_alone) {
     EXPECT_EQ(buf_lit(&pb, ":/usr/bin:/bin"), OK);
     at(room, 0) = os_str_own(buf_view(&pb));
     x.lh.env = (SpawnStrs){path_env, 1};
+    guards_unconfined_bin(&x, "fakebin");
     ran_put(&x, "remotes", "git@github.com:showell/\n");
     FileSystemCPath remotes_cp;
     const char *remotes_c = NULL;
@@ -586,6 +616,7 @@ TEST(an_unconfined_ls_remote_asks_the_remotes_file_s_remotes_for_their_head_alon
     EXPECT_EQ(buf_lit(&pb, ":/usr/bin:/bin"), OK);
     at(room, 0) = os_str_own(buf_view(&pb));
     x.lh.env = (SpawnStrs){path_env, 1};
+    guards_unconfined_bin(&x, "fakebin");
     ran_put(&x, "remotes", "git@github.com:showell/\n");
     FileSystemCPath remotes_cp;
     const char *remotes_c = NULL;
@@ -696,6 +727,7 @@ TEST(an_unconfined_copy_s_hosts_are_the_hosts_file_s_and_none_without_one) {
     EXPECT_EQ(buf_lit(&pb, ":/usr/bin:/bin"), OK);
     at(room, 0) = os_str_own(buf_view(&pb));
     x.lh.env = (SpawnStrs){path_env, 1};
+    guards_unconfined_bin(&x, "fakebin");
     ran_put(&x, "home/.keep", "");
     const char *old_home = getenv("HOME"); // cstr: the environment's
     char home_room[PATH_MAX];
@@ -724,6 +756,7 @@ TEST(an_unconfined_copy_s_hosts_are_the_hosts_file_s_and_none_without_one) {
     at(room, 0) = os_str_own(buf_view(&pyb));
     y.lh.env = (SpawnStrs){path_env, 1};
     guards_zig_fake(&y, "fakebin/ssh", "#!/bin/sh\necho \"fake $*\"\n");
+    guards_unconfined_bin(&y, "fakebin");
     ran_put(&y, "bad", "deploy@example.com\ndeploy at example.com\n");
     FileSystemCPath bad_cp;
     FileSystemCPath none_cp;
@@ -778,6 +811,7 @@ TEST(an_unconfined_deploy_s_host_may_be_a_secret_and_is_never_shown) {
     EXPECT_EQ(buf_lit(&pb, ":/usr/bin:/bin"), OK);
     at(room, 0) = os_str_own(buf_view(&pb));
     x.lh.env = (SpawnStrs){path_env, 1};
+    guards_unconfined_bin(&x, "fakebin");
     ran_put(&x, "keys/prod", "deploy@192.0.2.7\n");
     ran_put(&x, "keys/other", "other@192.0.2.8\n");
     ran_put(&x, "keys/opt", "-oProxyCommand=x\n");
@@ -932,6 +966,93 @@ TEST(an_env_that_picks_the_program_needs_a_want) {
     ran_free(&x);
 }
 
+// The session's sockets never reach a program: host_env_inherit drops the
+// session's D-Bus, the runtime folder, ssh's agent and Claude Code's
+// messaging from what is inherited (ZIG_PROGRESS too), keeping the agent
+// for an unconfined program alone; a script's `env` setting any of them is
+// refused, want or not, for run and job_start alike. The fake ssh, the
+// host's unconfined one, says the agent it got and its PATH.
+TEST(a_program_gets_no_session_socket_and_no_env_sets_one) {
+    static Ran x;
+    guards_ran_with(&x, "", false);
+    static char *inherited[] = {"PATH=/usr/bin:/bin", "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1/bus", "XDG_RUNTIME_DIR=/run/user/1", "SSH_AUTH_SOCK=/tmp/agent.1", "CLAUDE_CODE_MESSAGING_SOCKET=/tmp/cc", "CLAUDE_CODE_MESSAGING_TOKEN=tok", "ZIG_PROGRESS=3", "HOME=/h", NULL}; // cstr: test literals, environ's shape
+    SpawnStrs env = {NULL, 0};
+    Str agent = S("");
+    HostEnvNames gone = {NULL, 0};
+    EXPECT(host_env_inherit(&x.host, inherited, &env, &agent, &gone));
+    EXPECT_EQ(env.len, 2);
+    EXPECT_STR(at(env, 0).s, S("PATH=/usr/bin:/bin"));
+    EXPECT_STR(at(env, 1).s, S("HOME=/h"));
+    EXPECT_STR(agent, S("SSH_AUTH_SOCK=/tmp/agent.1"));
+    EXPECT_EQ(gone.len, 5);
+    x.lh.env = env;
+    x.lh.agent = agent;
+    guards_zig_fake(&x, "fakebin/ssh", "#!/bin/sh\necho \"agent=$SSH_AUTH_SOCK $PATH\"\n");
+    guards_unconfined_bin(&x, "fakebin");
+    ran_put(&x, "hosts", "deploy@example.com\n");
+    FileSystemCPath hosts_cp;
+    const char *hosts_c = NULL;
+    EXPECT_EQ(file_system_cstr(&hosts_cp, os_str_own(ran_at(&x, "hosts")), &hosts_c), FILE_SYSTEM_OK);
+    EXPECT_EQ(setenv("SHALE_HOSTS", hosts_c, 1), 0);
+    ran_run(&x, S("function f(a, o) return host(\"run\", a, o) end\nfunction j(a, o) return host(\"job_start\", a, o) end\n"
+                  "print(f({\"printenv\", \"SSH_AUTH_SOCK\", \"DBUS_SESSION_BUS_ADDRESS\", \"XDG_RUNTIME_DIR\", \"CLAUDE_CODE_MESSAGING_TOKEN\"}, {timeout_ms = 5000, tail = 3}).code)\n"
+                  "for k in {\"DBUS_SESSION_BUS_ADDRESS\", \"XDG_RUNTIME_DIR\", \"SSH_AUTH_SOCK\", \"CLAUDE_CODE_MESSAGING_TOKEN\"} do\n"
+                  "  local e = {}\n  e[k] = \"decoy\"\n"
+                  "  print(attempt(f, {\"true\"}, {timeout_ms = 5000, tail = 1, env = e, want = \"t: x\"}).error)\nend\n"
+                  "print(attempt(j, {\"true\"}, {log = \"j.log\", env = {XDG_RUNTIME_DIR = \"decoy\"}}).error)\n"
+                  "print(f({\"ssh\", \"deploy@example.com\"}, {timeout_ms = 10000, tail = 3, unconfined = \"t: x\"}).out)\n"),
+           ran_budgets());
+    EXPECT_EQ(unsetenv("SHALE_HOSTS"), 0);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("1\n"
+                                     "`run`'s `env` DBUS_SESSION_BUS_ADDRESS names a socket outside the confinement, even with a want: no program Shale starts gets the session's D-Bus, its runtime folder, ssh's agent or Claude Code's messaging\n"
+                                     "`run`'s `env` XDG_RUNTIME_DIR names a socket outside the confinement, even with a want: no program Shale starts gets the session's D-Bus, its runtime folder, ssh's agent or Claude Code's messaging\n"
+                                     "`run`'s `env` SSH_AUTH_SOCK names a socket outside the confinement, even with a want: no program Shale starts gets the session's D-Bus, its runtime folder, ssh's agent or Claude Code's messaging\n"
+                                     "`run`'s `env` CLAUDE_CODE_MESSAGING_TOKEN names a socket outside the confinement, even with a want: no program Shale starts gets the session's D-Bus, its runtime folder, ssh's agent or Claude Code's messaging\n"
+                                     "`job_start`'s `env` XDG_RUNTIME_DIR names a socket outside the confinement, even with a want: no program Shale starts gets the session's D-Bus, its runtime folder, ssh's agent or Claude Code's messaging\n"
+                                     "agent=/tmp/agent.1 /usr/bin:/bin\n\n"));
+    ran_free(&x);
+}
+
+// An unconfined program is the system's own, by its path, never one PATH
+// finds: with a decoy `ssh` first on PATH that leaves a mark outside every
+// mount (which only an unconfined one could write), the host's ssh runs,
+// with the system's PATH, and the mark is never made; a program named by a
+// path is refused. (The push test holds git and git's own ssh the same way.)
+TEST(an_unconfined_program_is_the_system_s_never_one_planted_on_path) {
+    static Ran x;
+    guards_ran_with(&x, "", false);
+    guards_zig_fake(&x, "fakebin/ssh", "#!/bin/sh\necho \"system ssh $* PATH=$PATH\"\n");
+    guards_zig_fake(&x, "decoy/ssh", "");
+    ran_write(&x, "decoy/ssh", ran_d(&x, "#!/bin/sh\necho planted > D/planted-ssh 2>/dev/null\necho planted\n"));
+    static OsStr path_env[1];
+    SLICE_TYPE(EnvRoom, OsStr);
+    EnvRoom room = {path_env, 1};
+    Buf pb = buf_make(&x.host);
+    EXPECT_EQ(buf_lit(&pb, "PATH="), OK);
+    EXPECT_EQ(buf_str(&pb, ran_at(&x, "decoy")), OK);
+    EXPECT_EQ(buf_lit(&pb, ":/usr/bin:/bin"), OK);
+    at(room, 0) = os_str_own(buf_view(&pb));
+    x.lh.env = (SpawnStrs){path_env, 1};
+    guards_unconfined_bin(&x, "fakebin");
+    ran_put(&x, "hosts", "deploy@example.com\n");
+    FileSystemCPath hosts_cp;
+    const char *hosts_c = NULL;
+    EXPECT_EQ(file_system_cstr(&hosts_cp, os_str_own(ran_at(&x, "hosts")), &hosts_c), FILE_SYSTEM_OK);
+    EXPECT_EQ(setenv("SHALE_HOSTS", hosts_c, 1), 0);
+    ran_run(&x, S("function f(a, o) return host(\"run\", a, o) end\n"
+                  "local o = {timeout_ms = 10000, tail = 3, unconfined = \"t: x\"}\n"
+                  "print(f({\"ssh\", \"deploy@example.com\", \"true\"}, o).out)\n"
+                  "print(attempt(f, {\"./ssh\", \"deploy@example.com\", \"true\"}, {timeout_ms = 10000, tail = 3, unconfined = \"t: x\", want = \"t: a path\"}).error)\n"),
+           ran_budgets());
+    EXPECT_EQ(unsetenv("SHALE_HOSTS"), 0);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("system ssh deploy@example.com true PATH=/usr/bin:/bin\n\n"
+                                     "`run`'s `unconfined` names its program bare (`git`, `ssh`, `scp` or `rsync`), not ./ssh: it runs the system's own, by its path\n"));
+    EXPECT_STR(guards_decoy(&x, "planted-ssh"), S("absent"));
+    ran_free(&x);
+}
+
 // A program runs confined to the mounts (host_confine.c): it writes only under
 // the root and the writable mounts, reads nothing outside them and the
 // system's folders, and a link out of the root reaches nothing. Each refusal
@@ -1031,4 +1152,5 @@ TEST_PART(run_guards, TEST_CASE(a_program_writes_and_reads_only_where_the_mounts
           TEST_CASE(an_unconfined_deploy_s_host_may_be_a_secret_and_is_never_shown),
           TEST_CASE(an_unconfined_push_reaches_the_remotes_file_s_remotes_alone),
           TEST_CASE(an_unconfined_fetch_comes_from_the_remotes_file_s_remotes_alone),
-          TEST_CASE(an_unconfined_ls_remote_asks_the_remotes_file_s_remotes_for_their_head_alone), TEST_CASE(gh_reads_no_configuration_and_never_says_its_token));
+          TEST_CASE(an_unconfined_ls_remote_asks_the_remotes_file_s_remotes_for_their_head_alone), TEST_CASE(gh_reads_no_configuration_and_never_says_its_token),
+          TEST_CASE(a_program_gets_no_session_socket_and_no_env_sets_one), TEST_CASE(an_unconfined_program_is_the_system_s_never_one_planted_on_path));

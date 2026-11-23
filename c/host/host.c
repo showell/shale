@@ -18,6 +18,13 @@ enum { HOST_ARGV_MAX = 80 };
 
 #define HOST_ELIDED "\xe2\x80\xa6"
 
+// The system's own folder of programs, the one an unconfined git, ssh, scp
+// or rsync is run from, and the PATH it runs with (host_run_unconfined):
+// never the inherited PATH, whose first folders (~/.local/bin) a script may
+// write.
+#define HOST_UNCONFINED_BIN "/usr/bin"
+#define HOST_UNCONFINED_PATH "PATH=/usr/bin:/bin"
+
 // One of the slowest programs: its ms and its argv, cut (`host_keep_ends`).
 typedef struct {
     uint64_t ms;
@@ -59,8 +66,16 @@ VEC_DEFINE(HostStartedJobs, HostStarted)
 // `paths.arena`, which outlives the run's values.
 typedef struct {
     Paths paths;
-    // The environment a program inherits, `K=V` each, `ZIG_PROGRESS` out.
+    // The environment a program inherits, `K=V` each, `ZIG_PROGRESS` and
+    // HOST_ENV_DROPPED's out (shale.c's base_env).
     SpawnStrs env;
+    // The inherited `SSH_AUTH_SOCK=...`, which only an unconfined program
+    // gets back (host_unconfined_env); empty for none.
+    Str agent;
+    // The folder an unconfined program is run from, by its absolute path
+    // (host_run_unconfined): HOST_UNCONFINED_BIN, a test's own folder of
+    // fakes in its place.
+    Str unconfined_bin;
     HostTime time;
     // One line each, a program run or a log written: `--verbose`'s `── ran`.
     HostRecords records;
@@ -80,6 +95,8 @@ typedef struct {
 static void host_make(Host *h, SpawnStrs env, struct HostZigProc *zig) {
     if (zig == NULL) c_bug("host_run: a host made with no zig-ast of its run's");
     h->env = env;
+    h->agent = S("");
+    h->unconfined_bin = S(HOST_UNCONFINED_BIN);
     h->zig = zig;
     memset(&h->time, 0, sizeof h->time);
     h->records = HostRecords_make(h->paths.arena);

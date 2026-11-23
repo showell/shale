@@ -990,6 +990,7 @@ stops-name_script_local_assigned_again	stops	tests/inputs/stops/name_script_loca
 stops-name_script_local_in_function	stops	tests/inputs/stops/name_script_local_in_function.shale	1	
 stops-name_undeclared	stops	tests/inputs/stops/name_undeclared.shale	1	
 stops-refused_attributes	stops	tests/inputs/stops/refused_attributes.shale	1	
+stops-refused_bearer_url	stops	tests/inputs/stops/refused_bearer_url.shale	1	
 stops-refused_bitwise	stops	tests/inputs/stops/refused_bitwise.shale	1	
 stops-refused_call_without_parens	stops	tests/inputs/stops/refused_call_without_parens.shale	1	
 stops-refused_escape_decimal	stops	tests/inputs/stops/refused_escape_decimal.shale	1	

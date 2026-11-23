@@ -1168,6 +1168,43 @@ TEST(a_root_path_s_names_are_the_core_s_to_check_before_the_hook_walks_its_links
     fixture_deinit(&f);
 }
 
+// A run's root that is the home, holds ~/.ssh, ~/.config or ~/.claude, or
+// lies inside ~/.ssh or ~/.config is barred, each said; ~/showell_repos, a
+// folder below it, a sibling that only begins with `.ssh` and a folder
+// inside ~/.claude (the memory's mount) are not.
+TEST(a_root_that_is_or_holds_the_home_s_keys_is_refused) {
+    bool refused = false;
+    Arena a;
+    arena_init(&a, (size_t)1 << 20, &refused);
+    typedef struct {
+        const char *root;
+        const char *says;
+    } Case;
+    static const Case cases[] = {
+        {"/home/x", "is the home folder, or holds it"},
+        {"/home", "is the home folder, or holds it"},
+        {"/", "is the home folder, or holds it"},
+        {"/home/x/.ssh", "holds ~/.ssh"},
+        {"/home/x/.ssh/keys", "is inside ~/.ssh"},
+        {"/home/x/.config", "holds ~/.config"},
+        {"/home/x/.config/shale", "is inside ~/.config"},
+        {"/home/x/.claude", "holds ~/.claude"},
+        {"/home/x/showell_repos", ""},
+        {"/home/x/showell_repos/shale", ""},
+        {"/home/x/.sshd", ""},
+        {"/home/x/.claude/projects/memory", ""},
+        {"/home/xy", ""},
+    };
+    SLICE_TYPE(Cases, const Case);
+    Cases all = {cases, sizeof cases / sizeof *cases};
+    for (size_t i = 0; i < all.len; i++) {
+        Str said = S("x");
+        EXPECT(mounts_root_kept_out(&a, S("/home/x"), file_system_fixture_cs(at(all, i).root), &said));
+        EXPECT_STR(said, file_system_fixture_cs(at(all, i).says));
+    }
+    arena_deinit(&a);
+}
+
 TEST_MAIN(
     TEST_CASE(every_way_out_of_the_root_is_refused_before_the_file_system_is_asked),
     TEST_CASE(mounts_a_mounts_paths_real_an_unknown_mount_or_a_missing_folder_named_the_files_mistakes_by_line),
@@ -1199,5 +1236,6 @@ TEST_MAIN(
     TEST_CASE(secrets_folders_worked_out_for_other_mounts_or_another_root_end_the_process),
     TEST_CASE(read_only_mounts_folders_are_worked_out_once_a_run_so_a_change_s_check_allocates_nothing),
     TEST_CASE(a_path_run_has_a_hook_always_metal_s_answers_nothing_resolved_no_hint_and_no_secret),
-    TEST_CASE(a_root_path_s_names_are_the_core_s_to_check_before_the_hook_walks_its_links)
+    TEST_CASE(a_root_path_s_names_are_the_core_s_to_check_before_the_hook_walks_its_links),
+    TEST_CASE(a_root_that_is_or_holds_the_home_s_keys_is_refused)
 )

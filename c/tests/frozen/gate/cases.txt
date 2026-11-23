@@ -39,8 +39,9 @@ case zig test command 5
 home dir
 input 96
 {"session_id":"s","tool_name":"Bash","tool_input":{"command":"cd ../roc-chat && shale a.shale"}}
-code 0
-out 0
+code 2
+out 568
+shale-gate: `cd ../roc-chat`: a launch starts in ~/showell_repos, a folder below it, or a mount's folder, never the home, ~/.ssh, ~/.config or ~/.claude; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
 
 log 0
 
@@ -57,8 +58,9 @@ case zig test command 7
 home dir
 input 144
 {"session_id":"s","tool_name":"Bash","tool_input":{"command":"cd /home/x && shale <<'END_IT'\nprint(\"a $b `c` ; | & < > ( ) * ?\")\nEND_IT  "}}
-code 0
-out 0
+code 2
+out 564
+shale-gate: `cd /home/x`: a launch starts in ~/showell_repos, a folder below it, or a mount's folder, never the home, ~/.ssh, ~/.config or ~/.claude; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
 
 log 0
 
@@ -753,8 +755,9 @@ case command 20
 home dir
 input 78
 {"session_id":"s","tool_name":"Bash","tool_input":{"command":"cd x && shale"}}
-code 0
-out 0
+code 2
+out 558
+shale-gate: `cd x`: a launch starts in ~/showell_repos, a folder below it, or a mount's folder, never the home, ~/.ssh, ~/.config or ~/.claude; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
 
 log 0
 

@@ -5,6 +5,9 @@
 // past 1024 bytes), the log line's cut, the hook's JSON as std.json reads
 // it, an escape's one append, and `shale --secrets` refused.
 // c/build/gate.shale holds the program to the Zig gate's answers.
+// realpath, which gate.c's `gate_cd_ok` reads a folder with, as c/shale_gate.c
+// asks for it.
+#define _GNU_SOURCE
 #include "test.h"
 #include "../gate/gate.c"
 
@@ -542,6 +545,68 @@ TEST(shale_secrets_is_refused_in_every_form_of_a_launch) {
     refuses("shale --secrets", BOTH);
 }
 
+// The hook's input for a Bash call of `cmd` from the shell's folder `cwd`.
+static Str bash_call_in(Arena *a, Str cmd, Str cwd) {
+    Buf b = buf_make(a);
+    if (buf_lit(&b, "{\"cwd\":\"") != OK || buf_str(&b, cwd) != OK || buf_lit(&b, "\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"") != OK || buf_str(&b, cmd) != OK || buf_lit(&b, "\"}}") != OK) abort();
+    return buf_view(&b);
+}
+
+// A launch's `cd` goes into ~/showell_repos, a folder below it, or a
+// mount's folder (or one below it), by an absolute path, `~/` or a path
+// from the hook's `cwd`; the home, ~/.ssh, a folder outside reached
+// through `..`, a secrets mount's folder, a folder that is not there and a
+// relative path with no `cwd` are each refused, and so is any `cd` with no
+// HOME.
+TEST(a_launch_cds_into_the_repos_or_a_mount_alone) {
+    bool refused = false;
+    Arena a;
+    arena_init(&a, TEST_GATE_LIMIT, &refused);
+    Str home = fresh_home(&a);
+    const char *dirs[] = {"/showell_repos", "/showell_repos/x", "/.ssh", "/.config", "/.config/shale", "/m", "/m/sub", "/k", "/other"};
+    TestGateCStrs made = {dirs, sizeof dirs / sizeof *dirs};
+    for (size_t i = 0; i < made.len; i++) EXPECT_EQ(mkdir(under(&a, home, at(made, i)), 0700), 0);
+    Buf mounts = buf_make(&a);
+    EXPECT(buf_lit(&mounts, "# the box's\nm = ") == OK && buf_str(&mounts, home) == OK && buf_lit(&mounts, "/m ro\nk = ~/k secrets\n") == OK);
+    int fd = open(under(&a, home, "/.config/shale/mounts"), O_WRONLY | O_CREAT | O_EXCL, 0600);
+    EXPECT(fd >= 0 && write(fd, mounts.ptr, mounts.len) == (ssize_t)mounts.len);
+    close(fd);
+    const char *old_mounts = getenv("SHALE_MOUNTS"); // cstr: the environment's
+    Str kept_mounts = old_mounts != NULL ? test_cs(old_mounts) : S("");
+    const char *kept_c = old_mounts != NULL ? arena_cstr(&a, os_str_own(kept_mounts)) : NULL;
+    EXPECT_EQ(unsetenv("SHALE_MOUNTS"), 0);
+    int saved = dup(2);
+    int null = open("/dev/null", O_WRONLY);
+    EXPECT(saved >= 0 && null >= 0 && dup2(null, 2) == 2);
+    Str repos = test_cs(under(&a, home, "/showell_repos"));
+    const char *ok_items[] = {"cd ~/showell_repos && shale a.shale", "cd ~/showell_repos/x && shale a.shale", "cd @/showell_repos && shale a.shale", "cd @/m/sub && shale a.shale", "cd x && shale a.shale", "cd . && shale a.shale"};
+    const char *no_items[] = {"cd ~ && shale a.shale", "cd @ && shale a.shale", "cd ~/.ssh && shale a.shale", "cd @/.config/shale && shale a.shale", "cd ~/showell_repos/.. && shale a.shale", "cd ../other && shale a.shale", "cd ~/k && shale a.shale", "cd ~/gone && shale a.shale", "cd / && shale a.shale"};
+    TestGateCStrs ok = {ok_items, sizeof ok_items / sizeof *ok_items};
+    TestGateCStrs no = {no_items, sizeof no_items / sizeof *no_items};
+    for (size_t pass = 0; pass < 2; pass++) {
+        TestGateCStrs these = pass == 0 ? ok : no;
+        for (size_t i = 0; i < these.len; i++) {
+            Str raw = test_cs(at(these, i));
+            Buf cmd = buf_make(&a);
+            for (size_t k = 0; k < raw.len; k++) {
+                Status s = str_byte(raw, k) == '@' ? buf_str(&cmd, home) : buf_byte(&cmd, str_byte(raw, k));
+                EXPECT(s == OK);
+            }
+            int got = gate_run_here(&a, true, bash_call_in(&a, buf_view(&cmd), repos), true, home);
+            if (got != (pass == 0 ? 0 : 2)) fprintf(stdout, "  `%.*s` exited %d\n", (int)cmd.len, cmd.ptr, got);
+            EXPECT_EQ(got, pass == 0 ? 0 : 2);
+        }
+    }
+    // A relative `cd` with no `cwd`, and any `cd` with no HOME.
+    EXPECT_EQ(gate_run_here(&a, true, bash_call(&a, S("cd x && shale a.shale")), true, home), 2);
+    EXPECT_EQ(gate_run_here(&a, true, bash_call_in(&a, S("cd ~/showell_repos && shale a.shale"), repos), false, S("")), 2);
+    EXPECT(dup2(saved, 2) == 2);
+    close(saved);
+    close(null);
+    if (kept_c != NULL) EXPECT_EQ(setenv("SHALE_MOUNTS", kept_c, 1), 0);
+    arena_deinit(&a);
+}
+
 TEST_MAIN(
     TEST_CASE(the_launch_every_form_the_design_names),
     TEST_CASE(what_it_refuses_naming_both_forms),
@@ -558,5 +623,6 @@ TEST_MAIN(
     TEST_CASE(the_decision_each_way_the_gate_answers),
     TEST_CASE(an_escape_is_one_append_to_homes_wants_tsv_its_folders_made),
     TEST_CASE(shale_secrets_is_refused_in_every_form_of_a_launch),
-    TEST_CASE(a_launch_by_path_is_the_shale_beside_the_gate)
+    TEST_CASE(a_launch_by_path_is_the_shale_beside_the_gate),
+    TEST_CASE(a_launch_cds_into_the_repos_or_a_mount_alone)
 )

@@ -50,6 +50,48 @@ static bool mounts_in_folder(Str abs, Str dir) {
     return str_starts_with(abs, dir) && (abs.len == dir.len || str_byte(abs, dir.len) == '/');
 }
 
+// The folders of the home a run's root is never, and never holds: the home
+// itself, then those whose files hold the user's keys, tokens and settings
+// (ssh's; every program's configuration, Shale's mounts, hosts and remotes
+// files among it; Claude Code's). A root inside the second or the third is
+// refused too; one inside ~/.claude is not, since its memory and
+// transcripts are mounts.
+static const char *const MOUNTS_ROOT_KEPT_OUT[] = {"", "/.ssh", "/.config", "/.claude"};
+
+// What bars the root `root` (absolute, real) when `home` is the real home
+// folder, into `*said`: the words a refusal says after "the root " (`is the
+// home folder, or holds it`, `holds ~/.ssh`, `is inside ~/.config`), or ""
+// when nothing does. False when the arena refuses.
+// DRAGON: the file system's boundaries. A script reads and writes all of
+// its root, and every program it runs may too, so `cd ~ && shale` handed a
+// script ~/.ssh, ~/.config/shale (the mounts, hosts and remotes files that
+// hold Shale's own rules) and ~/.claude (the hooks that hold Claude to
+// Shale).
+// REMEDY: shale.c's root_guard refuses such a root before a prelude is
+// read, naming where to run from; test_paths'
+// a_root_that_is_or_holds_the_home_s_keys_is_refused plants each.
+static bool mounts_root_kept_out(Arena *a, Str home, Str root, Str *said) {
+    *said = S("");
+    SLICE_TYPE(MountsKeptOut, const char *const);
+    MountsKeptOut kept_out = {MOUNTS_ROOT_KEPT_OUT, sizeof MOUNTS_ROOT_KEPT_OUT / sizeof *MOUNTS_ROOT_KEPT_OUT};
+    for (size_t i = 0; i < kept_out.len; i++) {
+        Str below = {at(kept_out, i), strlen(at(kept_out, i))};
+        Buf b = buf_make(a);
+        if (buf_str(&b, home) != OK || buf_str(&b, below) != OK) return false;
+        Str kept = buf_view(&b);
+        bool holds = mounts_in_folder(kept, root);
+        bool inside = (i == 1 || i == 2) && mounts_in_folder(root, kept);
+        if (!holds && !inside) continue; // skip: the root keeps clear of this one
+        Buf w = buf_make(a);
+        Status s = i == 0 ? buf_lit(&w, "is the home folder, or holds it") : buf_str(&w, holds ? S("holds ~") : S("is inside ~"));
+        if (s == OK && i > 0) s = buf_str(&w, below);
+        if (s != OK) return false;
+        *said = buf_view(&w);
+        return true;
+    }
+    return true;
+}
+
 // Whether `text` holds a secrets mount's folder, as the mounts file names
 // it, anywhere in it. A stop for a mount whose
 // folder is missing prints the folder only when it does not.

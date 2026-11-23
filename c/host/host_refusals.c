@@ -157,6 +157,86 @@ static STATUS_MUST_USE Status host_refuse_gh_env(Run *r, Pos pos, Str who, Paths
     return OK;
 }
 
+// The inherited variables no program Shale starts gets, and no script's
+// `env` sets, want or not: each names a socket to a service outside the
+// confinement (the session's D-Bus and the user's runtime folder, where
+// systemd's user manager listens; ssh's agent; Claude Code's own messaging,
+// with its token), and Landlock's file rules do not hold a socket a program
+// connects to. A name ending in `_` is a prefix. An unconfined ssh, scp,
+// rsync or git push gets the agent back (host_unconfined_env), as the user's
+// own ssh would have it.
+static const char *const HOST_ENV_DROPPED[] = {"DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR", "SSH_AUTH_SOCK", "CLAUDE_CODE_MESSAGING_"};
+
+// Whether the variable `name` is one of HOST_ENV_DROPPED.
+static bool host_env_dropped(Str name) {
+    HostConfineNames dropped = {HOST_ENV_DROPPED, sizeof HOST_ENV_DROPPED / sizeof *HOST_ENV_DROPPED};
+    for (size_t i = 0; i < dropped.len; i++) {
+        Str d = {at(dropped, i), strlen(at(dropped, i))};
+        bool prefix = str_byte(d, d.len - 1) == '_';
+        if (prefix ? str_starts_with(name, d) : str_eq(name, d)) return true;
+    }
+    return false;
+}
+
+SLICE_TYPE(HostEnvNames, Str);
+
+// The environment a program inherits, `K=V` each, from `from` (`environ`'s
+// shape, NULL-ended), in its order, into `*out`: without `ZIG_PROGRESS`, or
+// a `zig build` that `run` runs would write its progress to the pipe of the
+// build that ran `shale`, and without HOST_ENV_DROPPED's names, each into
+// `*gone` (room for every entry, its `len` set), so the caller can take them
+// out of its own environment too. The inherited `SSH_AUTH_SOCK=...` goes to
+// `*agent` (empty for none), for an unconfined program alone. False when
+// the arena refuses.
+static bool host_env_inherit(Arena *a, char **from, SpawnStrs *out, Str *agent, HostEnvNames *gone) {
+    size_t n = 0;
+    for (char **p = from; *p != NULL; p++) n++; // cstr: the environment's, NULL-ended
+    OsStr *env = ARENA_ARRAY(a, OsStr, n);
+    Str *names = ARENA_ARRAY(a, Str, n);
+    if ((env == NULL || names == NULL) && n > 0) return false;
+    SLICE_TYPE(EnvRoom, OsStr);
+    EnvRoom room = {env, n};
+    HostEnvNames gone_room = {names, n};
+    size_t k = 0;
+    size_t g = 0;
+    *agent = S("");
+    for (char **p = from; *p != NULL; p++) {
+        Str e = {*p, strlen(*p)}; // cstr: the environment's, NULL-ended
+        if (str_starts_with(e, S("ZIG_PROGRESS="))) continue;
+        const char *eq = str_find_byte(e, '=');
+        Str name = eq == NULL ? e : str_sub(e, 0, (size_t)(eq - e.ptr));
+        if (host_env_dropped(name)) {
+            if (str_eq(name, S("SSH_AUTH_SOCK")) && !arena_dup(a, e, agent)) return false;
+            if (!arena_dup(a, name, &at(gone_room, g))) return false;
+            g++;
+            continue;
+        }
+        at(room, k++) = os_str_own(e);
+    }
+    out->ptr = env;
+    out->len = k;
+    gone->ptr = names;
+    gone->len = g;
+    return true;
+}
+
+// Refuses an `env` that sets one of HOST_ENV_DROPPED, want or not.
+// DRAGON: the file system's boundaries. Landlock holds a program to the
+// mounts' files, and a socket it connects to is no file to it: with the
+// session's D-Bus a confined program could ask systemd's user manager to
+// start any program, unconfined, and with Claude Code's messaging socket
+// and token it could speak as the session.
+// REMEDY: those variables never reach a program (host_env_inherit drops
+// them, and this refuses a script's own); test_run_guards'
+// a_program_gets_no_session_socket_and_no_env_sets_one plants each.
+static STATUS_MUST_USE Status host_refuse_session_env(Run *r, Pos pos, Str who, PathsStrs names) {
+    for (size_t i = 0; i < names.len; i++) {
+        Str k = at(names, i);
+        if (host_env_dropped(k)) return host_fail(r, pos, CLASS_REFUSED, S("`{s}`'s `env` {s} names a socket outside the confinement, even with a want: no program Shale starts gets the session's D-Bus, its runtime folder, ssh's agent or Claude Code's messaging"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(k)));
+    }
+    return OK;
+}
+
 // Refuses `gh auth ...` (gh's first word that is no option `auth`) and `gh
 // alias ...`, want or not, when the program is gh by its name or the file it
 // reaches.

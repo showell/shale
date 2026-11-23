@@ -1,0 +1,1 @@
+{"id":"stops-refused_bearer_url","source":"stops","origin":"tests/inputs/stops/refused_bearer_url.shale","files":["refused_bearer_url.shale"],"steps":[{"argv":["{case}/refused_bearer_url.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

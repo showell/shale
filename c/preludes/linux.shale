@@ -112,7 +112,7 @@ function curl_http(who, method, url, opts?)
           push(argv, h)
         end
       elseif k == "bearer" then
-        o.secrets = {SHALE_BEARER = opts.bearer}
+        o.secrets = {SHALE_BEARER = bearer_url_held(who, url, opts.bearer)}
         push(argv, "--variable")
         push(argv, "%SHALE_BEARER")
         push(argv, "--expand-header")

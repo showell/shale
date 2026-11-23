@@ -14,8 +14,14 @@ use("build:lib.shale")
 -- c/tests/file_system copied whole beside it (its fixture.c reaches the
 -- copy's c/host), each caught by its `aim` tests (`run_plants`).
 
-const FILE_SYSTEM_TESTS = {["c/tests/file_system/test_file_system.c"] = 14, ["c/tests/file_system/test_paths.c"] = 31}
+const FILE_SYSTEM_TESTS = {["c/tests/file_system/test_file_system.c"] = 14, ["c/tests/file_system/test_paths.c"] = 32}
 const FILE_SYSTEM_PLANTS = {
+  {name = "a root that holds the home's keys is taken", file = "mounts.c", dir = "host", caught_by = "file_system/test_paths",
+   aim = "a_root_that_is_or_holds_the_home_s_keys_is_refused",
+   old = "        bool holds = mounts_in_folder(kept, root);", new = "        bool holds = false;"},
+  {name = "a root inside ~/.config is taken", file = "mounts.c", dir = "host", caught_by = "file_system/test_paths",
+   aim = "a_root_that_is_or_holds_the_home_s_keys_is_refused",
+   old = "        bool inside = (i == 1 || i == 2) && mounts_in_folder(root, kept);", new = "        bool inside = false;"},
   {name = "a folder that begins with a mount's name is in it", file = "mounts.c", dir = "host", caught_by = "file_system/test_paths",
    aim = "a_folder_that_only_begins_with_another_s_name_is_not_in_it",
    old = "return str_starts_with(abs, dir) && (abs.len == dir.len || str_byte(abs, dir.len) == '/');", new = "return str_starts_with(abs, dir);"},

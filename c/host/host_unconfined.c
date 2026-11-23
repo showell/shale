@@ -23,7 +23,8 @@ enum { HOST_UNCONFINED_HOSTS_MAX = 64 * 1024 };
 // argv: no hook, no fsmonitor, no credential helper, no submodule pushed and
 // no signing (each a program git would start, outside the confinement), and
 // then ssh itself as ssh, its HostName the remotes file's host
-// (host_run_unconfined adds `-c core.sshCommand=ssh -o HostName=<host>`).
+// (host_run_unconfined adds `-c core.sshCommand=/usr/bin/ssh -o
+// HostName=<host>`).
 // They come before every `-c` of the script's, which host_unconfined_git
 // refuses, so none is undone; and the push runs with GIT_ALLOW_PROTOCOL=ssh,
 // which no configuration overrides.
@@ -46,10 +47,19 @@ static const char *const HOST_UNCONFINED_GIT_FETCH[] = {"-c", "core.hooksPath=/d
 // the program git runs for ssh, or settings past HOST_UNCONFINED_GIT's.
 static const char *const HOST_UNCONFINED_GIT_ENV_DROPPED[] = {"GIT_SSH", "GIT_SSH_COMMAND", "GIT_SSH_VARIANT", "GIT_ALLOW_PROTOCOL", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT"};
 
-// The options an unconfined `scp` takes: quiet, recursive, times kept, and
+// The options an unconfined `scp` takes: quiet, times kept, and
 // HOST_UNCONFINED_SSH_SETTINGS' `-o`s. Any other (`-F`, `-S`, `-J`, `-i`)
 // could name a program, a config or a hop.
-static const char *const HOST_UNCONFINED_SCP_FLAGS[] = {"-q", "-r", "-p"};
+// DRAGON: the file system's boundaries. `scp -r` follows every symbolic
+// link below the folder it copies, and host_unconfined_local resolves the
+// operand alone, so a link in a deploy's folder to ~/.ssh's key sent the
+// key to the host, read with the user's own powers.
+// REMEDY: no `-r`: an unconfined scp copies files named one by one, each
+// resolved; a folder goes by rsync, whose options here follow no link
+// (HOST_UNCONFINED_RSYNC_LETTERS holds no `L` or `k`). test_run_guards'
+// an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone plants
+// an `-r`.
+static const char *const HOST_UNCONFINED_SCP_FLAGS[] = {"-q", "-p"};
 
 // The ssh settings an unconfined `ssh` or `scp` takes as `-o SETTING` (or
 // `-oSETTING`), and an rsync's `-e ssh` after it: no prompt, and none of
@@ -348,7 +358,7 @@ static STATUS_MUST_USE Status host_unconfined_scp(Host *h, Run *r, Pos pos, Str 
         bool taken = false;
         TRY(host_unconfined_ssh_o(r, pos, S("scp"), a, &i, &taken));
         if (taken) continue;
-        if (!host_unconfined_named(flags, host_unconfined_word(a, i))) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` scp takes -q, -r, -p and `-o`, not {s}: another option could name a program, a config or a hop"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(host_unconfined_shown(a, i))));
+        if (!host_unconfined_named(flags, host_unconfined_word(a, i))) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` scp takes -q, -p and `-o`, not {s}: `-r` follows the links in a folder, and another option could name a program, a config or a hop"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(host_unconfined_shown(a, i))));
         i++;
     }
     return host_unconfined_operands(h, r, pos, S("scp"), cwd, a, i, hosts);
@@ -710,27 +720,56 @@ static STATUS_MUST_USE Status host_unconfined_git(Host *h, Run *r, Pos pos, Str 
     return OK;
 }
 
-// git's environment for an unconfined push into `*env`: the program's
-// `*env` less HOST_UNCONFINED_GIT_ENV_DROPPED, with GIT_ALLOW_PROTOCOL=ssh.
-static STATUS_MUST_USE Status host_unconfined_git_env(Run *r, Pos pos, SpawnStrs *env) {
+// An unconfined program's environment into `*env`: the program's `*env`
+// less its PATH (and, for git, HOST_UNCONFINED_GIT_ENV_DROPPED), with
+// HOST_UNCONFINED_PATH, the inherited ssh agent when there is one (`agent`,
+// Host's), and for git GIT_ALLOW_PROTOCOL=ssh.
+static STATUS_MUST_USE Status host_unconfined_env(Run *r, Pos pos, SpawnStrs *env, Str agent, bool git) {
     HostConfineArgs dropped = {HOST_UNCONFINED_GIT_ENV_DROPPED, sizeof HOST_UNCONFINED_GIT_ENV_DROPPED / sizeof *HOST_UNCONFINED_GIT_ENV_DROPPED};
-    OsStr *all = ARENA_ARRAY(r->ctx.values, OsStr, env->len + 1);
+    OsStr *all = ARENA_ARRAY(r->ctx.values, OsStr, env->len + 3);
     if (all == NULL) return run_values_oom(r, pos);
     SLICE_TYPE(EnvRoom, OsStr);
-    EnvRoom room = {all, env->len + 1};
+    EnvRoom room = {all, env->len + 3};
     size_t n = 0;
     for (size_t i = 0; i < env->len; i++) {
         Str e = at(*env, i).s;
-        bool drop = false;
-        for (size_t k = 0; k < dropped.len; k++) {
+        bool drop = str_starts_with(e, S("PATH="));
+        for (size_t k = 0; git && k < dropped.len; k++) {
             Str name = {at(dropped, k), strlen(at(dropped, k))};
             drop = drop || (e.len > name.len && str_starts_with(e, name) && str_byte(e, name.len) == '=');
         }
         if (!drop) at(room, n++) = at(*env, i);
     }
-    at(room, n++) = os_str_own(S("GIT_ALLOW_PROTOCOL=ssh"));
+    at(room, n++) = os_str_own(S(HOST_UNCONFINED_PATH));
+    if (agent.len > 0) at(room, n++) = os_str_own(agent);
+    if (git) at(room, n++) = os_str_own(S("GIT_ALLOW_PROTOCOL=ssh"));
     env->ptr = all;
     env->len = n;
+    return OK;
+}
+
+// The program an unconfined run starts, by its absolute path, into
+// `*path`: `name` (git, ssh, scp or rsync) in Host's `unconfined_bin`
+// (HOST_UNCONFINED_BIN), which must be there to run and reach a file of
+// that name once every link is followed. `argv0` must be the bare name.
+// DRAGON: a refused program by another name. The inherited PATH starts with
+// ~/.local/bin, which a script may write through the `localbin` mount, so a
+// `git` or an `ssh` planted there ran unconfined, with the user's keys, as
+// the git or ssh it named; and git ran `core.sshCommand=ssh` along that PATH
+// too.
+// REMEDY: the program is the system's own, by its absolute path, never one
+// PATH finds, and it runs with HOST_UNCONFINED_PATH; git's ssh is named by
+// its path too. test_run_guards'
+// an_unconfined_program_is_the_system_s_never_one_planted_on_path plants a
+// `git` and an `ssh` first on PATH.
+static STATUS_MUST_USE Status host_unconfined_program(Host *h, Run *r, Pos pos, Str argv0, Str name, Str *path) {
+    if (!str_eq(argv0, name)) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` names its program bare (`git`, `ssh`, `scp` or `rsync`), not {s}: it runs the system's own, by its path"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(argv0)));
+    TRY(paths_cat(&builtin_files_of(r)->path, pos, h->unconfined_bin, S("/"), name, path));
+    char *c = arena_cstr(r->ctx.values, os_str_own(*path));
+    char *real = ARENA_ARRAY(r->ctx.values, char, PATH_MAX);
+    if (c == NULL || real == NULL) return run_values_oom(r, pos);
+    bool ok = access(c, X_OK) == 0 && realpath(c, real) != NULL && str_eq(host_base_name((Str){real, strlen(real)}), name);
+    if (!ok) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` {s}: the system's own, {s}, is not there to run, or is another program"), MESSAGE_ARGS(MESSAGE_FROM_HOST(name), MESSAGE_FROM_HOST(*path)));
     return OK;
 }
 
@@ -749,8 +788,9 @@ static STATUS_MUST_USE Status host_unconfined_git_env(Run *r, Pos pos, SpawnStrs
 // sends the code and the key's use elsewhere. A fetch with them reads what
 // the key may read, and its settings name more programs: an alternate's
 // refs command, an automatic gc, a submodule's fetch.
-// REMEDY: the program is `git`, `ssh`, `scp` or `rsync` by its name and the
-// file it reaches; each is held to its shape above; no `env` but git's
+// REMEDY: the program is the system's own `git`, `ssh`, `scp` or `rsync`,
+// by its path (host_unconfined_program), run with HOST_UNCONFINED_PATH;
+// each is held to its shape above; no `env` but git's
 // GIT_TERMINAL_PROMPT; no secrets folder inside the root or a mount. A push
 // forces only by `--force-with-lease`, and never main or master, and
 // deletes neither; every push URL of its remote, as git reads them (a
@@ -769,13 +809,12 @@ static STATUS_MUST_USE Status host_unconfined_git_env(Run *r, Pos pos, SpawnStrs
 // an_unconfined_fetch_comes_from_the_remotes_file_s_remotes_alone plant each
 // refusal.
 static STATUS_MUST_USE Status host_run_unconfined(Host *h, Run *r, Pos pos, SpawnStrs argv, SpawnStrs filled, const HostEnvOpt *env, Str why, Str cwd, SpawnStrs *out, SpawnStrs *spawn_env) {
-    Str reached = S("");
-    bool found = host_resolved_name(h, r->ctx.values, at(argv, 0), cwd, &reached);
     Str base = host_base_name(at(argv, 0).s);
-    bool named = found && str_eq(base, reached);
-    bool git = named && str_eq(base, S("git"));
-    bool ssh_family = named && (str_eq(base, S("ssh")) || str_eq(base, S("scp")) || str_eq(base, S("rsync")));
+    bool git = str_eq(base, S("git"));
+    bool ssh_family = str_eq(base, S("ssh")) || str_eq(base, S("scp")) || str_eq(base, S("rsync"));
     if (!git && !ssh_family) return host_unconfined_not_git(r, pos, why);
+    Str program = S("");
+    TRY(host_unconfined_program(h, r, pos, at(argv, 0).s, base, &program));
     for (size_t j = 0; j < env->names.len; j++) {
         Str k = at(env->names, j);
         if (!(git && str_eq(k, S("GIT_TERMINAL_PROMPT")))) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `unconfined` {s} takes no `env` (git: but GIT_TERMINAL_PROMPT), not {s}: a variable could name a program it starts"), MESSAGE_ARGS(MESSAGE_FROM_HOST(base), MESSAGE_FROM_SCRIPT(k)));
@@ -784,12 +823,23 @@ static STATUS_MUST_USE Status host_run_unconfined(Host *h, Run *r, Pos pos, Spaw
     // host_secret_args_fill fills word for word, the program's own first.
     if (filled.len != argv.len) return host_fail_plain(r, pos, CLASS_HOST, S("`run`'s `unconfined`: the filled argv is not the script's, word for word"));
     HostUnconfinedArgv a = {filled, argv};
-    *out = filled;
     Str hosts = S("");
-    if (ssh_family) TRY(host_unconfined_hosts(r, pos, &hosts));
-    if (str_eq(base, S("ssh"))) return host_unconfined_ssh(r, pos, &a, hosts);
-    if (str_eq(base, S("scp"))) return host_unconfined_scp(h, r, pos, cwd, &a, hosts);
-    if (str_eq(base, S("rsync"))) return host_unconfined_rsync(h, r, pos, cwd, &a, hosts);
+    if (ssh_family) {
+        TRY(host_unconfined_hosts(r, pos, &hosts));
+        if (str_eq(base, S("ssh"))) TRY(host_unconfined_ssh(r, pos, &a, hosts));
+        if (str_eq(base, S("scp"))) TRY(host_unconfined_scp(h, r, pos, cwd, &a, hosts));
+        if (str_eq(base, S("rsync"))) TRY(host_unconfined_rsync(h, r, pos, cwd, &a, hosts));
+        // The filled argv, the program named by its path.
+        OsStr *copy = ARENA_ARRAY(r->ctx.values, OsStr, filled.len);
+        if (copy == NULL) return run_values_oom(r, pos);
+        SLICE_TYPE(CopyRoom, OsStr);
+        CopyRoom words = {copy, filled.len};
+        at(words, 0) = os_str_own(program);
+        for (size_t i = 1; i < filled.len; i++) at(words, i) = at(filled, i);
+        out->ptr = copy;
+        out->len = filled.len;
+        return host_unconfined_env(r, pos, spawn_env, h->agent, false);
+    }
     Str dir = S("");
     Str remote = S("");
     bool fetch = false;
@@ -797,8 +847,11 @@ static STATUS_MUST_USE Status host_run_unconfined(Host *h, Run *r, Pos pos, Spaw
     TRY(host_unconfined_git(h, r, pos, cwd, &a, why, &dir, &remote, &fetch, &command));
     Str host = S("");
     TRY(host_unconfined_git_host(h, r, pos, cwd, dir, remote, !fetch, &host));
+    // git's ssh by its path too: git runs core.sshCommand by a shell, along
+    // PATH.
     Str ssh = S("");
-    TRY(paths_cat(&builtin_files_of(r)->path, pos, S("core.sshCommand=ssh -o HostName="), host, S(""), &ssh));
+    TRY(paths_cat(&builtin_files_of(r)->path, pos, S("core.sshCommand="), h->unconfined_bin, S("/ssh -o HostName="), &ssh));
+    TRY(paths_cat(&builtin_files_of(r)->path, pos, ssh, host, S(""), &ssh));
     HostConfineArgs fixed = {HOST_UNCONFINED_GIT, sizeof HOST_UNCONFINED_GIT / sizeof *HOST_UNCONFINED_GIT};
     if (fetch) fixed = (HostConfineArgs){HOST_UNCONFINED_GIT_FETCH, sizeof HOST_UNCONFINED_GIT_FETCH / sizeof *HOST_UNCONFINED_GIT_FETCH};
     size_t added = fixed.len + 2;
@@ -807,7 +860,7 @@ static STATUS_MUST_USE Status host_run_unconfined(Host *h, Run *r, Pos pos, Spaw
     if (all == NULL) return run_values_oom(r, pos);
     SLICE_TYPE(ArgvRoom, OsStr);
     ArgvRoom room = {all, n};
-    at(room, 0) = at(filled, 0);
+    at(room, 0) = os_str_own(program);
     for (size_t i = 0; i < fixed.len; i++) at(room, 1 + i) = os_str_own((Str){at(fixed, i), strlen(at(fixed, i))});
     at(room, 1 + fixed.len) = os_str_own(S("-c"));
     at(room, 2 + fixed.len) = os_str_own(ssh);
@@ -818,5 +871,5 @@ static STATUS_MUST_USE Status host_run_unconfined(Host *h, Run *r, Pos pos, Spaw
     }
     out->ptr = all;
     out->len = n;
-    return host_unconfined_git_env(r, pos, spawn_env);
+    return host_unconfined_env(r, pos, spawn_env, h->agent, true);
 }

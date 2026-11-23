@@ -826,6 +826,10 @@ not_option(who: Str, name: Str, v: Any) -> Never
   impl: prelude linux
   kind: internal
 
+bearer_url_held(who: Str, url: Str, token: Str) -> Str
+  impl: prelude core
+  kind: internal
+
 sleep(ms: Int) -> Nil
   impl: prelude linux
   kind: effect

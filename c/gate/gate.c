@@ -3,7 +3,8 @@
 // shale_gate.zig, frozen) that answers as it does. It reads the hook's JSON
 // and passes (exit 0) exactly:
 //
-//   - the launch: optionally `cd WORD && `, then `shale` (or an absolute path
+//   - the launch: optionally `cd WORD && ` (into ~/showell_repos or below
+//     it, or a mount's folder: `gate_cd_ok`), then `shale` (or an absolute path
 //     ending `/shale` that is the shale installed beside the gate, every
 //     link followed: `gate_ours`) and its words (`--verbose`, `--undo-on-stop`,
 //     `--args-stdin`, `--budget N=V`, a FILE, `NAME=VALUE`), each plain (no
@@ -24,6 +25,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -63,6 +65,9 @@ typedef struct {
     // run holds it to the shale installed beside the gate (`gate_ours`).
     bool by_path;
     Str program;
+    // A launch's `cd DIR && ` folder, as written; empty for none. The
+    // gate's run holds it to the folders a run may start in (`gate_cd_ok`).
+    Str cd;
 } GateVerdict;
 
 SLICE_TYPE(GateStrs, Str);
@@ -273,6 +278,7 @@ static inline void gate_classify(Arena *a, Str cmd, GateVerdict *v) {
             gate_refuse(a, v, S("`cd "), at(words, 1), S("` is not a plain folder; "));
             return;
         }
+        v->cd = at(words, 1);
         shale_at = 3;
     }
     // The heredoc's opener, the first line's last word.
@@ -388,6 +394,7 @@ typedef struct {
     GateJsonValue tool;
     GateJsonValue input;
     GateJsonValue command;
+    GateJsonValue cwd;
 } GateJson;
 
 static inline void gate_json_space(GateJson *j) {
@@ -565,6 +572,7 @@ static inline void gate_json_keep(GateJson *j, const GateFrame *f, GateJsonValue
         if (str_eq(f->key, S("session_id"))) j->session = v;
         if (str_eq(f->key, S("tool_name"))) j->tool = v;
         if (str_eq(f->key, S("tool_input"))) j->input = v;
+        if (str_eq(f->key, S("cwd"))) j->cwd = v;
     } else if (f->role == GATE_ROLE_INPUT) {
         if (str_eq(f->key, S("command"))) j->command = v;
     }
@@ -663,12 +671,15 @@ static inline STATUS_MUST_USE Status gate_json_read(GateJson *j, bool *ok) {
     }
 }
 
-// What the gate reads of the hook: its session (empty unless a string), and
-// Bash's or Monitor's command, `has_command` false for any other tool.
+// What the gate reads of the hook: its session (empty unless a string),
+// Bash's or Monitor's command, `has_command` false for any other tool, and
+// the shell's folder, `cwd` (empty unless a string), which a relative `cd`
+// is read from.
 typedef struct {
     Str session;
     bool has_command;
     Str command;
+    Str cwd;
 } GateHook;
 
 // The hook's input read into `h`; false for input the gate cannot read
@@ -685,6 +696,7 @@ static inline STATUS_MUST_USE Status gate_read_hook(Arena *a, Str json, GateHook
     GateHook none = {{"", 0}, false, {"", 0}};
     *h = none;
     if (j.session.kind == GATE_JSON_STRING) h->session = j.session.text;
+    if (j.cwd.kind == GATE_JSON_STRING) h->cwd = j.cwd.text;
     if (j.tool.kind != GATE_JSON_STRING) return OK;
     if (!str_eq(j.tool.text, S("Bash")) && !str_eq(j.tool.text, S("Monitor"))) {
         *ok = true;
@@ -710,6 +722,9 @@ typedef struct {
     // A launch by its absolute path, which the run holds to `gate_ours`.
     bool by_path;
     Str program;
+    // A launch's `cd` folder, which the run holds to `gate_cd_ok`; empty for
+    // none.
+    Str cd;
 } GateDecision;
 
 // The decision for the hook's input `input`, as Zig's `main` makes it before
@@ -737,9 +752,10 @@ static inline void gate_decide(Arena *a, bool read_ok, Str input, GateDecision *
     } else if (v.kind == GATE_ESCAPE) {
         d->log = true;
         d->escape = v;
-    } else if (v.by_path) {
-        d->by_path = true;
-        d->program = v.program;
+    } else {
+        d->by_path = v.by_path;
+        d->program = v.by_path ? v.program : S("");
+        d->cd = v.cd;
     }
 }
 
@@ -843,10 +859,113 @@ static inline bool gate_home(Str *home) {
     return found;
 }
 
+// ── The folder a launch starts in ────────────────────────────────────────
+
+// Whether `abs` is the folder `dir` or below it: c/host/mounts.c's
+// mounts_in_folder, which this program, built apart from the runtime, does
+// not include.
+static inline bool gate_in_folder(Str abs, Str dir) {
+    return str_starts_with(abs, dir) && (abs.len == dir.len || str_byte(abs, dir.len) == '/');
+}
+
+// The real path of `p` into `*out`, in `a`; false when it has none.
+static inline bool gate_real(Arena *a, Str p, Str *out) {
+    const char *c = arena_cstr(a, os_str_own(p));
+    char *buf = arena_alloc(a, PATH_MAX, 1);
+    if (c == NULL || buf == NULL || strlen(c) != p.len || realpath(c, buf) == NULL) return false;
+    *out = (Str){buf, strlen(buf)};
+    return true;
+}
+
+// `<home><rest>`, in `a`.
+static inline Str gate_under_home(Arena *a, Str home, Str rest) {
+    Buf b = buf_make(a);
+    if (buf_str(&b, home) != OK || buf_str(&b, rest) != OK) return S("");
+    return buf_view(&b);
+}
+
+// Whether the real path `real` is a mount's folder or below one, a secrets
+// mount's left out. The mounts file is SHALE_MOUNTS's, else
+// `<home>/.config/shale/mounts`; each line is `name = path` then any of
+// `ro`, `tools` and `secrets`, as c/host/mounts.c reads it (that file is the
+// format's home), and only its path and a `secrets` are read here. A line
+// that is not a mount's is passed by: shale's own read of the file refuses
+// it before any script runs.
+static inline bool gate_in_a_mount(Arena *a, Str real, Str home) {
+    const char *pinned = getenv("SHALE_MOUNTS"); // cstr: the environment's
+    Str file = pinned != NULL ? (Str){pinned, strlen(pinned)} : gate_under_home(a, home, S("/.config/shale/mounts"));
+    const char *fc = arena_cstr(a, os_str_own(file));
+    if (fc == NULL) return false;
+    int fd = open(fc, O_RDONLY);
+    if (fd < 0) return false;
+    Buf text = buf_make(a);
+    bool read_ok = buf_reserve(&text, 64 * 1024) == OK;
+    while (read_ok && text.len < text.cap) {
+        Bytes room = {text.ptr, text.cap};
+        ssize_t n = read(fd, &at(room, text.len), text.cap - text.len);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) break;
+        text.len += (size_t)n;
+    }
+    close(fd);
+    Str all = buf_view(&text);
+    size_t from = 0;
+    while (read_ok && from < all.len) {
+        Str line = gate_piece(all, &from);
+        Str t = gate_trim(line, S(" \t\r"));
+        if (t.len == 0 || str_byte(t, 0) == '#') continue;
+        size_t eq = gate_index_of(t, S("="));
+        if (eq == SIZE_MAX) continue;
+        Str rest = gate_trim(str_sub(t, eq + 1, t.len), S(" \t"));
+        size_t sp = 0;
+        while (sp < rest.len && str_byte(rest, sp) != ' ' && str_byte(rest, sp) != '\t') sp++;
+        Str path = str_sub(rest, 0, sp);
+        Str flags = str_sub(rest, sp, rest.len);
+        if (gate_index_of(flags, S("secrets")) != SIZE_MAX) continue;
+        if (str_starts_with(path, S("~/"))) path = gate_under_home(a, home, str_sub(path, 1, path.len));
+        Str dir = S("");
+        if (path.len > 0 && str_byte(path, 0) == '/' && gate_real(a, path, &dir) && gate_in_folder(real, dir)) return true;
+    }
+    return false;
+}
+
+// Whether a launch may start in the folder its `cd` names, `word`: an
+// absolute path, `~/...`, or one relative to the hook's `cwd`, which once
+// every link is followed is ~/showell_repos, a folder below it, or a mount's
+// folder (or one below it), never a secrets mount's.
+// DRAGON: the file system's boundaries. A script's root is the folder it
+// starts in, so `cd ~ && shale` gave it ~/.ssh, ~/.config and ~/.claude to
+// read and write.
+// REMEDY: the gate passes `cd` into the box's working folders alone, and
+// shale itself refuses such a root wherever it starts (shale.c's
+// root_guard); test_gate's a_launch_cds_into_the_repos_or_a_mount_alone
+// plants a `cd` into the home, ~/.ssh, a folder through `..` and a
+// secrets mount.
+static inline bool gate_cd_ok(Arena *a, Str word, Str cwd, bool has_home, Str home) {
+    if (!has_home || home.len == 0 || str_byte(home, 0) != '/') return false;
+    Str dir = word;
+    if (str_eq(word, S("~"))) {
+        dir = home;
+    } else if (str_starts_with(word, S("~/"))) {
+        dir = gate_under_home(a, home, str_sub(word, 1, word.len));
+    } else if (word.len > 0 && str_byte(word, 0) != '/') {
+        if (cwd.len == 0 || str_byte(cwd, 0) != '/') return false;
+        Buf b = buf_make(a);
+        if (buf_str(&b, cwd) != OK || buf_lit(&b, "/") != OK || buf_str(&b, word) != OK) return false;
+        dir = buf_view(&b);
+    }
+    Str real = S("");
+    if (!gate_real(a, dir, &real)) return false;
+    Str repos = S("");
+    if (gate_real(a, gate_under_home(a, home, S("/showell_repos")), &repos) && gate_in_folder(real, repos)) return true;
+    return gate_in_a_mount(a, real, home);
+}
+
 // The gate's whole run on `input` (`read_ok` false when it could not be
 // read): the decision, its line said, a launch by path held to the shale in
-// `beside`, the gate's own folder (`gate_ours`), and an escape logged under
-// `home` (`has_home` false for none). Gives the exit code.
+// `beside`, the gate's own folder (`gate_ours`), a launch's `cd` held to
+// `gate_cd_ok`, and an escape logged under `home` (`has_home` false for
+// none). Gives the exit code.
 static inline int gate_run(Arena *a, bool read_ok, Str input, bool has_home, Str home, Str beside) {
     GateDecision d;
     gate_decide(a, read_ok, input, &d);
@@ -857,6 +976,12 @@ static inline int gate_run(Arena *a, bool read_ok, Str input, bool has_home, Str
     if (d.by_path && !gate_ours(a, d.program, beside)) {
         GateVerdict v;
         gate_refuse(a, &v, S("`"), d.program, S("` is not the shale installed beside this gate; "));
+        gate_say(v.why);
+        return 2;
+    }
+    if (d.cd.len > 0 && !gate_cd_ok(a, d.cd, d.hook.cwd, has_home, home)) {
+        GateVerdict v;
+        gate_refuse(a, &v, S("`cd "), d.cd, S("`: a launch starts in ~/showell_repos, a folder below it, or a mount's folder, never the home, ~/.ssh, ~/.config or ~/.claude; "));
         gate_say(v.why);
         return 2;
     }
