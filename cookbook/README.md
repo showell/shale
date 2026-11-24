@@ -129,6 +129,10 @@ A door launched at the top level is the one that reads its secret: a nested
   `use("cookbook:folder_names.shale")`
 - `listen.shale`: listens to a roc-chat conversation for the posts meant for
   one agent. `shale cookbook:listen.shale site=https://chat.lynrummy.com conv=3 me=agent:2 key=keys:<file> once=1`
+- `local_main_branch.shale` (library): a remoteless repo's main branch
+  (`main` or `master`, whichever it has), which `retire_checkout.shale` and
+  `remove_lane.shale` judge a lane merged against when there is no origin.
+  `use("cookbook:local_main_branch.shale")`
 - `look.shale`: shows lines by number, and a literal's lines across folders,
   mounts or a git revision. `shale cookbook:look.shale at=src/io.zig:690-730`
 - `map_repos.shale`: maps the repos in a folder: branches, commits,
