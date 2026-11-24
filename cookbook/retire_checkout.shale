@@ -28,7 +28,11 @@
 --    worktree remove <path>`, which is also the way to delete a worktree
 --    that comes out CLEAR. A linked worktree's branches and stashes are its
 --    main checkout's, so checks 1's stashes and 2 are its main's business
---    and are not run on it.
+--    and are not run on it. A linked worktree of a repo with no remote at
+--    all is judged against the repo's local main branch instead
+--    (`local_main_branch.shale`: `main` or `master`, whichever it has): its
+--    commits not on that branch block it, and a repo with both or neither
+--    blocks it, since nothing could be judged.
 -- 4. **A symbolic link that resolves into it** (`readlink -m`), under the
 --    root, `build:` and `tools:` (`~/showell_repos`, `~/build` and `~/tools`
 --    on the box), walked 4 folders deep, hidden folders passed by (`.git`,
@@ -64,7 +68,9 @@
 --
 -- `self_test=1` plants fake repos made by git in a scratch root, one for
 -- each reason, and shows each blocks for its own reason alone; a clean one
--- and a worktree with its branch pushed come out CLEAR, a lane in a lanes
+-- and a worktree with its branch pushed come out CLEAR (and a worktree of a
+-- repo with no remote, merged into its local main; one a commit past it is
+-- blocked), a lane in a lanes
 -- root is blocked by a note on its own path (each form) and never by one on
 -- the same-named main checkout's, a sibling named
 -- with a longer name (`clean-page` beside `clean`), a file name
@@ -75,6 +81,7 @@
 -- budget: steps=300000000 reads=300000 arena_bytes=600000000 programs=3000
 
 use("./folder_names.shale")
+use("./local_main_branch.shale")
 
 const DIR = arg("dir", "")
 const SELF_TEST = arg("self_test", 0)
@@ -322,6 +329,21 @@ function check_worktree_branch(v, os)
   if ends_with(main, "/.git") then main = sub(main, 1, #main - 5) end
   local branch = trim(git_ok(os, {"branch", "--show-current"}).out)
   if branch == "" then branch = "HEAD (detached)" end
+  if #git_remotes(os) == 0 then
+    -- No remote to push to: its commits are safe once its repo's main
+    -- branch holds them, since removing the worktree keeps the repo.
+    local m = local_main_branch(os)
+    if m.name == "" then
+      add_reason(v, "worktree", "a worktree of " .. main .. ", which has no remote, and " .. m.why .. ": its " .. branch .. " has no branch to be judged against")
+      push(v.checks, "worktree: a linked worktree of " .. main .. " on " .. branch .. "; no remote, and " .. m.why)
+    else
+      local behind = parse_int(trim(git_ok(os, {"rev-list", "--count", "HEAD", "--not", "refs/heads/" .. m.name}).out))
+      if behind > 0 then add_reason(v, "worktree", "a worktree of " .. main .. ", which has no remote, its " .. branch .. " with " .. plural(behind, "commit", "commits") .. " not on its local " .. m.name) end
+      push(v.checks, "worktree: a linked worktree of " .. main .. " on " .. branch .. ", which has no remote; " .. plural(behind, "commit", "commits") .. " not on its local " .. m.name .. "; its main's branches are not this folder's")
+    end
+    push(v.notes, "it is a worktree: delete it with `git -C " .. main .. " worktree remove " .. os .. "`, never rm")
+    return nil
+  end
   local count = parse_int(trim(git_ok(os, {"rev-list", "--count", "HEAD", "--not", "--remotes"}).out))
   if count > 0 then add_reason(v, "worktree", "a worktree of " .. main .. ", its " .. branch .. " with " .. plural(count, "commit", "commits") .. " on no remote") end
   push(v.checks, "worktree: a linked worktree of " .. main .. " on " .. branch .. ", " .. plural(count, "commit", "commits") .. " on no remote; its main's branches are not this folder's")
@@ -598,6 +620,14 @@ function self_test()
   git_ok(main_os, {"worktree", "add", "-q", "-b", "wt-side", Ros .. "/wt-unpushed"})
   commit_file(Ros .. "/wt-unpushed", R .. "/wt-unpushed", "c.txt", "c\n")
   git_ok(main_os, {"worktree", "add", "-q", "--detach", Ros .. "/wt-pushed"})
+  -- 3, with no remote: worktrees of a main with none, one merged into its
+  -- local main, one a commit past it.
+  local local_os = plant(T, "local-main", "elsewhere")
+  git_ok(local_os, {"worktree", "add", "-q", "-b", "wt-merged", Ros .. "/wt-local-merged"})
+  commit_file(Ros .. "/wt-local-merged", R .. "/wt-local-merged", "m.txt", "m\n")
+  git_ok(local_os, {"merge", "-q", "--ff-only", "wt-merged"})
+  git_ok(local_os, {"worktree", "add", "-q", "-b", "wt-ahead", Ros .. "/wt-local-ahead"})
+  commit_file(Ros .. "/wt-local-ahead", R .. "/wt-local-ahead", "n.txt", "n\n")
   -- 4: a link two folders deep into linked, and one to the longer name.
   link(real(T) .. "/links/a/b/to-linked", os["linked"] .. "/README.md")
   link(real(T) .. "/links/c/to-clean-page", os["clean-page"])
@@ -643,6 +673,8 @@ function self_test()
     {dir = "has-wt", kinds = "worktree", says = "elsewhere/has-wt-side (detached)"},
     {dir = "wt-unpushed", kinds = "worktree", says = "its wt-side with 1 commit on no remote"},
     {dir = "wt-pushed", kinds = "", says = ""},
+    {dir = "wt-local-merged", kinds = "", says = ""},
+    {dir = "wt-local-ahead", kinds = "worktree", says = "which has no remote, its wt-ahead with 1 commit not on its local main"},
     {dir = "linked", kinds = "link", says = "links/a/b/to-linked -> " .. os["linked"] .. "/README.md"},
     {dir = "named", kinds = "named", says = "user/a/b/build.zig:1: const named"},
     {dir = "zoned", kinds = "named", says = "user/build.zig.zon:3 (a .zon path dependency)"},

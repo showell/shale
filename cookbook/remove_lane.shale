@@ -16,7 +16,13 @@
 -- 1. **Fetch** the lane's origin (`git_fetch(lane, {remote = "origin",
 --    prune = true})`, from the lane, whose refs a worktree shares with its
 --    main checkout, so a fetch over ssh runs unconfined), so the checks
---    below see the remote as it is, not as the last fetch saw it.
+--    below see the remote as it is, not as the last fetch saw it. **A repo
+--    with no remote at all** (safari-walk's) has nothing to fetch: the
+--    run says so, and every "merged" below is judged against the repo's
+--    local main branch (`main` or `master`, whichever it has:
+--    `local_main_branch.shale`) in place of origin's default, and there is
+--    no remote branch to settle. A repo with remotes but none named
+--    `origin` is refused, nothing removed.
 -- 2. **Run `retire_checkout.shale dir=<lane>`** as a child run from the
 --    same folder: its checks are its own, never copied here. Anything but a
 --    plain `CLEAR: <lane> can be deleted` stops the run with nothing
@@ -46,7 +52,8 @@
 -- Each step prints one line, and the last line is the outcome: `removed:
 -- <lane> (...)` naming what was deleted and what was kept.
 --
--- `self_test=1` plants a main checkout with a bare origin, its lanes in a
+-- `self_test=1` plants a main checkout with a bare origin, and one with no
+-- remote, their lanes in a
 -- scratch root, and a mounts file of its own (`build:`, `tools:` and
 -- `memory:` in the scratch folder, `cookbook:` this one), so
 -- `retire_checkout` checks the plants and nothing of the box. A lane with an
@@ -56,10 +63,14 @@
 -- main (its commits picked there under new hashes) is removed with its
 -- branch on both sides; a lane with one of its two commits picked is
 -- removed and its branch kept; a merged clone is deleted with its remote
--- branch. The child run is given its root as `SHALE_ROOT`, so the self-test
+-- branch. Of the remoteless repo's lanes, one merged into its local main
+-- is removed with its branch, and one a commit past it is refused and left
+-- whole. The child run is given its root as `SHALE_ROOT`, so the self-test
 -- passes under a parent run that sets its own.
 --
 -- budget: steps=200000000 reads=100000 programs=400
+
+use("./local_main_branch.shale")
 
 const DIR = arg("dir", "")
 const SELF_TEST = arg("self_test", 0)
@@ -89,30 +100,45 @@ function default_branch(dir_os, repo)
   return sub(said, #"origin/" + 1, #said)
 end
 
+-- What a lane's branch is judged merged against: `{name, ref, shown,
+-- why}` (`ref` whole, so a tag of the same name never stands in for it),
+-- its name `""` (and `why` the reason) when it can't be known. With an origin,
+-- origin's default branch (`origin/<name>`); with no remote at all, the
+-- repo's local main branch (`local_main_branch.shale`).
+function lane_base(repo_os, path, has_origin)
+  if has_origin then
+    local main = default_branch(repo_os, path)
+    if main == nil then return {name = "", why = "origin's default branch is not known here"} end
+    return {name = main, ref = "refs/remotes/origin/" .. main, shown = "origin/" .. main, why = "origin's default branch"}
+  end
+  local m = local_main_branch(repo_os)
+  if m.name == "" then return {name = "", why = "the repo has no remote, and " .. m.why} end
+  return {name = m.name, ref = "refs/heads/" .. m.name, shown = "local " .. m.name, why = "the repo's local main branch"}
+end
+
 function commits(n)
   if n == 1 then return "1 commit" end
   return n .. " commits"
 end
 
--- Whether `ref` is merged into origin's `main`: {merged, why}. Merged is
--- its tip an ancestor of origin/main, or every commit past it a patch
--- origin/main already has (`git cherry`, by patch-id): a lane rebased onto
+-- Whether `ref` is merged into `upstream` (origin/main, or a remoteless
+-- repo's local main): {merged, why}. Merged is its tip an ancestor of
+-- upstream, or every commit past it a patch upstream already has (`git cherry`, by patch-id): a lane rebased onto
 -- the default branch and fast-forwarded there leaves its old branch with
 -- the same patches under other hashes. A merge commit past it has no patch
 -- `git cherry` can judge, so it keeps the branch.
-function merged_into(dir_os, ref, main)
-  local upstream = "origin/" .. main
-  if git(dir_os, {"merge-base", "--is-ancestor", ref, upstream}).code == 0 then return {merged = true, why = "merged into " .. upstream} end
+function merged_into(dir_os, ref, upstream, shown)
+  if git(dir_os, {"merge-base", "--is-ancestor", ref, upstream}).code == 0 then return {merged = true, why = "merged into " .. shown} end
   local n = parse_int(trim(git_ok(dir_os, {"rev-list", "--count", ref, "--not", upstream}).out))
   local merges = parse_int(trim(git_ok(dir_os, {"rev-list", "--count", "--merges", ref, "--not", upstream}).out))
-  if merges > 0 then return {merged = false, why = commits(n) .. " not in " .. upstream .. ", " .. merges .. " of them a merge, which has no patch to compare"} end
+  if merges > 0 then return {merged = false, why = commits(n) .. " not in " .. shown .. ", " .. merges .. " of them a merge, which has no patch to compare"} end
   local missing = 0
   for l in lines(git_ok(dir_os, {"cherry", upstream, ref}).out) do
     if starts_with(l, "+ ") then missing = missing + 1 end
   end
-  if missing == 0 then return {merged = true, why = "rebased into " .. upstream .. ", each of its " .. commits(n) .. " there by its patch"} end
-  if missing == n then return {merged = false, why = commits(n) .. " not in " .. upstream} end
-  return {merged = false, why = commits(missing) .. " of " .. n .. " not in " .. upstream .. ", the rest there by their patches"}
+  if missing == 0 then return {merged = true, why = "rebased into " .. shown .. ", each of its " .. commits(n) .. " there by its patch"} end
+  if missing == n then return {merged = false, why = commits(n) .. " not in " .. shown} end
+  return {merged = false, why = commits(missing) .. " of " .. n .. " not in " .. shown .. ", the rest there by their patches"}
 end
 
 -- `retire_checkout.shale dir=<dir>` as a child run from the root, with
@@ -140,13 +166,14 @@ end
 -- What happens to a branch: deleted when merged, else kept. `where` is
 -- "local" (the branch in `dir_os`) or "remote" (its branch on origin,
 -- deleted by `git_push` from `push_from`, the lane's Shale path, so a push
--- over ssh runs unconfined). Gives the line said.
-function settle_branch(dir_os, branch, main, where, push_from?)
-  if main == nil then return "kept " .. where .. " " .. branch .. ": origin's default branch is not known here" end
-  if branch == main then return "kept " .. where .. " " .. branch .. ": origin's default branch" end
+-- over ssh runs unconfined). `base` is what merged means (`lane_base`).
+-- Gives the line said.
+function settle_branch(dir_os, branch, base, where, push_from?)
+  if base.name == "" then return "kept " .. where .. " " .. branch .. ": " .. base.why end
+  if branch == base.name then return "kept " .. where .. " " .. branch .. ": " .. base.why end
   local ref = branch
   if where == "remote" then ref = "origin/" .. branch end
-  local m = merged_into(dir_os, ref, main)
+  local m = merged_into(dir_os, ref, base.ref, base.shown)
   if not m.merged then return "kept " .. where .. " " .. branch .. ": " .. m.why end
   if where == "remote" then git_push(push_from, {delete = branch}) else git_ok(dir_os, {"branch", "-D", branch}) end
   return "deleted " .. where .. " " .. branch .. ": " .. m.why
@@ -183,17 +210,26 @@ function remove_lane(cfg)
     if ends_with(repo_os, "/.git") then repo_os = sub(repo_os, 1, #repo_os - 5) end
   end
   local branch = trim(git_ok(lane_os, {"branch", "--show-current"}).out)
-  -- From the lane, whose refs are its main checkout's: git_fetch runs a
-  -- fetch over ssh unconfined, which a plain `run` of git cannot.
-  git_fetch(path, {remote = "origin", prune = true})
-  print("remove_lane: fetched origin in " .. repo_os)
+  local remotes = git_remotes(repo_os)
+  local has_origin = has_item(remotes, "origin")
+  if #remotes > 0 and not has_origin then fail("remove_lane: " .. repo_os .. " has remotes but no `origin` (" .. join(remotes, ", ") .. "): which one its branches are judged against is not known; nothing removed") end
+  if has_origin then
+    -- From the lane, whose refs are its main checkout's: git_fetch runs a
+    -- fetch over ssh unconfined, which a plain `run` of git cannot.
+    git_fetch(path, {remote = "origin", prune = true})
+    print("remove_lane: fetched origin in " .. repo_os)
+  else
+    print("remove_lane: " .. repo_os .. " has no remote: nothing fetched, and its branch is judged merged against its local main branch")
+  end
   require_clear(cfg.root, dir, cfg.env)
-  local main = default_branch(repo_os, path)
+  local main = lane_base(repo_os, path, has_origin)
+  local no_remote_said = "no remote branch " .. branch .. " on origin"
+  if not has_origin then no_remote_said = "no remote: the repo has none" end
   local said = {}
   if is_worktree then
     -- The remote branch is settled while the lane is there to push from,
     -- and said after the removal, in the outcome's order.
-    local remote_said = "no remote branch " .. branch .. " on origin"
+    local remote_said = no_remote_said
     if branch ~= "" and has_remote_branch(repo_os, branch) then remote_said = settle_branch(repo_os, branch, main, "remote", path) end
     git_ok(repo_os, {"worktree", "remove", lane_os})
     say(said, "removed the worktree " .. lane_os .. " of " .. repo_os)
@@ -209,7 +245,7 @@ function remove_lane(cfg)
     elseif has_remote_branch(lane_os, branch) then
       say(said, settle_branch(lane_os, branch, main, "remote", path))
     else
-      say(said, "no remote branch " .. branch .. " on origin")
+      say(said, no_remote_said)
     end
     remove_tree(path)
     say(said, "deleted the clone " .. lane_os .. ", its local branches with it")
@@ -245,7 +281,7 @@ function self_test()
   -- `main` holds the main checkout, whose .git the lanes' git reads: a
   -- program runs confined to the root and the mounts, as the box's lanes
   -- reach theirs through the `repos` mount.
-  create(T .. "/mounts", "cookbook = " .. real("cookbook:") .. " ro\nbuild = " .. Tos .. "/build\ntools = " .. Tos .. "/tools ro\nmemory = " .. Tos .. "/memory ro\nmain = " .. Tos .. "/main ro\n")
+  create(T .. "/mounts", "cookbook = " .. real("cookbook:") .. " ro\nbuild = " .. Tos .. "/build\ntools = " .. Tos .. "/tools ro\nmemory = " .. Tos .. "/memory ro\nmain = " .. Tos .. "/main ro\nsolo = " .. Tos .. "/solo ro\n")
   local env = {SHALE_MOUNTS = Tos .. "/mounts"}
   local L = T .. "/lanes"
   local Los = real(L)
@@ -291,6 +327,17 @@ function self_test()
   git_push(L .. "/clone", {branch = "cloned"})
   git_push(L .. "/clone", {to = "main"})
 
+  -- A main checkout with no remote at all, and two lanes of it: one merged
+  -- into its local main, one a commit past it.
+  local S = Tos .. "/solo"
+  must(run({"git", "init", "-q", "-b", "main", S}, {timeout_ms = 30000, whole = 10000}))
+  commit_file(S, "README.md", "solo, first")
+  git_ok(S, {"worktree", "add", "-q", "-b", "solo-merged", Los .. "/solo-merged"})
+  commit_file(Los .. "/solo-merged", "s.txt", "solo, merged")
+  git_ok(S, {"merge", "-q", "--ff-only", "solo-merged"})
+  git_ok(S, {"worktree", "add", "-q", "-b", "solo-ahead", Los .. "/solo-ahead"})
+  commit_file(Los .. "/solo-ahead", "t.txt", "solo, ahead")
+
   local a = attempt(remove_lane, {root = L, dir = "unpushed", env = env})
   expect("unpushed: refused", a.ok, false)
   expect("unpushed: the refusal says BLOCKED", contains(a.error, "remove_lane: unpushed is BLOCKED"), true)
@@ -330,8 +377,21 @@ function self_test()
   expect("clone: its branch on origin gone", git(Tos .. "/origin.git", {"rev-parse", "-q", "--verify", "refs/heads/cloned"}).code == 0, false)
   print(clone)
 
+  local ahead = attempt(remove_lane, {root = L, dir = "solo-ahead", env = env})
+  expect("solo-ahead: refused", ahead.ok, false)
+  expect("solo-ahead: the refusal says BLOCKED", contains(ahead.error, "remove_lane: solo-ahead is BLOCKED"), true)
+  expect("solo-ahead: still there", exists(L .. "/solo-ahead/t.txt"), true)
+  expect("solo-ahead: its branch still there", branch_there(S, "refs/heads/solo-ahead"), true)
+  print("refused as it should be: " .. ahead.error)
+
+  local solo = remove_lane({root = L, dir = "solo-merged", env = env})
+  expect("solo-merged: gone", exists(L .. "/solo-merged"), false)
+  expect("solo-merged: its branch gone", branch_there(S, "refs/heads/solo-merged"), false)
+  expect("solo-merged: the outcome says local main", contains(solo, "deleted local solo-merged: merged into local main; no remote: the repo has none"), true)
+  print(solo)
+
   remove_tree(T)
-  print("remove_lane self_test: PASS (an unpushed lane refused and left whole; a merged lane removed with its branch here and on origin; a pushed, unmerged lane removed and its branch kept; a rebased lane removed with its branch on both sides; a partly picked lane's branch kept; a merged clone deleted with its remote branch)")
+  print("remove_lane self_test: PASS (a remoteless repo's merged lane removed with its branch and its unmerged one refused; an unpushed lane refused and left whole; a merged lane removed with its branch here and on origin; a pushed, unmerged lane removed and its branch kept; a rebased lane removed with its branch on both sides; a partly picked lane's branch kept; a merged clone deleted with its remote branch)")
   return nil
 end
 

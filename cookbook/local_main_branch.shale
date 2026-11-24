@@ -1,0 +1,35 @@
+-- This library holds the rule for a checkout with no remote: which of its
+-- local branches is its main one, the branch a lane's work is judged merged
+-- against when there is no origin to judge it by. It is `main` or `master`,
+-- whichever of the two the repo has; a repo with both, or neither, has no
+-- main branch by this rule, and the answer says why, so a caller refuses
+-- rather than guess.
+--
+-- `retire_checkout.shale` judges a remoteless repo's linked worktree by it,
+-- and `remove_lane.shale` its lane's branch.
+--
+--   use("cookbook:local_main_branch.shale")
+--   if #git_remotes(os) == 0 then local m = local_main_branch(os) ... end
+
+-- The names of the repo's remotes (`git remote`), at its OS path `dir_os`.
+function git_remotes(dir_os)
+  local r = must(run({"git", "-C", dir_os, "remote"}, {timeout_ms = 60000, whole = 100000}))
+  local names = {}
+  for l in lines(r.out) do
+    if l ~= "" then push(names, l) end
+  end
+  return names
+end
+
+-- The repo's main branch by the rule above: `{name, why}`, its name `""`
+-- when it has none, `why` naming what it found.
+function local_main_branch(dir_os)
+  local found = {}
+  for b in {"main", "master"} do
+    local r = run({"git", "-C", dir_os, "rev-parse", "-q", "--verify", "refs/heads/" .. b}, {timeout_ms = 60000, whole = 10000, want = "nonzero: no such branch, said by the caller"})
+    if r.code == 0 then push(found, b) end
+  end
+  if #found == 1 then return {name = found[1], why = "its local " .. found[1]} end
+  if #found == 0 then return {name = "", why = "it has neither a main nor a master branch"} end
+  return {name = "", why = "it has both a main and a master branch, so which is its main one is not known"}
+end
