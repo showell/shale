@@ -45,8 +45,10 @@
 -- side, in code. A `from` in a comment or inside a string is left and
 -- counted (`left in comments`, `left in strings`), since those are often
 -- prose; a `${...}` interpolation is code. A character literal (`'c'`,
--- `'\''`, `'"'`) is never a name: roc-ast's tree says where each one is, so
--- `from=c` leaves `'c'` alone and a quote inside one doesn't open a string.
+-- `'\''`, `'"'`) is never a name, in an expression or a `match` branch's
+-- pattern: roc-ast's tree says where each one is, so `from=c` leaves `'c'`
+-- alone, `from=n` leaves `'\n'`, and a quote inside one doesn't open a
+-- string. A name after a spread's `..` (`{ ..from, f: v }`) is a use.
 -- A file holding `from` and a `'` that roc-ast refuses is refused, since its
 -- literals can't be told. A `from` followed by `:` is a
 -- record field when it comes after `{` or `,`, or when its line ends in `,`
@@ -180,8 +182,11 @@ function next_code_line(all, i)
   return ""
 end
 
+-- A name after `..` is a spread's (`{ ..base, f: v }`), a bare use of it,
+-- not a field after a value.
 function is_wanted(line, at, stop, in_module, next)
-  if at > 1 and sub(line, at - 1, at - 1) == "." then
+  local spread = at > 2 and sub(line, at - 2, at - 1) == ".."
+  if at > 1 and sub(line, at - 1, at - 1) == "." and not spread then
     local q = qualifier_of(line, at - 1)
     if q ~= "" and contains(UPPER, sub(q, 1, 1)) then return MODULE == "" or q == MODULE end
     return FIELDS
@@ -348,7 +353,7 @@ function literal_spans_of_chunk(chunk, out)
     else
       local by_line = {}
       for n in t.nodes do
-        if n.kind == "e-single-quote" then push_at(by_line, "" .. n.line, {column = n.column, end_column = n.end_column}) end
+        if n.kind == "e-single-quote" or n.kind == "p-single-quote" then push_at(by_line, "" .. n.line, {column = n.column, end_column = n.end_column}) end
       end
       out.spans[t.path] = by_line
     end
@@ -499,6 +504,13 @@ function self_test()
   if r.code == 0 or not contains(r.out, "Broken.roc: roc-ast can't parse it") then push(wrong, "a file roc-ast refuses, holding a `'`, should be refused: exited " .. r.code .. ": " .. r.out) end
   expect_same("chars, refused", d .. "/Chars.roc", plants .. "chars/Chars.want", wrong)
 
+  -- A `match` branch's `'n'` and `'\n'` are literals too, and `..n` in a
+  -- record is a use; `n:` and `.n` after it are the field's, left.
+  d = copy_plants("patterns", scratch)
+  r = child({"glob=" .. d .. "/Lines.roc", "from=n", "to=total"})
+  expect_ok("patterns", r, {"Lines.roc: 9 renamed, 7 left in comments, 1 left in strings", "9 renamed in 1 file of 1"}, wrong)
+  expect_same("patterns", d .. "/Lines.roc", plants .. "patterns/Lines.want", wrong)
+
   d = copy_plants("rider", scratch)
   r = child({"glob=" .. d .. "/*.roc", "from=Rider", "to=Cyclist", "module=Ride", "book=" .. d .. "/book.md"})
   expect_ok("Rider module=Ride", r, {"Ride.roc: 5 renamed", "Uses.roc: 1 renamed", "book.md: 2 renamed, 2 left in strings", "8 renamed in 3 files of 3"}, wrong)
@@ -544,7 +556,7 @@ function self_test()
   remove_tree(scratch)
   for w in wrong do print("FAIL " .. w) end
   if #wrong > 0 then fail("rename_identifier_by_whole_word self_test: " .. #wrong .. " wrong") end
-  print("rename_identifier_by_whole_word (Roc) self_test: PASS (portion, fields=1, character literals and a file roc-ast refuses, a stacked annotation beside fields a line each, module=Ride with a book, skip=, dry=1, two renames of nothing that fail, and to_module= moves: imports added, kept, dropped, already there, refused, dry, and of nothing)")
+  print("rename_identifier_by_whole_word (Roc) self_test: PASS (portion, fields=1, character literals and a file roc-ast refuses, literals in match patterns and a record spread, a stacked annotation beside fields a line each, module=Ride with a book, skip=, dry=1, two renames of nothing that fail, and to_module= moves: imports added, kept, dropped, already there, refused, dry, and of nothing)")
   return nil
 end
 
