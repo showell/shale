@@ -1260,6 +1260,34 @@ TEST(a_program_writes_and_reads_only_where_the_mounts_allow) {
     ran_free(&x);
 }
 
+// A folder above the root is no rule's (D, the test's folder), and Landlock
+// cannot give a folder alone: a rule on a folder holds for all below it, so
+// a rule that let a program list D would let it list everything under D.
+// So a program may not open an ancestor as a directory to read (`ls D`,
+// and Odin's make_directory_all, which opens "/" and then each part of an
+// absolute path in turn), while mkdir on one answers EEXIST, as the kernel
+// looks the name up before it asks Landlock, and a `mkdir -p` of a path
+// through D into the root works. SHALE-AGENTS.md says the limit and its
+// workaround (a relative path, or the folder made first).
+TEST(a_program_may_not_list_a_folder_above_the_root_but_mkdir_there_says_it_exists) {
+    static Ran x;
+    guards_ran_with(&x, "", false);
+    ran_run(&x, ran_d(&x, "function c(a) return host(\"run\", a, {timeout_ms = 5000, tail = 3}) end\n"
+                          "local l = c({\"ls\", \"D\"})\n"
+                          "print(l.code, l.out)\n"
+                          "local m = c({\"mkdir\", \"D\"})\n"
+                          "print(m.code, m.out)\n"
+                          "print(c({\"ls\", \".\"}).code)\n"
+                          "print(c({\"mkdir\", \"-p\", \"D/root/made/deep\"}).code)\n"
+                          "print(exists(\"made/deep\"))\n"),
+           ran_budgets());
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), ran_d(&x, "2\tls: cannot open directory 'D': Permission denied\n\n"
+                                             "1\tmkdir: cannot create directory 'D': File exists\n\n"
+                                             "0\n0\ntrue\n"));
+    ran_free(&x);
+}
+
 // What the confinement allows still works: git makes a repository in a mount
 // and commits to it (its objects moved between folders, Landlock's REFER),
 // a build writes its out folder, and `mktemp` makes a file in the run's own
@@ -1283,7 +1311,8 @@ TEST(git_commits_in_a_mount_and_a_build_writes_its_out_folder_confined) {
     ran_free(&x);
 }
 
-TEST_PART(run_guards, TEST_CASE(a_program_writes_and_reads_only_where_the_mounts_allow), TEST_CASE(git_commits_in_a_mount_and_a_build_writes_its_out_folder_confined),
+TEST_PART(run_guards, TEST_CASE(a_program_writes_and_reads_only_where_the_mounts_allow),
+          TEST_CASE(a_program_may_not_list_a_folder_above_the_root_but_mkdir_there_says_it_exists), TEST_CASE(git_commits_in_a_mount_and_a_build_writes_its_out_folder_confined),
           TEST_CASE(an_env_that_picks_the_program_needs_a_want), TEST_CASE(a_refused_program_by_another_name_is_refused_by_the_one_it_reaches),
           TEST_CASE(each_kind_of_refused_program_is_refused_by_its_other_names), TEST_CASE(copy_mode_gives_a_copy_its_source_s_bits_and_a_read_only_mount_refuses_it),
           TEST_CASE(a_nul_in_an_argument_an_env_a_secrets_name_or_a_secret_is_refused_before_any_guard),

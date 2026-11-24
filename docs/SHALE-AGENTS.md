@@ -364,7 +364,25 @@ has none of it):
   widens it. A program it
   refuses gets EACCES from the call it made, so a script sees the
   program's own words, `Permission denied`, and its exit code: a refusal
-  is a gap to name in host_confine.c on purpose. A kernel without Landlock
+  is a gap to name in host_confine.c on purpose. **A folder above the
+  root, or above a mount, cannot be opened to read** (`ls /`, `ls ~`):
+  Landlock gives a rule to a folder and everything below it, never to a
+  folder alone, so no rule could let a program list `/` without listing
+  every folder on the machine. A `mkdir` of such a folder still answers
+  EEXIST (the kernel finds the name before it asks Landlock), and
+  coreutils' `mkdir -p /abs/path` works. **What breaks is a library that
+  walks an absolute path by opening each folder from `/`**, as Odin's
+  `os.make_directory_all` does (`open("/")`, then `openat` part by part):
+  its first open fails with EACCES, and the program says "Permission
+  denied" for a folder it only wanted made, even one already there. Hand
+  such a program a path relative to its working folder (`run`'s `cwd`,
+  under the root or a mount, which it may open): the walk then starts at
+  `.`. When the program makes the folder only if it is missing, making it
+  before the run (`mkdir("build:x/out")`, which makes the parents) works
+  too.
+  `c/tests/host_builtins/test_run_guards.c`'s
+  `a_program_may_not_list_a_folder_above_the_root_but_mkdir_there_says_it_exists`
+  holds all three. A kernel without Landlock
   (or older than ABI 3) runs no program, and nor does a secrets mount
   whose folder lies inside the root or another mount: no rule could hide
   it.

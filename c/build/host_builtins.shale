@@ -3,7 +3,7 @@
 -- host_write_gate.c, host_run_secrets.c, host_run.c, jobs.c, host_jobs.c).
 -- c/build.shale runs it, with the `build` mount that `use` below reads; see
 -- that file for the tiers and the blocks.
--- (steps, reads, read bytes and the arena: its plants, 87 with the Landlock lane's,
+-- (steps, reads, read bytes and the arena: its plants, 88 with the Landlock lane's,
 -- the unconfined gate's, secret_args', the push's, the fetch's and ls-remote's, gh's, the fenced secret's, the
 -- scrubber's parts' and the security review's (2026-11-23, past 256 MiB of arena), each copy c/, about 2M steps, 290 reads and 1.7 MB read a copy:
 -- 34 of them stopped at 10,000 reads.)
@@ -21,7 +21,7 @@ use("build:lib.shale")
 -- faults below planted in a copy of c/ (`run_plants`), each caught by its
 -- `aim` tests.
 
-const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 15, ["c/tests/host_builtins/test_run_guards.c"] = 27, ["c/tests/host_builtins/test_run_secret_args.c"] = 2}
+const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 15, ["c/tests/host_builtins/test_run_guards.c"] = 28, ["c/tests/host_builtins/test_run_secret_args.c"] = 2}
 const HOST_BUILTINS_PLANTS = {
   {name = "an unconfined run is any program", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
@@ -77,6 +77,9 @@ const HOST_BUILTINS_PLANTS = {
   {name = "a read-only mount is a program's to write", file = "host_confine.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "a_program_writes_and_reads_only_where_the_mounts_allow",
    old = "m->access == MOUNT_READ_ONLY ? LANDLOCK_READ_RIGHTS : handled;", new = "handled;"},
+  {name = "every folder is a program's to list", file = "host_confine.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "a_program_may_not_list_a_folder_above_the_root_but_mkdir_there_says_it_exists",
+   old = "    \"/usr\", \"/bin\", \"/sbin\",", new = "    \"/\", \"/usr\", \"/bin\", \"/sbin\","},
   {name = "a secrets folder inside the root is a program's to read", file = "host_confine.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "a_program_by_a_secret_s_path_is_the_secrets_guard_s_before_git_is_asked",
    old = "    if (leaks) {\n", new = "    if (0) {\n"},
