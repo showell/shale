@@ -79,8 +79,16 @@ function with_roc_names_masked(line)
   return re_replace(re_replace(line, "roc__p(roc_)?[0-9a-f]+", "roc__pX"), "[0-9a-f]{16,}", "X")
 end
 
--- The integer a run of lowercase hex digits says.
+-- The integer a run of lowercase hex digits says. Sixteen digits from `8`
+-- up are a 64-bit address below zero, as two's complement reads it: in an
+-- object file before it is linked, a call's target ahead of the section's
+-- start (`call ffffffffffffffd6 <...>`) is one.
 function hex_value(s)
+  if #s == 16 and find(HEX_DIGITS, sub(s, 1, 1)) > 8 then
+    local below = 0
+    for i = 1, #s do below = below * 16 + 16 - find(HEX_DIGITS, sub(s, i, i)) end
+    return -below - 1
+  end
   local n = 0
   for i = 1, #s do n = n * 16 + find(HEX_DIGITS, sub(s, i, i)) - 1 end
   return n
@@ -584,7 +592,7 @@ function self_test()
     if not has_key(seen, w) then fail("compare_machine_code self_test: no `" .. w .. "_` plant") end
   end
   if wrong > 0 then fail("compare_machine_code self_test: " .. wrong .. " plants wrong") end
-  print("compare_machine_code self_test: PASS (" .. #cases .. " plants: a move across modules and objdump's boundary jumps SAME; a changed instruction, a changed immediate and a reached trailing jump's new target caught; a changed crash string and a literal's new length data only)")
+  print("compare_machine_code self_test: PASS (" .. #cases .. " plants: a move across modules and objdump's boundary jumps SAME; a changed instruction, a changed immediate and a reached trailing jump's new target caught; a changed crash string and a literal's new length data only; a call to an address below zero, as an object file's before linking, read)")
 end
 
 if SELF_TEST then

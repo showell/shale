@@ -1,0 +1,11 @@
+plant.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000000000 <roc__p1111aaaa1111aaaa1111aaaa1111aaaa>:
+   0:	55                   	push   %rbp
+   1:	e8 d0 ff ff ff       	call   ffffffffffffffd7 <roc__p2222bbbb2222bbbb2222bbbb2222bbbb+0x2b>
+	2: R_X86_64_PLT32	roc__p3333cccc3333cccc3333cccc3333cccc-0x4
+   6:	5d                   	pop    %rbp
+   7:	c3                   	ret
