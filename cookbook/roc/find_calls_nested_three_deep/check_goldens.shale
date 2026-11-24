@@ -79,7 +79,10 @@ function cases()
   push(c, {name = "two globs", values = {"glob=" .. AT .. "nested.roc," .. AT .. "nested_two.roc"}})
   push(c, {name = "nothing", values = {"glob=" .. AT .. "nothing_here/*.roc"}})
   push(c, {name = "broken", values = {"glob=cookbook:roc/plants/find_unused_imports/broken/*.roc"}})
-  push(c, {name = "broken and plants", values = {"glob=cookbook:roc/plants/**/*.roc", "min=4"}})
+  -- A folder of its own, a nested plant beside a file that doesn't parse:
+  -- a glob over every recipe's plants made this case's count move with any
+  -- new plant anywhere (and a comma list of two wildcards matches nothing).
+  push(c, {name = "broken and plants", values = {"glob=" .. AT .. "broken_and_nested/*.roc", "min=4"}})
   push(c, {name = "self_test=1", values = {"self_test=1"}})
   return c
 end
