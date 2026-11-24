@@ -655,7 +655,11 @@ or `"."` for the root and `repos:roc-chat` for a mount.
     rev, as a lane starts). A `new` branch tracks nothing, so its first
     push is `git_push(repo, {branch})`, to a branch of its own name;
     `git_worktree_remove(repo, dir, {force})` and `git_branch_delete(repo,
-    name, {force})`.
+    name, {force})`. Git removes a worktree holding an initialized
+    submodule only by `force`, which also throws away its changes: a lane
+    is removed by `cookbook/remove_lane.shale`, which forces it only once
+    the lane is merged and each submodule is clean with every commit on a
+    remote.
 - **Errors:** a git error stops the run naming the git command and git's
   first line: `` `git show HEAD:nope` exited 128: fatal: ... ``; a call
   that changes things prints git's output first (its first and last 10

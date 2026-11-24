@@ -30,7 +30,18 @@
 --    too, since a check that didn't run is not a check passed.
 -- 3. **Remove the lane.** A worktree goes by `git -C <main> worktree remove
 --    <lane>` (never `--force`: git refuses a worktree with changes, which
---    the check has just said there are none of). A clone's folder is
+--    the check has just said there are none of). **A worktree holding an
+--    initialized submodule** git will not remove without `--force`
+--    ("working trees containing submodules cannot be moved or removed"),
+--    since the submodule's repository lives in the worktree's own admin
+--    folder and goes with it. It is removed with `--force` only when, by
+--    `submodule_check`: the lane's branch (or detached HEAD) is merged, by
+--    the rule of 4; every submodule (`git submodule status --recursive`)
+--    is at the commit the lane records, with no change, untracked file or
+--    stash in it; and each one's HEAD and local branches are all on one of
+--    its remotes, so nothing that goes with the admin folder is anywhere
+--    alone. Otherwise the run stops naming why, with nothing removed or
+--    deleted, its remote branch included. A clone's folder is
 --    deleted whole, after its remote branch (5) is dealt with, since that
 --    push is made from the clone.
 -- 4. **Delete the lane's local branch** (a worktree's, in its main
@@ -65,7 +76,10 @@
 -- removed and its branch kept; a merged clone is deleted with its remote
 -- branch. Of the remoteless repo's lanes, one merged into its local main
 -- is removed with its branch, and one a commit past it is refused and left
--- whole. The child run is given its root as `SHALE_ROOT`, so the self-test
+-- whole. Of a third repo's lanes, each holding a submodule: one merged
+-- and clean is removed with its branch; one pushed and not merged, and one
+-- merged whose submodule has a local commit on no remote, are refused and
+-- left whole. The child run is given its root as `SHALE_ROOT`, so the self-test
 -- passes under a parent run that sets its own.
 --
 -- budget: steps=200000000 reads=100000 programs=400
@@ -190,6 +204,48 @@ function has_remote_branch(dir_os, branch)
   return git(dir_os, {"rev-parse", "-q", "--verify", "refs/remotes/origin/" .. branch}).code == 0
 end
 
+function submodules(n)
+  if n == 1 then return "submodule" end
+  return "submodules"
+end
+
+-- The lane's initialized submodules, when it holds any, checked as the
+-- header's step 3 says: `{count, said}`, `said` the removal's words.
+-- Stops the run, naming why, when one would be lost with the worktree.
+-- `lane_os` is the worktree, `repo_os` its main checkout, `base` what
+-- merged means (`lane_base`).
+function submodule_check(lane_os, repo_os, branch, base)
+  local subs = {}
+  for l in lines(git_ok(lane_os, {"submodule", "status", "--recursive"}).out) do
+    if l ~= "" and not starts_with(l, "-") then
+      local m = re_find(l, "^(.)[0-9a-f]+ (\\S+)")
+      if m == nil then fail("remove_lane: `git submodule status` said a line it can't read: `" .. l .. "`; nothing removed") end
+      push(subs, {mark = m.groups[1], path = m.groups[2]})
+    end
+  end
+  if #subs == 0 then return {count = 0, said = ""} end
+  local why = "it holds " .. #subs .. " initialized " .. submodules(#subs) .. ", which git removes only by `--force`, and "
+  local stop = "; nothing removed"
+  if base.name == "" then fail("remove_lane: " .. lane_os .. ": " .. why .. base.why .. stop) end
+  local ref = branch
+  if ref == "" then ref = trim(git_ok(lane_os, {"rev-parse", "HEAD"}).out) end
+  local named = branch
+  if branch == "" then named = "detached HEAD" end
+  local m = merged_into(repo_os, ref, base.ref, base.shown)
+  if not m.merged then fail("remove_lane: " .. lane_os .. ": " .. why .. "its " .. named .. " is not merged: " .. m.why .. stop) end
+  for s in subs do
+    if s.mark ~= " " then fail("remove_lane: " .. lane_os .. ": " .. why .. "its submodule " .. s.path .. " is not at the commit the lane records (`" .. s.mark .. "` in `git submodule status`)" .. stop) end
+    local sub_os = lane_os .. "/" .. s.path
+    local dirty = trim(git_ok(sub_os, {"status", "--porcelain"}).out)
+    if dirty ~= "" then fail("remove_lane: " .. lane_os .. ": " .. why .. "its submodule " .. s.path .. " has changes: " .. sub(dirty, 1, 200) .. stop) end
+    if trim(git_ok(sub_os, {"stash", "list"}).out) ~= "" then fail("remove_lane: " .. lane_os .. ": " .. why .. "its submodule " .. s.path .. " has a stash" .. stop) end
+    if #git_remotes(sub_os) == 0 then fail("remove_lane: " .. lane_os .. ": " .. why .. "its submodule " .. s.path .. " has no remote, so its commits may be nowhere else" .. stop) end
+    local alone = parse_int(trim(git_ok(sub_os, {"rev-list", "--count", "HEAD", "--branches", "--not", "--remotes"}).out))
+    if alone > 0 then fail("remove_lane: " .. lane_os .. ": " .. why .. "its submodule " .. s.path .. " has " .. commits(alone) .. " on no remote" .. stop) end
+  end
+  return {count = #subs, said = " by `--force`, its " .. #subs .. " " .. submodules(#subs) .. " clean, each commit on a remote, its " .. named .. " " .. m.why}
+end
+
 -- The removal of the lane `dir` in the root `cfg.root`, `cfg.env` the
 -- child run's environment. Gives the outcome line.
 function remove_lane(cfg)
@@ -229,10 +285,15 @@ function remove_lane(cfg)
   if is_worktree then
     -- The remote branch is settled while the lane is there to push from,
     -- and said after the removal, in the outcome's order.
+    local subs = submodule_check(lane_os, repo_os, branch, main)
     local remote_said = no_remote_said
     if branch ~= "" and has_remote_branch(repo_os, branch) then remote_said = settle_branch(repo_os, branch, main, "remote", path) end
-    git_ok(repo_os, {"worktree", "remove", lane_os})
-    say(said, "removed the worktree " .. lane_os .. " of " .. repo_os)
+    if subs.count > 0 then
+      git_ok(repo_os, {"worktree", "remove", "--force", lane_os})
+    else
+      git_ok(repo_os, {"worktree", "remove", lane_os})
+    end
+    say(said, "removed the worktree " .. lane_os .. " of " .. repo_os .. subs.said)
     if branch == "" then
       say(said, "no branch: its HEAD was detached")
     else
@@ -281,7 +342,7 @@ function self_test()
   -- `main` holds the main checkout, whose .git the lanes' git reads: a
   -- program runs confined to the root and the mounts, as the box's lanes
   -- reach theirs through the `repos` mount.
-  create(T .. "/mounts", "cookbook = " .. real("cookbook:") .. " ro\nbuild = " .. Tos .. "/build\ntools = " .. Tos .. "/tools ro\nmemory = " .. Tos .. "/memory ro\nmain = " .. Tos .. "/main ro\nsolo = " .. Tos .. "/solo ro\n")
+  create(T .. "/mounts", "cookbook = " .. real("cookbook:") .. " ro\nbuild = " .. Tos .. "/build\ntools = " .. Tos .. "/tools ro\nmemory = " .. Tos .. "/memory ro\nmain = " .. Tos .. "/main ro\nsolo = " .. Tos .. "/solo ro\nsuper = " .. Tos .. "/super ro\n")
   local env = {SHALE_MOUNTS = Tos .. "/mounts"}
   local L = T .. "/lanes"
   local Los = real(L)
@@ -337,6 +398,32 @@ function self_test()
   git_ok(S, {"merge", "-q", "--ff-only", "solo-merged"})
   git_ok(S, {"worktree", "add", "-q", "-b", "solo-ahead", Los .. "/solo-ahead"})
   commit_file(Los .. "/solo-ahead", "t.txt", "solo, ahead")
+  -- A repo with an origin whose lanes each hold a submodule, initialized:
+  -- one merged, one pushed and not merged, one merged whose submodule has
+  -- a local branch a commit past its remote.
+  local U = Tos .. "/subrepo"
+  must(run({"git", "init", "-q", "-b", "main", U}, {timeout_ms = 30000, whole = 10000}))
+  commit_file(U, "lib.txt", "the submodule, first")
+  local P = Tos .. "/super"
+  must(run({"git", "init", "-q", "--bare", "-b", "main", Tos .. "/super.git"}, {timeout_ms = 30000, whole = 10000}))
+  must(run({"git", "clone", "-q", Tos .. "/super.git", P}, {timeout_ms = 30000, whole = 10000}))
+  git_ok(P, {"-c", "protocol.file.allow=always", "submodule", "add", "-q", U, "lib"})
+  git_ok(P, {"commit", "-q", "-m", "a submodule"})
+  git_push(T .. "/super", {to = "main"})
+  git_ok(P, {"remote", "set-head", "origin", "--auto"})
+  for name in {"subs-merged", "subs-unmerged", "subs-alone"} do
+    git_ok(P, {"worktree", "add", "-q", "-b", name, Los .. "/" .. name})
+    git_ok(Los .. "/" .. name, {"-c", "protocol.file.allow=always", "submodule", "update", "--init", "-q"})
+    commit_file(Los .. "/" .. name, name .. ".txt", name)
+    git_push(L .. "/" .. name, {branch = name})
+  end
+  git_ok(P, {"merge", "-q", "--ff-only", "subs-merged"})
+  git_ok(P, {"merge", "-q", "--no-edit", "subs-alone"})
+  git_push(T .. "/super", {to = "main"})
+  local alone_lib = Los .. "/subs-alone/lib"
+  git_ok(alone_lib, {"checkout", "-q", "-b", "side"})
+  commit_file(alone_lib, "side.txt", "the submodule, a local commit")
+  git_ok(alone_lib, {"checkout", "-q", "-"})
 
   local a = attempt(remove_lane, {root = L, dir = "unpushed", env = env})
   expect("unpushed: refused", a.ok, false)
@@ -377,6 +464,28 @@ function self_test()
   expect("clone: its branch on origin gone", git(Tos .. "/origin.git", {"rev-parse", "-q", "--verify", "refs/heads/cloned"}).code == 0, false)
   print(clone)
 
+  local unmerged = attempt(remove_lane, {root = L, dir = "subs-unmerged", env = env})
+  expect("subs-unmerged: refused", unmerged.ok, false)
+  expect("subs-unmerged: the refusal says not merged", contains(unmerged.error, "it holds 1 initialized submodule, which git removes only by `--force`, and its subs-unmerged is not merged: 1 commit not in origin/main; nothing removed"), true)
+  expect("subs-unmerged: still there", exists(L .. "/subs-unmerged/subs-unmerged.txt"), true)
+  expect("subs-unmerged: its branch on origin kept", git(Tos .. "/super.git", {"rev-parse", "-q", "--verify", "refs/heads/subs-unmerged"}).code == 0, true)
+  print("refused as it should be: " .. unmerged.error)
+
+  local alone = attempt(remove_lane, {root = L, dir = "subs-alone", env = env})
+  expect("subs-alone: refused", alone.ok, false)
+  expect("subs-alone: the refusal names the submodule's commit", contains(alone.error, "its submodule lib has 1 commit on no remote; nothing removed"), true)
+  expect("subs-alone: still there", exists(L .. "/subs-alone/lib/lib.txt"), true)
+  expect("subs-alone: its branch on origin kept", git(Tos .. "/super.git", {"rev-parse", "-q", "--verify", "refs/heads/subs-alone"}).code == 0, true)
+  print("refused as it should be: " .. alone.error)
+
+  local subs = remove_lane({root = L, dir = "subs-merged", env = env})
+  expect("subs-merged: gone", exists(L .. "/subs-merged"), false)
+  expect("subs-merged: unregistered", contains(git_ok(P, {"worktree", "list"}).out, "subs-merged"), false)
+  expect("subs-merged: its local branch gone", branch_there(P, "refs/heads/subs-merged"), false)
+  expect("subs-merged: its branch on origin gone", git(Tos .. "/super.git", {"rev-parse", "-q", "--verify", "refs/heads/subs-merged"}).code == 0, false)
+  expect("subs-merged: the outcome says how", contains(subs, " by `--force`, its 1 submodule clean, each commit on a remote, its subs-merged merged into origin/main"), true)
+  print(subs)
+
   local ahead = attempt(remove_lane, {root = L, dir = "solo-ahead", env = env})
   expect("solo-ahead: refused", ahead.ok, false)
   expect("solo-ahead: the refusal says BLOCKED", contains(ahead.error, "remove_lane: solo-ahead is BLOCKED"), true)
@@ -391,7 +500,7 @@ function self_test()
   print(solo)
 
   remove_tree(T)
-  print("remove_lane self_test: PASS (a remoteless repo's merged lane removed with its branch and its unmerged one refused; an unpushed lane refused and left whole; a merged lane removed with its branch here and on origin; a pushed, unmerged lane removed and its branch kept; a rebased lane removed with its branch on both sides; a partly picked lane's branch kept; a merged clone deleted with its remote branch)")
+  print("remove_lane self_test: PASS (a merged lane holding a clean submodule removed by --force, and an unmerged one and one whose submodule has a commit alone refused; a remoteless repo's merged lane removed with its branch and its unmerged one refused; an unpushed lane refused and left whole; a merged lane removed with its branch here and on origin; a pushed, unmerged lane removed and its branch kept; a rebased lane removed with its branch on both sides; a partly picked lane's branch kept; a merged clone deleted with its remote branch)")
   return nil
 end
 
