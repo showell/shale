@@ -339,23 +339,29 @@ has none of it):
   `gh alias` are refused, want or not. **One secret is fenced to one
   program:** `github-pr-token`, a classic token with `public_repo` that
   writes every public repository its owner may reach, goes to `gh pr
-  create`, `gh pr view` and `gh pr close` alone
-  (`c/host/host_run_secrets.c`'s HOST_SECRET_FENCED). `run` refuses any
-  other use of it before it reads the secret: another program (`curl`, and
-  so `http`'s `bearer`), another gh command (`gh pr merge`, `gh api -X
-  POST`), and any option those three commands' lists don't name (`--web`,
-  `--editor`). Each value is held to its shape: `--repo OWNER/NAME` with no
-  host, `--head OWNER:BRANCH` whose owner is a github.com owner of the
-  remotes file (below), and a pull request by its number. A create names
-  `--repo`, `--head`, `--title` and `--body-file`, so gh never asks, forks
-  or pushes. The token goes in `secrets = {GH_TOKEN =
-  "keys:github-pr-token"}` alone, the run's only secret, with no `env`,
-  `want`, `unconfined` or `stdout_secret`, and never in `secret_args`. It
-  runs as the system's own gh, `/usr/bin/gh`, with `PATH=/usr/bin:/bin`,
-  never one planted on PATH, and stays confined.
-  `cookbook/open_pull_request.shale` is its one user. `remote_owners()`
-  gives the remotes file's lines as `{host, owner}`, so a script can check
-  a head before it runs gh. A `want` never widens it. A program it
+  create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue
+  view` alone (`c/host/host_run_secrets.c`'s HOST_SECRET_FENCED). `run`
+  refuses any other use of it before it reads the secret: another program
+  (`curl`, and so `http`'s `bearer`), another gh command (`gh pr merge`,
+  `gh issue edit`, `close` or `comment`, `gh api -X POST`), and any option
+  those five commands' lists don't name (`--web`, `--editor`). Each value
+  is held to its shape: `--repo OWNER/NAME` with no host, `--head
+  OWNER:BRANCH` whose owner is a github.com owner of the remotes file
+  (below), and a pull request or an issue by its number. A pull request's
+  create names `--repo`, `--head`, `--title` and `--body-file`, so gh never
+  asks, forks or pushes; an issue's names `--repo`, `--title` and
+  `--body-file`. **An issue's `--repo` is one we file on**: a repository of
+  a github.com owner of the remotes file, or one of
+  HOST_FENCE_ISSUE_UPSTREAMS, the one list of the upstreams (`roc-lang/roc`
+  first), which `issue_upstreams()` gives a script. The token goes in
+  `secrets = {GH_TOKEN = "keys:github-pr-token"}` alone, the run's only
+  secret, with no `env`, `want`, `unconfined` or `stdout_secret`, and never
+  in `secret_args`. It runs as the system's own gh, `/usr/bin/gh`, with
+  `PATH=/usr/bin:/bin`, never one planted on PATH, and stays confined.
+  `cookbook/open_pull_request.shale` and `cookbook/open_issue.shale` are its
+  users. `remote_owners()` gives the remotes file's lines as `{host,
+  owner}`, so a script can check a head before it runs gh. A `want` never
+  widens it. A program it
   refuses gets EACCES from the call it made, so a script sees the
   program's own words, `Permission denied`, and its exit code: a refusal
   is a gap to name in host_confine.c on purpose. A kernel without Landlock

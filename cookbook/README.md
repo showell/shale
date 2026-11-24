@@ -48,6 +48,47 @@ checkouts, and `<lanes>` the one that holds your lanes.
   it all and prints the command. Run `dry=1` first, at the top level.
   `shale cookbook:open_pull_request.shale --args-stdin` with `repo=`,
   `base=`, `head=showell:<branch>`, `title=`, `body=<path>` and `dry=1` on stdin
+- `open_issue.shale`: for "file that issue upstream". It files an issue on
+  one of our repositories or an upstream we file against (`roc-lang/roc`
+  first: c/host/host_run_secrets.c's HOST_FENCE_ISSUE_UPSTREAMS, the one
+  list, which `issue_upstreams()` reads), with the same fenced token, which
+  `run` hands to `gh issue create` and `view` alone, never `edit`, `close`,
+  `comment` or `gh api`. It checks the repository against those lists, the
+  title and the body file; `dry=1` checks it all and prints the command.
+  Run `dry=1` first, at the top level.
+  `shale cookbook:open_issue.shale --args-stdin` with `repo=`, `title=`,
+  `body=<path>` and `dry=1` on stdin
+
+## Doors: every outward action, one command each
+
+Each action that reaches past the box (a push, a publish, a deploy, a
+GitHub write, a read with a key) has one door: a script that checks its
+inputs, refuses by name, and runs the one command. An agent runs a door
+only as its column says; nothing here is run by hand outside Shale. A
+secret is named by its mount path alone; its contents never reach a
+script. "Steve's yes" is his sign-off on that one action; a dry run, where a
+door has one, comes first and needs none.
+
+| Action | The command | Who runs it | Documented in |
+|---|---|---|---|
+| Push a branch to its upstream | `git_push(repo)` in a heredoc (`{branch}`, `{to}`, `{delete}`, `{lease}`, `{tag}`) | agent, on Steve's yes | docs/SHALE-AGENTS.md, "Git, in the git prelude" |
+| Push a work branch to our Rocco fork | `cd <repos> && shale cookbook:push_rocco_fork.shale dir=<mount path> branch=<name>` | agent, standing permission (never main or master, never a force) | its header |
+| Open a pull request from a fork | `shale cookbook:open_pull_request.shale --args-stdin` (`repo=`, `base=`, `head=`, `title=`, `body=`, `dry=1` first) | agent, on Steve's "open it" | its header; the fence in docs/SHALE-AGENTS.md |
+| File an issue on ours or an upstream | `shale cookbook:open_issue.shale --args-stdin` (`repo=`, `title=`, `body=`, `dry=1` first) | agent, on Steve's "file it" | its header; the fence in docs/SHALE-AGENTS.md |
+| Read a Zulip topic | `shale cookbook:read_zulip_topic.shale --args-stdin` (`site=`, `email=`, `key=keys:<file>`, `stream=`, `topic=`, `num=`) | agent (read-only) | its header |
+| Run a workflow on GitHub (c-full) | `shale cookbook:build_on_github.shale workflow=c-full.yml ref=<branch>` | agent, on Steve's yes | its header; c/docs/building.md |
+| Publish an app to roc-apps' staging | `cd <roc-apps> && shale site/publish.shale app=<app>` | agent, on Steve's sign-off of dev | roc-apps: site/publish.shale's header |
+| Publish roc-js-interpreter's playground and book | `cd <roc-apps> && shale site/publish_roc_js.shale` (`dry=1` first) | agent, on Steve's sign-off | roc-apps: site/publish_roc_js.shale's header |
+| Publish Safari Walk | `cd <roc-apps> && shale site/publish_safari_walk.shale` (`dry=1`: the checks alone) | agent, on Steve's sign-off | roc-apps: site/publish_safari_walk.shale's header |
+| Publish roc-markdown's playground | `cd <roc-apps> && shale site/publish_markdown.shale` (`dry=1` first) | agent, on Steve's sign-off | roc-apps: site/publish_markdown.shale's header |
+| Publish roc-screensaver's pages | `cd <roc-apps> && shale site/publish_screensavers.shale` (`saver=<name>` for one) | agent, on Steve's sign-off | roc-apps: site/publish_screensavers.shale's header |
+| Deploy roc-apps' staging to prod | `cd <roc-apps> && shale site/deploy.shale` (reads `keys:prod-ssh`) | agent, on Steve's sign-off of staging | roc-apps: site/deploy.shale's header, docs/production.md |
+| Deploy roc-chat to prod | `cd <roc-chat> && shale tools/deploy.shale` (reads `keys:prod-ssh`; on `main`) | agent, on Steve's yes | roc-chat: docs/deploy.md, tools/deploy.shale's header |
+| Release the essay surface | `cd <repos> && shale repos:essay-surface/scripts/release.shale data=essays: port=<port>` (`rollback=1` to swap back) | agent, on Steve's yes | essay-surface: scripts/release.shale's header |
+| Store or replace a secret | `shale --secrets` (`store`, the secret's bare name at the prompt) | Steve, in his own terminal (the gate refuses it to an agent) | docs/SHALE-AGENTS.md, "Setting up your own secrets folder" |
+
+A door launched at the top level is the one that reads its secret: a nested
+`shale` (one a script runs) reaches no secrets mount and no remotes file.
 
 ## For any project
 

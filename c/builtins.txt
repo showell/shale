@@ -856,6 +856,13 @@ remote_owners() -> List({host: Str, owner: Str})
   doc: each line of the remotes file (~/.config/shale/remotes) as `{host, owner}`, `{}` with none
   anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
 
+issue_upstreams() -> List(Str)
+  impl: prelude linux
+  kind: effect
+  stops: -
+  doc: the upstream repositories, each `OWNER/NAME`, a fenced `gh issue` may name beside the remotes file's owners' own (HOST_FENCE_ISSUE_UPSTREAMS)
+  anchor: docs/SHALE-AGENTS.md#before-you-reach-for-the-shell
+
 job_start(argv: List(Str), opts: Opts) -> Job
   impl: prelude linux
   kind: effect

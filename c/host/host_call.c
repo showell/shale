@@ -62,6 +62,7 @@ static STATUS_MUST_USE Status host_call(void *ctx, Run *r, Pos pos, Str name, Co
     }
     if (str_eq(name, S("copy_mode"))) return host_copy_mode(lh, r, pos, args, out);
     if (str_eq(name, S("remote_owners"))) return host_remote_owners(r, pos, args, out);
+    if (str_eq(name, S("issue_upstreams"))) return host_issue_upstreams(r, pos, args, out);
     if (str_eq(name, S("re_lines"))) return host_re_lines(r, pos, args, out);
     if (str_eq(name, S("shale_tokens"))) return host_shale_tokens(r, pos, args, out);
     if (str_eq(name, S("grep_tree"))) return host_grep_tree(r, pos, args, out);

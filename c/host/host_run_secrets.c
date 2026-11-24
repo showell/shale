@@ -599,47 +599,75 @@ static STATUS_MUST_USE Status host_secret_args_fill(Host *h, Run *r, Pos pos, Sp
 
 // The fenced secret's file name, in a secrets mount (or a folder of one):
 // the box's classic GitHub token with `public_repo`, which opens a pull
-// request from a fork (cookbook/open_pull_request.shale).
+// request from a fork (cookbook/open_pull_request.shale) and files an issue
+// (cookbook/open_issue.shale).
 // DRAGON: the secrets rule. `secrets` hands any secret to any program, and
 // this token writes every public repository its owner may reach: a script
-// could hand it to `gh pr merge`, `gh api -X POST`, `gh repo delete`, curl
-// (`http`'s `bearer` among them) or a `gh` planted first on PATH.
+// could hand it to `gh pr merge`, `gh issue close`, `gh issue comment`, `gh
+// api -X POST`, `gh repo delete`, curl (`http`'s `bearer` among them) or a
+// `gh` planted first on PATH.
 // REMEDY: a run that names it is held to HOST_SECRET_FENCE_USES' shapes
 // (host_secret_fence), each option by name and each value by its shape, a
-// head's owner one of the remotes file's; it is the only secret, with no
+// head's owner one of the remotes file's, an issue's repository one of
+// theirs or HOST_FENCE_ISSUE_UPSTREAMS'; it is the only secret, with no
 // `env`, `want`, `unconfined`, `secret_args` or `stdout_secret`, and it runs
 // as the system's own gh (host_unconfined_program) with HOST_UNCONFINED_PATH;
 // in `secret_args` it is refused. It is checked before any secret is read.
 // test_run_guards' a_fenced_secret_goes_to_gh_pr_create_view_and_close_alone
-// plants each refusal. What is left: a file of the same bytes under another
-// name, which only the secrets folder's owner can make.
+// and a_fenced_secret_files_an_issue_on_a_listed_repository_alone plant each
+// refusal. What is left: a file of the same bytes under another name, which
+// only the secrets folder's owner can make.
 #define HOST_SECRET_FENCED "github-pr-token"
+
+// The fenced commands, as every refusal names them.
+#define HOST_FENCE_SAID "`gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view`"
 
 #define HOST_FENCE_LEN(a) (sizeof(a) / sizeof *(a))
 
-// One command the fenced secret may go to, `gh pr <command>`: its options
-// that take the next word as their value, its options that take none, and
-// whether it takes one positional word, a pull request's number. Every
-// command needs `--repo`; `create` needs `--head`, `--title` and
-// `--body-file` too, so gh never asks, forks or pushes.
+// **THE UPSTREAM REPOSITORIES WE FILE ISSUES ON**, the one list: a fenced
+// `gh issue` names a repository of a github.com owner of the remotes file
+// (our own) or one of these, `OWNER/NAME` exactly. A script reads it as
+// `issue_upstreams()` (cookbook/open_issue.shale checks a dry run by it).
+// An addition is Steve's call, made here.
+static const char *const HOST_FENCE_ISSUE_UPSTREAMS[] = {"roc-lang/roc"};
+
+// One command the fenced secret may go to, `gh <group> <command>`: its
+// options that take the next word as their value, its options that take
+// none, the values it must name, and whether it takes one positional word,
+// a pull request's or an issue's number. Every command needs `--repo`; a
+// create needs its `--title` and `--body-file` too (and a pull request's its
+// `--head`), so gh never asks, forks or pushes. An issue's `--repo` is held
+// to the listed repositories (`listed`).
 typedef struct {
+    const char *group;   // cstr: a literal, `pr` or `issue`
     const char *command; // cstr: a literal
     HostConfineArgs values;
     HostConfineArgs flags;
+    HostConfineArgs needs;
+    const char *needs_said; // cstr: a literal, the refusal when one of `needs` is missing
     bool number;
+    bool listed;
 } HostFenceUse;
 
 SLICE_TYPE(HostFenceUses, const HostFenceUse);
 
 static const char *const HOST_FENCE_CREATE_VALUES[] = {"--repo", "--base", "--head", "--title", "--body-file"};
 static const char *const HOST_FENCE_CREATE_FLAGS[] = {"--draft"};
+static const char *const HOST_FENCE_CREATE_NEEDS[] = {"--repo", "--head", "--title", "--body-file"};
 static const char *const HOST_FENCE_VIEW_VALUES[] = {"--repo", "--json"};
 static const char *const HOST_FENCE_CLOSE_VALUES[] = {"--repo"};
+static const char *const HOST_FENCE_REPO_NEEDS[] = {"--repo"};
+static const char *const HOST_FENCE_ISSUE_CREATE_VALUES[] = {"--repo", "--title", "--body-file"};
+static const char *const HOST_FENCE_ISSUE_CREATE_NEEDS[] = {"--repo", "--title", "--body-file"};
+
+#define HOST_FENCE_ARGS(a) {a, HOST_FENCE_LEN(a)}
 
 static const HostFenceUse HOST_SECRET_FENCE_USES[] = {
-    {"create", {HOST_FENCE_CREATE_VALUES, HOST_FENCE_LEN(HOST_FENCE_CREATE_VALUES)}, {HOST_FENCE_CREATE_FLAGS, HOST_FENCE_LEN(HOST_FENCE_CREATE_FLAGS)}, false},
-    {"view", {HOST_FENCE_VIEW_VALUES, HOST_FENCE_LEN(HOST_FENCE_VIEW_VALUES)}, {NULL, 0}, true},
-    {"close", {HOST_FENCE_CLOSE_VALUES, HOST_FENCE_LEN(HOST_FENCE_CLOSE_VALUES)}, {NULL, 0}, true},
+    {"pr", "create", HOST_FENCE_ARGS(HOST_FENCE_CREATE_VALUES), HOST_FENCE_ARGS(HOST_FENCE_CREATE_FLAGS), HOST_FENCE_ARGS(HOST_FENCE_CREATE_NEEDS), "`gh pr create` names its `--head`, `--title` and `--body-file`, so gh never asks, forks or pushes", false, false},
+    {"pr", "view", HOST_FENCE_ARGS(HOST_FENCE_VIEW_VALUES), {NULL, 0}, HOST_FENCE_ARGS(HOST_FENCE_REPO_NEEDS), "it names its repository, `--repo OWNER/NAME`", true, false},
+    {"pr", "close", HOST_FENCE_ARGS(HOST_FENCE_CLOSE_VALUES), {NULL, 0}, HOST_FENCE_ARGS(HOST_FENCE_REPO_NEEDS), "it names its repository, `--repo OWNER/NAME`", true, false},
+    {"issue", "create", HOST_FENCE_ARGS(HOST_FENCE_ISSUE_CREATE_VALUES), {NULL, 0}, HOST_FENCE_ARGS(HOST_FENCE_ISSUE_CREATE_NEEDS), "`gh issue create` names its `--repo`, `--title` and `--body-file`, so gh never asks", false, true},
+    {"issue", "view", HOST_FENCE_ARGS(HOST_FENCE_VIEW_VALUES), {NULL, 0}, HOST_FENCE_ARGS(HOST_FENCE_REPO_NEEDS), "it names its repository, `--repo OWNER/NAME`", true, true},
 };
 
 static bool host_fence_word_byte(uint8_t c) {
@@ -687,7 +715,7 @@ static STATUS_MUST_USE Status host_secret_is_fenced(Host *h, Run *r, Pos pos, St
 }
 
 static STATUS_MUST_USE Status host_fence_refused(Run *r, Pos pos, Str why) {
-    return host_fail(r, pos, CLASS_REFUSED, S("`run`: the secret " HOST_SECRET_FENCED " goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: {s}"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(why)));
+    return host_fail(r, pos, CLASS_REFUSED, S("`run`: the secret " HOST_SECRET_FENCED " goes to " HOST_FENCE_SAID " alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: {s}"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(why)));
 }
 
 // A refusal that names a word of the script's argv.
@@ -697,19 +725,55 @@ static STATUS_MUST_USE Status host_fence_refused_word(Run *r, Pos pos, const cha
     return host_fence_refused(r, pos, buf_view(&b));
 }
 
-// Holds a fenced command's words after `gh pr <command>` to `use`.
+static Str host_fence_cstr(const char *s) { // cstr: a literal
+    return (Str){s, strlen(s)};
+}
+
+// Whether a fenced issue's `--repo` (of host_fence_repo's shape) is one we
+// file on: one of HOST_FENCE_ISSUE_UPSTREAMS, or a repository of a
+// github.com owner of the remotes file.
+static STATUS_MUST_USE Status host_fence_issue_repo(Run *r, Pos pos, Str v, bool *ok) {
+    HostConfineArgs upstreams = HOST_FENCE_ARGS(HOST_FENCE_ISSUE_UPSTREAMS);
+    *ok = host_unconfined_named(upstreams, v);
+    if (*ok) return OK;
+    Str remotes = S("");
+    TRY(host_unconfined_remotes(r, pos, &remotes));
+    *ok = host_remote_owner_listed(remotes, str_sub(v, 0, (size_t)(str_find_byte(v, '/') - v.ptr)));
+    return OK;
+}
+
+// `host("issue_upstreams")`: HOST_FENCE_ISSUE_UPSTREAMS, each `OWNER/NAME`, in
+// its order: a script's view of the upstream repositories a fenced issue may
+// be filed on, beside the remotes file's owners' own (`remote_owners`).
+static STATUS_MUST_USE Status host_issue_upstreams(Run *r, Pos pos, ConstValues args, Value *out) {
+    if (args.len != 0) return host_fail(r, pos, CLASS_ARGUMENT, S("`issue_upstreams` takes nothing, given {d} arguments"), MESSAGE_ARGS(MESSAGE_FROM_HOST(run_unum(r, args.len))));
+    Table *list = NULL;
+    TRY(run_new_table(r, pos, &list));
+    list->kind = TABLE_LIST;
+    HostConfineArgs upstreams = HOST_FENCE_ARGS(HOST_FENCE_ISSUE_UPSTREAMS);
+    for (size_t k = 0; k < upstreams.len; k++) {
+        Value v;
+        value_string(&v, host_fence_cstr(at(upstreams, k)));
+        TRY(run_list_push(r, pos, list, &v));
+    }
+    value_table(out, list);
+    return OK;
+}
+
+// Holds a fenced command's words after `gh <group> <command>` to `use`.
 static STATUS_MUST_USE Status host_fence_command(Run *r, Pos pos, SpawnStrs argv, const HostFenceUse *use) {
     bool seen[8] = {false};
     SLICE_TYPE(Seen, bool);
     Seen s = {seen, 8};
     size_t positional = 0;
+    bool pr = str_eq(host_fence_cstr(use->group), S("pr"));
     for (size_t i = 3; i < argv.len; i++) {
         Str w = at(argv, i).s;
         if (!str_starts_with(w, S("-"))) {
-            if (!use->number) return host_fence_refused_word(r, pos, "`gh pr create` takes no word but its options' values, not ", w);
+            if (!use->number) return host_fence_refused_word(r, pos, pr ? "`gh pr create` takes no word but its options' values, not " : "`gh issue create` takes no word but its options' values, not ", w);
             bool digits = w.len > 0 && w.len <= 12;
             for (size_t k = 0; k < w.len && digits; k++) digits = str_byte(w, k) >= '0' && str_byte(w, k) <= '9';
-            if (!digits || positional > 0) return host_fence_refused_word(r, pos, "it names one pull request by its number, not ", w);
+            if (!digits || positional > 0) return host_fence_refused_word(r, pos, pr ? "it names one pull request by its number, not " : "it names one issue by its number, not ", w);
             positional++;
             continue;
         }
@@ -727,6 +791,11 @@ static STATUS_MUST_USE Status host_fence_command(Run *r, Pos pos, SpawnStrs argv
         Str v = at(argv, ++i).s;
         bool ok = v.len > 0;
         if (str_eq(w, S("--repo"))) ok = host_fence_repo(v);
+        if (ok && use->listed && str_eq(w, S("--repo"))) {
+            bool listed = false;
+            TRY(host_fence_issue_repo(r, pos, v, &listed));
+            if (!listed) return host_fence_refused_word(r, pos, "an issue's repository is a github.com remotes-file owner's (~/.config/shale/remotes, or SHALE_REMOTES's) or one of HOST_FENCE_ISSUE_UPSTREAMS, not ", v);
+        }
         if (str_eq(w, S("--base"))) ok = host_fence_branch(v);
         if (str_eq(w, S("--json"))) {
             for (size_t k = 0; k < v.len && ok; k++) {
@@ -745,10 +814,16 @@ static STATUS_MUST_USE Status host_fence_command(Run *r, Pos pos, SpawnStrs argv
         }
         if (!ok) return host_fence_refused_word(r, pos, "a value not of its option's shape (`--repo OWNER/NAME`, `--head OWNER:BRANCH`, `--base BRANCH`, `--json a,b`, no other empty): ", v);
     }
-    // `--repo` is the first value of each; `create` needs all but `--base`.
+    // `--repo` is the first value of each, and first of its `needs`.
     if (!at(s, 0)) return host_fence_refused(r, pos, S("it names its repository, `--repo OWNER/NAME`"));
-    if (str_eq((Str){use->command, strlen(use->command)}, S("create")) && (!at(s, 2) || !at(s, 3) || !at(s, 4))) return host_fence_refused(r, pos, S("`gh pr create` names its `--head`, `--title` and `--body-file`, so gh never asks, forks or pushes"));
-    if (use->number && positional == 0) return host_fence_refused(r, pos, S("it names one pull request by its number"));
+    for (size_t n = 0; n < use->needs.len; n++) {
+        bool named = false;
+        for (size_t k = 0; k < use->values.len; k++) {
+            if (at(s, k) && str_eq(host_fence_cstr(at(use->values, k)), host_fence_cstr(at(use->needs, n)))) named = true;
+        }
+        if (!named) return host_fence_refused(r, pos, host_fence_cstr(use->needs_said));
+    }
+    if (use->number && positional == 0) return host_fence_refused(r, pos, pr ? S("it names one pull request by its number") : S("it names one issue by its number"));
     return OK;
 }
 
@@ -773,13 +848,15 @@ static STATUS_MUST_USE Status host_secret_fence(Host *h, Run *r, Pos pos, SpawnS
     if (!str_eq(at(secrets->names, 0), S("GH_TOKEN"))) return host_fence_refused(r, pos, S("it goes to gh as GH_TOKEN"));
     if (env->names.len > 0 || want || unconfined || stdout_secret) return host_fence_refused(r, pos, S("its run takes no `env`, `want`, `unconfined` or `stdout_secret`"));
     if (!str_eq(at(argv, 0).s, S("gh"))) return host_fence_refused_word(r, pos, "its program is `gh`, named bare (the system's own), not ", at(argv, 0).s);
-    if (argv.len < 3 || !str_eq(at(argv, 1).s, S("pr"))) return host_fence_refused(r, pos, S("its command is `gh pr create`, `gh pr view` or `gh pr close`"));
+    if (argv.len < 3 || !(str_eq(at(argv, 1).s, S("pr")) || str_eq(at(argv, 1).s, S("issue")))) return host_fence_refused(r, pos, S("its command is one of those five"));
     HostFenceUses uses = {HOST_SECRET_FENCE_USES, HOST_FENCE_LEN(HOST_SECRET_FENCE_USES)};
     for (size_t k = 0; k < uses.len; k++) {
         const HostFenceUse *use = &at(uses, k);
-        if (str_eq(at(argv, 2).s, (Str){use->command, strlen(use->command)})) return host_fence_command(r, pos, argv, use);
+        if (str_eq(at(argv, 1).s, host_fence_cstr(use->group)) && str_eq(at(argv, 2).s, host_fence_cstr(use->command))) return host_fence_command(r, pos, argv, use);
     }
-    return host_fence_refused_word(r, pos, "its command is `gh pr create`, `gh pr view` or `gh pr close`, not gh pr ", at(argv, 2).s);
+    Buf b = buf_make(r->ctx.values);
+    if (buf_lit(&b, "gh ") != OK || buf_str(&b, at(argv, 1).s) != OK || buf_byte(&b, ' ') != OK || buf_str(&b, at(argv, 2).s) != OK) return run_values_oom(r, pos);
+    return host_fence_refused_word(r, pos, "its command is one of those five, not ", buf_view(&b));
 }
 
 // A fenced run's argv and environment: the system's own gh by its path, and

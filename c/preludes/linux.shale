@@ -950,3 +950,10 @@ end
 function remote_owners()
   return host("remote_owners")
 end
+
+-- **THE UPSTREAMS WE FILE ISSUES ON** (`c/host/host_run_secrets.c`'s
+-- HOST_FENCE_ISSUE_UPSTREAMS): each `OWNER/NAME` a fenced `gh issue` may
+-- name beside the remotes file's owners' own repositories.
+function issue_upstreams()
+  return host("issue_upstreams")
+end

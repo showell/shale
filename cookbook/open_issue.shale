@@ -1,0 +1,166 @@
+-- This recipe files an issue on a GitHub repository, one of ours or an
+-- upstream we file against (roc-lang/roc first). It runs exactly
+--
+--   gh issue create --repo <repo> --title <title> --body-file <body>
+--
+-- with the fenced token, `secrets = {GH_TOKEN = "keys:github-pr-token"}`,
+-- and prints the issue's URL.
+--
+-- **Dry run first, always**: `dry=1` checks everything below and prints the
+-- exact command, creating nothing. Then run it again without `dry`.
+--
+--   shale cookbook:open_issue.shale --args-stdin <<'ARGS'
+--   repo=roc-lang/roc
+--   title=A list copied where it should be moved
+--   body=build:lanes/roc-issue-body.md
+--   dry=1
+--   ARGS
+--
+-- `repo` is the repository, `OWNER/NAME`: one of a github.com owner of the
+-- remotes file (~/.config/shale/remotes, our own) or one of the upstreams
+-- `issue_upstreams()` gives; `title` is the title (a long one goes on stdin
+-- with `--args-stdin`, as above); `body` is a Shale path to the body's
+-- file, under the root or a mount.
+--
+-- It refuses before running anything: a `repo` not of its shape or not on
+-- those lists, an empty title or body, and a body outside the root and the
+-- mounts. `self_test=1` holds those refusals, running no program.
+--
+-- **The token is fenced in Shale itself, not only here.** keys:github-pr-token
+-- is a classic token with `public_repo`, so it can write to every public
+-- repository Steve can reach. `run` hands it only to `gh pr create`, `gh pr
+-- view`, `gh pr close`, `gh issue create` and `gh issue view`, each held to
+-- its options, an issue's repository to the same two lists as here, and
+-- always as the system's own /usr/bin/gh (c/host/host_run_secrets.c's
+-- HOST_SECRET_FENCED, docs/SHALE-AGENTS.md). **The upstreams' one home is
+-- that file's HOST_FENCE_ISSUE_UPSTREAMS**: a new upstream is added there
+-- (Steve's call), and this recipe reads it by `issue_upstreams()`.
+--
+-- **Launch it at the top level.** It reads the token through `run`'s
+-- `secrets`, and a nested shale (one a script runs) reaches no secrets
+-- mount, so it can't read the token there.
+--
+-- Never point it at `gh issue edit`, `close`, `comment` or `delete`: the
+-- fence refuses those, and so should we.
+
+const REPO = arg("repo", "")
+const TITLE = arg("title", "")
+const BODY = arg("body", "")
+const DRY = arg("dry", 0)
+const SELF_TEST = arg("self_test", 0)
+const TOKEN = "keys:github-pr-token"
+
+const WHO = "open_issue"
+
+-- A GitHub owner's or repository's name: letters, digits, `.`, `_` and
+-- `-`, not first `.` or `-`.
+function is_github_name(s)
+  return re_match(s, "^[A-Za-z0-9_][A-Za-z0-9._-]*$")
+end
+
+-- Whether `repo` (OWNER/NAME) is one we file on, as the fence has it: an
+-- upstream exactly, else a repository of a github.com owner of the remotes
+-- file. The upstreams are asked first, so a run that reaches no remotes
+-- file still checks one.
+function is_listed(repo, owner)
+  if has_item(issue_upstreams(), repo) then return true end
+  for o in remote_owners() do
+    if o.host == "github.com" and o.owner == owner then return true end
+  end
+  return false
+end
+
+-- Every refusal, before any program runs.
+function checked(repo, title, body)
+  not_option(WHO, "repo", repo)
+  local r = re_find(repo, "^([^/]+)/([^/]+)$")
+  if r == nil or not is_github_name(r.groups[1]) or not is_github_name(r.groups[2]) then fail(WHO .. ": `repo` is OWNER/NAME, not \"" .. repo .. "\"") end
+  if not is_listed(repo, r.groups[1]) then fail(WHO .. ": " .. repo .. " is neither a repository of a github.com owner of the remotes file nor an upstream we file on (" .. join(issue_upstreams(), ", ") .. "; c/host/host_run_secrets.c's HOST_FENCE_ISSUE_UPSTREAMS)") end
+  if trim(title) == "" then fail(WHO .. ": `title` is empty") end
+  if body == "" then fail(WHO .. ": `body` names the body's file, a Shale path") end
+  -- `read` holds the path to the root and the mounts, refusing an absolute
+  -- one, `..` and a secrets mount's.
+  if not exists(body) then fail(WHO .. ": the body " .. body .. " is not there") end
+  if trim(read(body)) == "" then fail(WHO .. ": the body " .. body .. " is empty") end
+  return true
+end
+
+function replace_all(s, old, new)
+  return join(split(s, old), new)
+end
+
+-- How the command reads, each word as a shell would need it quoted.
+function shown(argv)
+  local words = {}
+  for w in argv do
+    if re_match(w, "^[A-Za-z0-9_./:=@,+-]+$") then push(words, w) else push(words, "'" .. replace_all(w, "'", "'\\''") .. "'") end
+  end
+  return join(words, " ")
+end
+
+-- The real run: the URL gh prints last, or a stop with what it said.
+function opened(argv)
+  local r = run(argv, {timeout_ms = 60000, tail = 20, secrets = {GH_TOKEN = TOKEN}})
+  if r.code ~= 0 then
+    print(trim(r.out))
+    fail(WHO .. ": `gh issue create` exited " .. r.code .. "; nothing above is secret, the token is scrubbed")
+  end
+  local url = nil
+  for l in lines(r.out) do
+    if starts_with(l, "https://github.com/") then url = l end
+  end
+  if url == nil then
+    print(trim(r.out))
+    fail(WHO .. ": gh exited 0 and printed no issue URL")
+  end
+  return url
+end
+
+function expect_stop(wrong, name, r, want)
+  if r.ok then
+    push(wrong, name .. ": did not stop")
+  elseif not contains(r.error, want) then
+    push(wrong, name .. ": stopped with " .. r.class .. ": " .. r.error)
+  end
+end
+
+-- The refusals, each before any program: an upstream and a body under a
+-- fresh scratch folder, so no remotes file is needed.
+function self_test()
+  local wrong = {}
+  local dir = fresh_dir("scratch:", "open_issue")
+  local body = path_under(dir, "body.md")
+  create(body, "What happened, and how to see it.\n")
+  local blank = path_under(dir, "blank.md")
+  create(blank, "  \n\n")
+  local up = issue_upstreams()[1]
+  if not attempt(checked, up, "A title", body).ok then push(wrong, "the first upstream with a title and a body: stopped") end
+  expect_stop(wrong, "a repo with a host", attempt(checked, "evil.example/" .. up, "t", body), "`repo` is OWNER/NAME")
+  expect_stop(wrong, "a repo that is an option", attempt(checked, "--web", "t", body), "one of the program's options")
+  -- Refused by the lists, or, in a nested run that can't read the remotes
+  -- file, by that: either way it stops.
+  expect_stop(wrong, "an upstream's owner's other repo", attempt(checked, split(up, "/")[1] .. "/not-listed-here", "t", body), "")
+  expect_stop(wrong, "an empty title", attempt(checked, up, "  ", body), "`title` is empty")
+  expect_stop(wrong, "no body", attempt(checked, up, "t", ""), "`body` names the body's file")
+  expect_stop(wrong, "a missing body", attempt(checked, up, "t", path_under(dir, "none.md")), "is not there")
+  expect_stop(wrong, "a blank body", attempt(checked, up, "t", blank), "is empty")
+  expect_stop(wrong, "a body outside the root", attempt(checked, up, "t", "/etc/hostname"), "")
+  remove_tree(dir)
+  for w in wrong do print("wrong: " .. w) end
+  if #wrong > 0 then fail(WHO .. " self-test: " .. #wrong .. " wrong") end
+  print(WHO .. " self-test: all cases right")
+end
+
+if SELF_TEST == 1 then
+  self_test()
+else
+  checked(REPO, TITLE, BODY)
+  local argv = {"gh", "issue", "create", "--repo", REPO, "--title", TITLE, "--body-file", real(BODY)}
+  print("checked: " .. REPO .. ", body " .. BODY .. " (" .. count_lines(BODY) .. " lines)")
+  if DRY == 1 then
+    print("dry run, nothing created; it would run, with secrets = {GH_TOKEN = \"" .. TOKEN .. "\"}:")
+    print(shown(argv))
+  else
+    print(opened(argv))
+  end
+end

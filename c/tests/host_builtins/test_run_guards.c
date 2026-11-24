@@ -773,20 +773,85 @@ TEST(a_fenced_secret_goes_to_gh_pr_create_view_and_close_alone) {
                                      "gh pr close 7 --repo showell/t token=<secret GH_TOKEN> path=/usr/bin:/bin\n"
                                      "\n"
                                      "showell\n"
-                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: its command is `gh pr create`, `gh pr view` or `gh pr close`, not gh pr merge\n"
-                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: its command is `gh pr create`, `gh pr view` or `gh pr close`\n"
-                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: its program is `gh`, named bare (the system's own), not curl\n"
-                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: a head's owner is a github.com owner of the remotes file (~/.config/shale/remotes, or SHALE_REMOTES's), not the one in someone:lane\n"
-                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: a value not of its option's shape (`--repo OWNER/NAME`, `--head OWNER:BRANCH`, `--base BRANCH`, `--json a,b`, no other empty): evil.example/showell/t\n"
-                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: an option it does not name: --web\n"
-                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: `gh pr create` names its `--head`, `--title` and `--body-file`, so gh never asks, forks or pushes\n"
-                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: its run takes no `env`, `want`, `unconfined` or `stdout_secret`\n"
-                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: it is the run's only secret\n"
-                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: it goes in `secrets`, never `secret_args`\n"
-                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: its program is `gh`, named bare (the system's own), not fake:gh\n"
-                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view` and `gh pr close` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: its run takes no `env`, `want`, `unconfined` or `stdout_secret`\n"));
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: its command is one of those five, not gh pr merge\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: its command is one of those five\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: its program is `gh`, named bare (the system's own), not curl\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: a head's owner is a github.com owner of the remotes file (~/.config/shale/remotes, or SHALE_REMOTES's), not the one in someone:lane\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: a value not of its option's shape (`--repo OWNER/NAME`, `--head OWNER:BRANCH`, `--base BRANCH`, `--json a,b`, no other empty): evil.example/showell/t\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: an option it does not name: --web\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: `gh pr create` names its `--head`, `--title` and `--body-file`, so gh never asks, forks or pushes\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: its run takes no `env`, `want`, `unconfined` or `stdout_secret`\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: it is the run's only secret\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: it goes in `secrets`, never `secret_args`\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: its program is `gh`, named bare (the system's own), not fake:gh\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: its run takes no `env`, `want`, `unconfined` or `stdout_secret`\n"));
     EXPECT(!guards_holds(buf_view(&x.r.out), "PRTOKEN"));
     EXPECT(!guards_holds(buf_view(&x.r.out), "planted"));
+    ran_free(&x);
+}
+
+// The fenced secret files an issue, `gh issue create`, and reads one back,
+// `gh issue view`, each held to its options, on a repository of a remotes
+// file's owner or one of HOST_FENCE_ISSUE_UPSTREAMS (roc-lang/roc), exactly,
+// as the system's own gh. Refused: `gh issue edit`, `close` and `comment`,
+// another owner's repository, another of roc-lang's, `--web`, `--head`, a
+// word past the options, a create with no body or an empty title, a view
+// with no number or with `--comments`. Every refusal comes before the
+// secret is read, so none ran.
+TEST(a_fenced_secret_files_an_issue_on_a_listed_repository_alone) {
+    static Ran x;
+    guards_ran_with(&x, "k = D/keys secrets\nfake = D/fakebin ro\n", false);
+    guards_zig_fake(&x, "fakebin/gh", "");
+    ran_write(&x, "fakebin/gh", ran_d(&x, "#!/bin/sh\necho \"gh $* token=$GH_TOKEN path=$PATH\"\n"));
+    guards_unconfined_bin(&x);
+    ran_put(&x, "remotes", "git@github.com:showell/\n");
+    FileSystemCPath remotes_cp;
+    const char *remotes_c = NULL;
+    EXPECT_EQ(file_system_cstr(&remotes_cp, os_str_own(ran_at(&x, "remotes")), &remotes_c), FILE_SYSTEM_OK);
+    EXPECT_EQ(setenv("SHALE_REMOTES", remotes_c, 1), 0);
+    ran_put(&x, "keys/github-pr-token", "ghp_PRTOKENABCDEFGHIJKLMNOPQRSTUVWXYZ0123\n");
+    ran_run(&x, S("function c(a, o) return host(\"run\", a, o) end\n"
+                  "function no(a, o) return attempt(c, a, o).error end\n"
+                  "local o = {timeout_ms = 10000, tail = 5, secrets = {GH_TOKEN = \"k:github-pr-token\"}}\n"
+                  "print(c({\"gh\", \"issue\", \"create\", \"--repo\", \"roc-lang/roc\", \"--title\", \"A title\", \"--body-file\", \"b.md\"}, o).out)\n"
+                  "print(c({\"gh\", \"issue\", \"create\", \"--body-file\", \"b.md\", \"--title\", \"t\", \"--repo\", \"showell/t\"}, o).out)\n"
+                  "print(c({\"gh\", \"issue\", \"view\", \"12\", \"--repo\", \"roc-lang/roc\", \"--json\", \"url,state\"}, o).out)\n"
+                  "print(host(\"issue_upstreams\")[1], #host(\"issue_upstreams\"))\n"
+                  "print(no({\"gh\", \"issue\", \"edit\", \"12\", \"--repo\", \"roc-lang/roc\"}, o))\n"
+                  "print(no({\"gh\", \"issue\", \"close\", \"12\", \"--repo\", \"showell/t\"}, o))\n"
+                  "print(no({\"gh\", \"issue\", \"comment\", \"12\", \"--repo\", \"roc-lang/roc\"}, o))\n"
+                  "print(no({\"gh\", \"issue\", \"create\", \"--repo\", \"someone/t\", \"--title\", \"t\", \"--body-file\", \"b.md\"}, o))\n"
+                  "print(no({\"gh\", \"issue\", \"create\", \"--repo\", \"roc-lang/other\", \"--title\", \"t\", \"--body-file\", \"b.md\"}, o))\n"
+                  "print(no({\"gh\", \"issue\", \"create\", \"--repo\", \"roc-lang/roc\", \"--title\", \"t\", \"--body-file\", \"b.md\", \"--web\"}, o))\n"
+                  "print(no({\"gh\", \"issue\", \"create\", \"--repo\", \"roc-lang/roc\", \"--title\", \"t\", \"--body-file\", \"b.md\", \"--head\", \"showell:x\"}, o))\n"
+                  "print(no({\"gh\", \"issue\", \"create\", \"--repo\", \"roc-lang/roc\", \"--title\", \"t\", \"--body-file\", \"b.md\", \"extra\"}, o))\n"
+                  "print(no({\"gh\", \"issue\", \"create\", \"--repo\", \"roc-lang/roc\", \"--title\", \"t\"}, o))\n"
+                  "print(no({\"gh\", \"issue\", \"create\", \"--repo\", \"roc-lang/roc\", \"--title\", \"\", \"--body-file\", \"b.md\"}, o))\n"
+                  "print(no({\"gh\", \"issue\", \"view\", \"--repo\", \"roc-lang/roc\"}, o))\n"
+                  "print(no({\"gh\", \"issue\", \"view\", \"12\", \"--repo\", \"roc-lang/roc\", \"--comments\"}, o))\n"),
+           ran_budgets());
+    EXPECT(x.parsed);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("gh issue create --repo roc-lang/roc --title A title --body-file b.md token=<secret GH_TOKEN> path=/usr/bin:/bin\n"
+                                     "\n"
+                                     "gh issue create --body-file b.md --title t --repo showell/t token=<secret GH_TOKEN> path=/usr/bin:/bin\n"
+                                     "\n"
+                                     "gh issue view 12 --repo roc-lang/roc --json url,state token=<secret GH_TOKEN> path=/usr/bin:/bin\n"
+                                     "\n"
+                                     "roc-lang/roc\t1\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: its command is one of those five, not gh issue edit\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: its command is one of those five, not gh issue close\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: its command is one of those five, not gh issue comment\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: an issue's repository is a github.com remotes-file owner's (~/.config/shale/remotes, or SHALE_REMOTES's) or one of HOST_FENCE_ISSUE_UPSTREAMS, not someone/t\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: an issue's repository is a github.com remotes-file owner's (~/.config/shale/remotes, or SHALE_REMOTES's) or one of HOST_FENCE_ISSUE_UPSTREAMS, not roc-lang/other\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: an option it does not name: --web\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: an option it does not name: --head\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: `gh issue create` takes no word but its options' values, not extra\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: `gh issue create` names its `--repo`, `--title` and `--body-file`, so gh never asks\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: a value not of its option's shape (`--repo OWNER/NAME`, `--head OWNER:BRANCH`, `--base BRANCH`, `--json a,b`, no other empty): \n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: it names one issue by its number\n"
+                                     "`run`: the secret github-pr-token goes to `gh pr create`, `gh pr view`, `gh pr close`, `gh issue create` and `gh issue view` alone, held to their options (c/host/host_run_secrets.c's HOST_SECRET_FENCE_USES), even with a want: an option it does not name: --comments\n"));
+    EXPECT(!guards_holds(buf_view(&x.r.out), "PRTOKEN"));
     ran_free(&x);
 }
 
@@ -1235,4 +1300,5 @@ TEST_PART(run_guards, TEST_CASE(a_program_writes_and_reads_only_where_the_mounts
           TEST_CASE(an_unconfined_fetch_comes_from_the_remotes_file_s_remotes_alone),
           TEST_CASE(an_unconfined_ls_remote_asks_the_remotes_file_s_remotes_for_their_head_alone), TEST_CASE(gh_reads_no_configuration_and_never_says_its_token),
           TEST_CASE(a_fenced_secret_goes_to_gh_pr_create_view_and_close_alone),
+          TEST_CASE(a_fenced_secret_files_an_issue_on_a_listed_repository_alone),
           TEST_CASE(a_program_gets_no_session_socket_and_no_env_sets_one), TEST_CASE(an_unconfined_program_is_the_system_s_never_one_planted_on_path));

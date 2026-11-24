@@ -3,7 +3,7 @@
 -- host_write_gate.c, host_run_secrets.c, host_run.c, jobs.c, host_jobs.c).
 -- c/build.shale runs it, with the `build` mount that `use` below reads; see
 -- that file for the tiers and the blocks.
--- (steps, reads, read bytes and the arena: its plants, 83 with the Landlock lane's,
+-- (steps, reads, read bytes and the arena: its plants, 87 with the Landlock lane's,
 -- the unconfined gate's, secret_args', the push's, the fetch's and ls-remote's, gh's, the fenced secret's, the
 -- scrubber's parts' and the security review's (2026-11-23, past 256 MiB of arena), each copy c/, about 2M steps, 290 reads and 1.7 MB read a copy:
 -- 34 of them stopped at 10,000 reads.)
@@ -21,7 +21,7 @@ use("build:lib.shale")
 -- faults below planted in a copy of c/ (`run_plants`), each caught by its
 -- `aim` tests.
 
-const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 15, ["c/tests/host_builtins/test_run_guards.c"] = 26, ["c/tests/host_builtins/test_run_secret_args.c"] = 2}
+const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 15, ["c/tests/host_builtins/test_run_guards.c"] = 27, ["c/tests/host_builtins/test_run_secret_args.c"] = 2}
 const HOST_BUILTINS_PLANTS = {
   {name = "an unconfined run is any program", file = "host_unconfined.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "an_unconfined_run_is_a_git_push_or_a_deploy_to_the_prod_host_alone",
@@ -199,7 +199,7 @@ const HOST_BUILTINS_PLANTS = {
    old = "    return host_fence_refused_word(r, pos, \"its command is", new = "    return OK;\n    return host_fence_refused_word(r, pos, \"its command is"},
   {name = "the fenced secret goes to any gh command", file = "host_run_secrets.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "a_fenced_secret_goes_to_gh_pr_create_view_and_close_alone",
-   old = "    if (argv.len < 3 || !str_eq(at(argv, 1).s, S(\"pr\"))) return", new = "    if (argv.len < 3) return"},
+   old = "    if (argv.len < 3 || !(str_eq(at(argv, 1).s, S(\"pr\")) || str_eq(at(argv, 1).s, S(\"issue\")))) return", new = "    if (argv.len < 3) return"},
   {name = "a fenced command takes any option", file = "host_run_secrets.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "a_fenced_secret_goes_to_gh_pr_create_view_and_close_alone",
    old = "        if (which == use->values.len) return", new = "        if (which == use->values.len) continue;\n        if (0) return"},
@@ -211,7 +211,19 @@ const HOST_BUILTINS_PLANTS = {
    old = "        if (str_eq(w, S(\"--repo\"))) ok = host_fence_repo(v);", new = ""},
   {name = "a fenced create needs no head", file = "host_run_secrets.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "a_fenced_secret_goes_to_gh_pr_create_view_and_close_alone",
-   old = "(!at(s, 2) || !at(s, 3) || !at(s, 4))", new = "(!at(s, 3) || !at(s, 4))"},
+   old = "HOST_FENCE_CREATE_NEEDS[] = {\"--repo\", \"--head\", \"--title\", \"--body-file\"};", new = "HOST_FENCE_CREATE_NEEDS[] = {\"--repo\", \"--title\", \"--body-file\"};"},
+  {name = "a fenced issue goes to any repository", file = "host_run_secrets.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "a_fenced_secret_files_an_issue_on_a_listed_repository_alone",
+   old = "            if (!listed) return host_fence_refused_word(r, pos, \"an issue's repository", new = "            if (0) return host_fence_refused_word(r, pos, \"an issue's repository"},
+  {name = "a fenced issue goes to any repository of an upstream's owner", file = "host_run_secrets.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "a_fenced_secret_files_an_issue_on_a_listed_repository_alone",
+   old = "    *ok = host_unconfined_named(upstreams, v);", new = "    *ok = str_starts_with(v, S(\"roc-lang/\"));"},
+  {name = "a fenced issue create needs no body", file = "host_run_secrets.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "a_fenced_secret_files_an_issue_on_a_listed_repository_alone",
+   old = "HOST_FENCE_ISSUE_CREATE_NEEDS[] = {\"--repo\", \"--title\", \"--body-file\"};", new = "HOST_FENCE_ISSUE_CREATE_NEEDS[] = {\"--repo\", \"--title\"};"},
+  {name = "the fenced secret goes to any gh issue command", file = "host_run_secrets.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "a_fenced_secret_files_an_issue_on_a_listed_repository_alone",
+   old = "&& str_eq(at(argv, 2).s, host_fence_cstr(use->command))) return host_fence_command", new = "&& (str_eq(at(argv, 1).s, S(\"issue\")) || str_eq(at(argv, 2).s, host_fence_cstr(use->command)))) return host_fence_command"},
   {name = "a fenced run takes an env", file = "host_run_secrets.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "a_fenced_secret_goes_to_gh_pr_create_view_and_close_alone",
    old = "    if (env->names.len > 0 || want ||", new = "    if (want ||"},
