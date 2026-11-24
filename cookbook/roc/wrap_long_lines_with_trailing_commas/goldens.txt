@@ -1,7 +1,7 @@
 === copy=roc (exit 0)
-roc: pass 1: 1 trailing commas added or taken out
+roc: pass 1: 2 trailing commas added or taken out
 roc: pass 2: 0 trailing commas added or taken out
-roc: 1 files rewritten
+roc: 2 files rewritten
 still over 100: 1 code lines with nothing to stack, 1 wide only for their strings, 2 of numeric data, 1 comment lines
 roc/function_type.roc:4 (103): nothing to stack: run_all_the_steps : (List(U64), Str, U64 -> List(U64)), (List(U64), Str, U64 -> List(U64)) -> List(U64)
 still over 100: 1 code lines with nothing to stack, 1 wide only for their strings, 2 of numeric data, 1 comment lines
@@ -14,6 +14,22 @@ three = |a, b, c| a + b + c
 
 apply : (U8, U8, U8 -> U8) -> U8
 apply = |_| 0
+--- roc/annotation_return.roc
+module [Checks]
+
+# A line too wide whose one group to stack is its return type's: `roc fmt`
+# then puts each argument on a line of its own. Joined, the group would put
+# the annotation back on the line too wide, so it stays stacked (the rewrite
+# once took its comma out and gave it back, pass after pass).
+Checks := [].{
+	constructor_checked : Ast.FunctionDefinition,
+	Parser.ClassCode,
+	Ast.Where -> Try(
+		{},
+		Lexer.Fault,
+	)
+	constructor_checked = |_definition, _made, _site| Ok({})
+}
 --- roc/at_the_cap.roc
 module [deep]
 
@@ -132,7 +148,7 @@ joined = |first, second| Str.concat(
 	first.concat(second),
 )
 === copy=roc tokens=6 (exit 0)
-roc: pass 1: 11 trailing commas added or taken out
+roc: pass 1: 12 trailing commas added or taken out
 roc: pass 2: 2 trailing commas added or taken out
 roc: pass 3: 1 trailing commas added or taken out
 roc: pass 4: 1 trailing commas added or taken out
@@ -140,7 +156,7 @@ roc: pass 5: 1 trailing commas added or taken out
 roc: pass 6: 1 trailing commas added or taken out
 roc: pass 7: 1 trailing commas added or taken out
 roc: pass 8: 0 trailing commas added or taken out
-roc: 7 files rewritten
+roc: 8 files rewritten
 still over 100: 1 code lines with nothing to stack, 1 wide only for their strings, 2 of numeric data, 1 comment lines
 roc/function_type.roc:4 (103): nothing to stack: run_all_the_steps : (List(U64), Str, U64 -> List(U64)), (List(U64), Str, U64 -> List(U64)) -> List(U64)
 still over 100: 1 code lines with nothing to stack, 1 wide only for their strings, 2 of numeric data, 1 comment lines
@@ -153,6 +169,22 @@ three = |a, b, c| a + b + c
 
 apply : (U8, U8, U8 -> U8) -> U8
 apply = |_| 0
+--- roc/annotation_return.roc
+module [Checks]
+
+# A line too wide whose one group to stack is its return type's: `roc fmt`
+# then puts each argument on a line of its own. Joined, the group would put
+# the annotation back on the line too wide, so it stays stacked (the rewrite
+# once took its comma out and gave it back, pass after pass).
+Checks := [].{
+	constructor_checked : Ast.FunctionDefinition,
+	Parser.ClassCode,
+	Ast.Where -> Try(
+		{},
+		Lexer.Fault,
+	)
+	constructor_checked = |_definition, _made, _site| Ok({})
+}
 --- roc/at_the_cap.roc
 module [deep]
 
@@ -335,10 +367,11 @@ roc: pass 3: 1 trailing commas added or taken out
 roc: pass 4: 1 trailing commas added or taken out
 roc: pass 5: 0 trailing commas added or taken out
 roc: 3 files rewritten
-still over 60: 2 code lines with nothing to stack, 2 wide only for their strings, 3 of numeric data, 11 comment lines
+still over 60: 3 code lines with nothing to stack, 2 wide only for their strings, 3 of numeric data, 15 comment lines
+roc/annotation_return.roc:8 (101): nothing to stack: constructor_checked : Ast.FunctionDefinition, Parser.ClassCode, Ast.Where -> Try({}, Lexer.Fault)
 roc/function_type.roc:4 (103): nothing to stack: run_all_the_steps : (List(U64), Str, U64 -> List(U64)), (List(U64), Str, U64 -> List(U64)) -> List(U64)
 roc/platform_targets.roc:10 (76): nothing to stack: inputs: ["crt1.o", "host.o", app, "libc.a", "libm.a", "libz.a"],
-still over 60: 2 code lines with nothing to stack, 2 wide only for their strings, 3 of numeric data, 11 comment lines
+still over 60: 3 code lines with nothing to stack, 2 wide only for their strings, 3 of numeric data, 15 comment lines
 --- roc/annotation.roc
 module [apply, three]
 
@@ -348,6 +381,17 @@ three = |a, b, c| a + b + c
 
 apply : (U8, U8, U8 -> U8) -> U8
 apply = |_| 0
+--- roc/annotation_return.roc
+module [Checks]
+
+# A line too wide whose one group to stack is its return type's: `roc fmt`
+# then puts each argument on a line of its own. Joined, the group would put
+# the annotation back on the line too wide, so it stays stacked (the rewrite
+# once took its comma out and gave it back, pass after pass).
+Checks := [].{
+	constructor_checked : Ast.FunctionDefinition, Parser.ClassCode, Ast.Where -> Try({}, Lexer.Fault)
+	constructor_checked = |_definition, _made, _site| Ok({})
+}
 --- roc/at_the_cap.roc
 module [deep]
 
@@ -486,7 +530,7 @@ joined = |first, second| Str.concat(
 	first.concat(second),
 )
 === copy=roc tokens=6 write=0 (exit 0)
-roc: pass 1: 11 trailing commas added or taken out
+roc: pass 1: 12 trailing commas added or taken out
 roc: pass 2: 2 trailing commas added or taken out
 roc: pass 3: 1 trailing commas added or taken out
 roc: pass 4: 1 trailing commas added or taken out
@@ -506,6 +550,17 @@ three = |a, b, c| a + b + c
 
 apply : (U8, U8, U8 -> U8) -> U8
 apply = |_| 0
+--- roc/annotation_return.roc
+module [Checks]
+
+# A line too wide whose one group to stack is its return type's: `roc fmt`
+# then puts each argument on a line of its own. Joined, the group would put
+# the annotation back on the line too wide, so it stays stacked (the rewrite
+# once took its comma out and gave it back, pass after pass).
+Checks := [].{
+	constructor_checked : Ast.FunctionDefinition, Parser.ClassCode, Ast.Where -> Try({}, Lexer.Fault)
+	constructor_checked = |_definition, _made, _site| Ok({})
+}
 --- roc/at_the_cap.roc
 module [deep]
 
@@ -910,7 +965,7 @@ wide = h(
 	"and another",
 )
 === copy=roc,edges dir=roc,edges tokens=6 (exit 0)
-roc: pass 1: 11 trailing commas added or taken out
+roc: pass 1: 12 trailing commas added or taken out
 roc: pass 2: 2 trailing commas added or taken out
 roc: pass 3: 1 trailing commas added or taken out
 roc: pass 4: 1 trailing commas added or taken out
@@ -918,7 +973,7 @@ roc: pass 5: 1 trailing commas added or taken out
 roc: pass 6: 1 trailing commas added or taken out
 roc: pass 7: 1 trailing commas added or taken out
 roc: pass 8: 0 trailing commas added or taken out
-roc: 7 files rewritten
+roc: 8 files rewritten
 edges: pass 1: 4 trailing commas added or taken out
 edges: pass 2: 0 trailing commas added or taken out
 edges: 3 files rewritten
@@ -995,6 +1050,22 @@ three = |a, b, c| a + b + c
 
 apply : (U8, U8, U8 -> U8) -> U8
 apply = |_| 0
+--- roc/annotation_return.roc
+module [Checks]
+
+# A line too wide whose one group to stack is its return type's: `roc fmt`
+# then puts each argument on a line of its own. Joined, the group would put
+# the annotation back on the line too wide, so it stays stacked (the rewrite
+# once took its comma out and gave it back, pass after pass).
+Checks := [].{
+	constructor_checked : Ast.FunctionDefinition,
+	Parser.ClassCode,
+	Ast.Where -> Try(
+		{},
+		Lexer.Fault,
+	)
+	constructor_checked = |_definition, _made, _site| Ok({})
+}
 --- roc/at_the_cap.roc
 module [deep]
 
@@ -1186,7 +1257,7 @@ module [deep]
 # Eight groups, one a pass, so the eighth pass still changes something.
 deep = f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, f(a, b, c, d, e, g, h, i))))))))
 === copy=roc,too_deep dir=roc,too_deep tokens=6 (exit 1)
-roc: pass 1: 11 trailing commas added or taken out
+roc: pass 1: 12 trailing commas added or taken out
 roc: pass 2: 2 trailing commas added or taken out
 roc: pass 3: 1 trailing commas added or taken out
 roc: pass 4: 1 trailing commas added or taken out
@@ -1194,7 +1265,7 @@ roc: pass 5: 1 trailing commas added or taken out
 roc: pass 6: 1 trailing commas added or taken out
 roc: pass 7: 1 trailing commas added or taken out
 roc: pass 8: 0 trailing commas added or taken out
-roc: 7 files rewritten
+roc: 8 files rewritten
 too_deep: pass 1: 1 trailing commas added or taken out
 too_deep: pass 2: 1 trailing commas added or taken out
 too_deep: pass 3: 1 trailing commas added or taken out
@@ -1213,6 +1284,22 @@ three = |a, b, c| a + b + c
 
 apply : (U8, U8, U8 -> U8) -> U8
 apply = |_| 0
+--- roc/annotation_return.roc
+module [Checks]
+
+# A line too wide whose one group to stack is its return type's: `roc fmt`
+# then puts each argument on a line of its own. Joined, the group would put
+# the annotation back on the line too wide, so it stays stacked (the rewrite
+# once took its comma out and gave it back, pass after pass).
+Checks := [].{
+	constructor_checked : Ast.FunctionDefinition,
+	Parser.ClassCode,
+	Ast.Where -> Try(
+		{},
+		Lexer.Fault,
+	)
+	constructor_checked = |_definition, _made, _site| Ok({})
+}
 --- roc/at_the_cap.roc
 module [deep]
 
@@ -1404,6 +1491,17 @@ three = |a, b, c| a + b + c
 
 apply : (U8, U8, U8 -> U8) -> U8
 apply = |_| 0
+--- roc/annotation_return.roc
+module [Checks]
+
+# A line too wide whose one group to stack is its return type's: `roc fmt`
+# then puts each argument on a line of its own. Joined, the group would put
+# the annotation back on the line too wide, so it stays stacked (the rewrite
+# once took its comma out and gave it back, pass after pass).
+Checks := [].{
+	constructor_checked : Ast.FunctionDefinition, Parser.ClassCode, Ast.Where -> Try({}, Lexer.Fault)
+	constructor_checked = |_definition, _made, _site| Ok({})
+}
 --- roc/at_the_cap.roc
 module [deep]
 
@@ -1529,6 +1627,17 @@ three = |a, b, c| a + b + c
 
 apply : (U8, U8, U8 -> U8) -> U8
 apply = |_| 0
+--- roc/annotation_return.roc
+module [Checks]
+
+# A line too wide whose one group to stack is its return type's: `roc fmt`
+# then puts each argument on a line of its own. Joined, the group would put
+# the annotation back on the line too wide, so it stays stacked (the rewrite
+# once took its comma out and gave it back, pass after pass).
+Checks := [].{
+	constructor_checked : Ast.FunctionDefinition, Parser.ClassCode, Ast.Where -> Try({}, Lexer.Fault)
+	constructor_checked = |_definition, _made, _site| Ok({})
+}
 --- roc/at_the_cap.roc
 module [deep]
 
@@ -1654,6 +1763,17 @@ three = |a, b, c| a + b + c
 
 apply : (U8, U8, U8 -> U8) -> U8
 apply = |_| 0
+--- roc/annotation_return.roc
+module [Checks]
+
+# A line too wide whose one group to stack is its return type's: `roc fmt`
+# then puts each argument on a line of its own. Joined, the group would put
+# the annotation back on the line too wide, so it stays stacked (the rewrite
+# once took its comma out and gave it back, pass after pass).
+Checks := [].{
+	constructor_checked : Ast.FunctionDefinition, Parser.ClassCode, Ast.Where -> Try({}, Lexer.Fault)
+	constructor_checked = |_definition, _made, _site| Ok({})
+}
 --- roc/at_the_cap.roc
 module [deep]
 
@@ -1779,6 +1899,17 @@ three = |a, b, c| a + b + c
 
 apply : (U8, U8, U8 -> U8) -> U8
 apply = |_| 0
+--- roc/annotation_return.roc
+module [Checks]
+
+# A line too wide whose one group to stack is its return type's: `roc fmt`
+# then puts each argument on a line of its own. Joined, the group would put
+# the annotation back on the line too wide, so it stays stacked (the rewrite
+# once took its comma out and gave it back, pass after pass).
+Checks := [].{
+	constructor_checked : Ast.FunctionDefinition, Parser.ClassCode, Ast.Where -> Try({}, Lexer.Fault)
+	constructor_checked = |_definition, _made, _site| Ok({})
+}
 --- roc/at_the_cap.roc
 module [deep]
 
@@ -1894,7 +2025,7 @@ describe = |bytes|
 joined : Str, Str -> Str
 joined = |first, second| Str.concat("a fairly long string literal that takes room on this line", first.concat(second))
 === self_test=1 (exit 0)
-scratch:wrap_long_lines_with_trailing_commas: pass 1: 11 trailing commas added or taken out
+scratch:wrap_long_lines_with_trailing_commas: pass 1: 12 trailing commas added or taken out
 scratch:wrap_long_lines_with_trailing_commas: pass 2: 2 trailing commas added or taken out
 scratch:wrap_long_lines_with_trailing_commas: pass 3: 1 trailing commas added or taken out
 scratch:wrap_long_lines_with_trailing_commas: pass 4: 1 trailing commas added or taken out
@@ -1902,8 +2033,9 @@ scratch:wrap_long_lines_with_trailing_commas: pass 5: 1 trailing commas added or
 scratch:wrap_long_lines_with_trailing_commas: pass 6: 1 trailing commas added or taken out
 scratch:wrap_long_lines_with_trailing_commas: pass 7: 1 trailing commas added or taken out
 scratch:wrap_long_lines_with_trailing_commas: pass 8: 0 trailing commas added or taken out
-scratch:wrap_long_lines_with_trailing_commas: 7 files rewritten
+scratch:wrap_long_lines_with_trailing_commas: 8 files rewritten
 ok   annotation.roc: comes out as its .want
+ok   annotation_return.roc: comes out as its .want
 ok   at_the_cap.roc: comes out as its .want
 ok   both_ways.roc: comes out as its .want
 ok   five.roc: comes out as its .want

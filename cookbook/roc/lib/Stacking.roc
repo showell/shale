@@ -312,17 +312,44 @@ is_inside = |inner, outer|
 	inner.line > outer.line or (inner.line == outer.line and inner.open > outer.open)
 
 ## The text before a group once it sits on one line. A stacked group among an
-## annotation's arguments moves its line down from the annotation's, and `roc
-## fmt` brings it back up with the group on one line.
+## annotation's arguments moves its line down from the annotation's, and the
+## arguments between them each go on a line of their own; `roc fmt` brings
+## them all back up with the group on one line.
 text_up_to_group : List(Str), Groups.Group -> List(U8)
 text_up_to_group = |source_lines, group| {
 	up_to = Bytes.span(Bytes.line_of(source_lines, group.line), 1, group.open)
-	above = Bytes.line_of(source_lines, group.line - 1)
-	if group.line > 1 and is_annotation_line(Bytes.trimmed(above)) {
-		above.append(' ').concat(Bytes.trimmed(up_to))
-	} else {
-		up_to
+	match annotation_above(source_lines, group.line) {
+		Ok(start) => {
+			var $joined = Bytes.line_of(source_lines, start)
+			var $i = start + 1
+			while $i < group.line {
+				$joined = $joined.append(' ').concat(Bytes.trimmed(Bytes.line_of(source_lines, $i)))
+				$i = $i + 1
+			}
+			$joined.append(' ').concat(Bytes.trimmed(up_to))
+		}
+		Err(_) => up_to
 	}
+}
+
+## The line of the annotation whose arguments a line is among: the nearest
+## line above it that starts a function's annotation and ends in a comma
+## (is_annotation_line), every line between ending in a comma too, as the
+## annotation's arguments, one a line, do once `roc fmt` has stacked them.
+annotation_above : List(Str), U64 -> Try(U64, [NoAnnotation])
+annotation_above = |source_lines, line| {
+	var $i = line
+	while $i > 1 {
+		$i = $i - 1
+		above = Bytes.trimmed(Bytes.line_of(source_lines, $i))
+		if is_annotation_line(above) {
+			return Ok($i)
+		}
+		if above.last() != Ok(',') {
+			return Err(NoAnnotation)
+		}
+	}
+	Err(NoAnnotation)
 }
 
 ## `joined`, the line a group would be on, with the rest of its annotation
@@ -334,9 +361,10 @@ with_annotation_rest : List(Str), { group : Groups.Group, joined : List(U8) } ->
 with_annotation_rest = |source_lines, at| {
 	group = at.group
 	opens = annotation_opens(Bytes.trimmed(Bytes.line_of(source_lines, group.line)))
-	follows = group.line > 1 and is_annotation_line(
-		Bytes.trimmed(Bytes.line_of(source_lines, group.line - 1)),
-	)
+	follows = match annotation_above(source_lines, group.line) {
+		Ok(_) => Bool.True
+		Err(_) => Bool.False
+	}
 	if !(opens) and !(follows) {
 		return at.joined
 	}
