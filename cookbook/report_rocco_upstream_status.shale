@@ -1,0 +1,290 @@
+-- This recipe says what of a Rocco work branch has gone upstream to
+-- Braeden's Rocco (github.com/Pixelsprout/rocco-engine), so that nothing is
+-- sent twice by accident. It fetches the checkout's `origin` (upstream) and
+-- Steve's fork (github.com/showell/rocco-engine, read over https, so no key
+-- is needed), then gives each commit of the work branch that origin/main
+-- doesn't hold one of three states:
+--
+--   upstream             origin/main has an equal patch;
+--   pending in <branch>  a fork branch `upstream/<topic>` holds it (the same
+--                        commit or an equal patch), and origin/main doesn't;
+--   never sent           neither.
+--
+-- Hashes don't say this: upstream may merge by a merge commit or a squash,
+-- and our commits are cherry-picked onto new bases, so a commit is matched
+-- by its patch (`git cherry`, which compares `git patch-id`s). A commit
+-- reworked on its way into a PR (rebased past a conflict, its subject
+-- recapitalized) has a new patch, so a commit no patch matches is matched
+-- next by its subject, compared in lower case: it reads `upstream (by
+-- subject)` or `pending in <branch> (by subject)`. That match is weaker,
+-- and the state says so; it errs toward "sent", which is the safe side.
+-- Two commits squashed into one match only by the one whose subject the
+-- squash kept.
+--
+--   cd ~/showell_repos && shale cookbook:report_rocco_upstream_status.shale dir=repos:rocco-engine
+--   cd ~/showell_repos && shale cookbook:report_rocco_upstream_status.shale dir=repos:rocco-engine work=walk/outdoor-particles
+--
+-- `dir` is the checkout, through a mount; `work` is the work branch (default
+-- walk/outdoor-particles, the one Safari Walk builds on), read as the fork
+-- has it, or as a revision of the checkout when the fork has no such branch.
+-- It prints a line a commit (state, short hash, subject), oldest first, a
+-- count a state, and each fork `upstream/*` branch whose patches are all
+-- upstream now, as safe to retire, with the calls that would retire it.
+--
+-- **Before bundling a new PR**, check the commits it would carry:
+--
+--   cd ~/showell_repos && shale cookbook:report_rocco_upstream_status.shale dir=repos:rocco-engine check=1 commits=a431d1db,400a208f
+--
+-- It fails naming each commit that is already upstream or pending, by
+-- patch or by subject, and passes when all of them were never sent.
+--
+-- It is read-only on GitHub and in the work tree: it fetches, which moves
+-- only the checkout's `origin/*` and `fork/*` remote-tracking refs, and it
+-- pushes, deletes and creates nothing, and never runs gh.
+--
+-- budget: programs=400
+
+const ORIGIN = "https://github.com/Pixelsprout/rocco-engine.git"
+const FORK_HTTPS = "https://github.com/showell/rocco-engine.git"
+const FORK_SSH = "git@github.com:showell/rocco-engine.git"
+const DIR = arg("dir", "")
+const WORK = arg("work", "walk/outdoor-particles")
+const CHECK = arg("check", 0)
+const COMMITS = arg("commits", "")
+const WHO = "report_rocco_upstream_status"
+
+if DIR == "" then fail(WHO .. ": name the checkout: dir=<mount path>, as dir=repos:rocco-engine") end
+if not re_match(WORK, "^[A-Za-z0-9][A-Za-z0-9._/-]*$") or find(WORK, "..") ~= nil then fail(WHO .. ": `" .. WORK .. "` is not a plain branch name") end
+if CHECK == 1 and COMMITS == "" then fail(WHO .. ": check=1 checks commits=<hash,hash,...>; none were named") end
+if CHECK ~= 1 and COMMITS ~= "" then fail(WHO .. ": commits= is for check=1") end
+
+const CHECKOUT = real(DIR)
+
+-- git in the checkout, with no prompt and no credential helper, so a fetch
+-- that can't read a repository fails rather than asking for a password.
+function git(args, opts?)
+  local argv = {"git", "-C", CHECKOUT, "-c", "credential.helper=", "-c", "color.ui=never"}
+  for a in args do push(argv, a) end
+  local o = {timeout_ms = 60000, whole = 4000000, env = {GIT_TERMINAL_PROMPT = "0"}, want = "nonzero: the caller says why"}
+  local r = run(argv, o)
+  if r.code ~= 0 and not get(opts or {}, "may_fail", false) then
+    fail(WHO .. ": `git " .. join(args, " ") .. "` exited " .. r.code .. ": " .. trim(r.out))
+  end
+  return r
+end
+
+function ok(args)
+  return git(args, {may_fail = true}).code == 0
+end
+
+-- The checkout is the Rocco one: `origin` is Braeden's, `fork` is Steve's.
+function check_remotes()
+  local o = git({"remote", "get-url", "origin"}, {may_fail = true})
+  if o.code ~= 0 or trim(o.out) ~= ORIGIN then fail(WHO .. ": " .. DIR .. "'s `origin` is not " .. ORIGIN .. ": " .. trim(o.out)) end
+  local f = git({"remote", "get-url", "fork"}, {may_fail = true})
+  if f.code ~= 0 then fail(WHO .. ": " .. DIR .. " has no `fork` remote") end
+  local u = trim(f.out)
+  if u ~= FORK_SSH and u ~= FORK_HTTPS then fail(WHO .. ": " .. DIR .. "'s `fork` remote is " .. u .. ", not " .. FORK_SSH) end
+end
+
+-- Both remotes over https: public repositories read with no token. The
+-- fork's refs land where `git fetch fork` would put them, pruned, so a
+-- branch deleted on the fork drops out here too.
+function fetch()
+  git({"fetch", "--quiet", "--prune", "origin"})
+  git({"fetch", "--quiet", "--prune", FORK_HTTPS, "+refs/heads/*:refs/remotes/fork/*"})
+end
+
+function verify(rev)
+  local r = git({"rev-parse", "-q", "--verify", rev .. "^{commit}"}, {may_fail = true})
+  if r.code ~= 0 then return nil end
+  return trim(r.out)
+end
+
+-- The fork's `upstream/*` branches, as `fork/upstream/<topic>`.
+function upstream_branches()
+  local out = {}
+  for l in lines(git({"for-each-ref", "--format=%(refname:short)", "refs/remotes/fork/upstream/"}).out) do
+    if trim(l) ~= "" then push(out, trim(l)) end
+  end
+  return out
+end
+
+-- `git cherry -v base head [limit]` as a list of {mark, hash, subject}:
+-- head's commits that base can't reach, `-` when base has an equal patch.
+function cherry(base, head, limit?)
+  local args = {"cherry", "-v", base, head}
+  if limit ~= nil then push(args, limit) end
+  local out = {}
+  for l in lines(git(args).out) do
+    local m = re_find(l, "^([-+]) ([0-9a-f]{40}) ?(.*)$")
+    if m ~= nil then push(out, {mark = m.groups[1], hash = m.groups[2], subject = m.groups[3]}) end
+  end
+  return out
+end
+
+function short(hash)
+  return sub(hash, 1, 8)
+end
+
+function topic(b)
+  return sub(b, #"fork/" + 1)
+end
+
+-- A subject as the subject match compares it.
+function plain(subject)
+  return lower(trim(subject))
+end
+
+-- The subjects of the commits in `range`, as a set of plain subjects.
+function subjects_in(range)
+  local out = {}
+  for l in lines(git({"log", "--format=%s", range}).out) do
+    if trim(l) ~= "" then out[plain(l)] = true end
+  end
+  return out
+end
+
+-- For each `upstream/*` branch's commits that origin/main has no patch of:
+-- plain subject -> list of topics.
+function pending_subjects(branches)
+  local by = {}
+  for b in branches do
+    for c in cherry("origin/main", b) do
+      if c.mark == "+" then push_at(by, plain(c.subject), topic(b)) end
+    end
+  end
+  return by
+end
+
+-- Where each of `commits` (full hashes, none on origin/main by hash or
+-- patch) is pending: the map hash -> list of `upstream/<topic>`. A commit
+-- is pending in a branch that reaches it, or that holds an equal patch.
+function pending_in(commits, branches, head, limit)
+  local where = {}
+  for b in branches do
+    local listed = {}
+    for c in cherry(b, head, limit) do listed[c.hash] = c.mark end
+    for h in commits do
+      local mark = get(listed, h, "reached")
+      if mark ~= "+" then push_at(where, h, topic(b)) end
+    end
+  end
+  return where
+end
+
+function say(state, hash, subject)
+  print(state .. "  " .. short(hash) .. "  " .. subject)
+end
+
+-- A commit origin/main has no patch of: pending by patch, else upstream or
+-- pending by subject, else never sent. `up_subjects` is origin/main's own
+-- subjects past the commit's base, `by_subject` pending_subjects'.
+function state_of(hash, subject, where, up_subjects, by_subject)
+  local in_ = get(where, hash, nil)
+  if in_ ~= nil then return "pending in " .. join(in_, ", ") end
+  if get(up_subjects, plain(subject), false) then return "upstream (by subject)" end
+  local named = get(by_subject, plain(subject), nil)
+  if named ~= nil then return "pending in " .. join(named, ", ") .. " (by subject)" end
+  return "never sent"
+end
+
+function kind_of(state)
+  if starts_with(state, "upstream") then return "upstream" end
+  if starts_with(state, "pending") then return "pending" end
+  return state
+end
+
+function report()
+  local head = verify("fork/" .. WORK)
+  local named = "fork/" .. WORK
+  if head == nil then
+    head = verify(WORK)
+    named = WORK
+  end
+  if head == nil then fail(WHO .. ": neither the fork nor " .. DIR .. " has a branch or revision " .. WORK) end
+  local branches = upstream_branches()
+  local commits = cherry("origin/main", head)
+  local sent = {}
+  for c in commits do
+    if c.mark == "+" then push(sent, c.hash) end
+  end
+  local where = pending_in(sent, branches, head, "origin/main")
+  local up_subjects = subjects_in(head .. "..origin/main")
+  local by_subject = pending_subjects(branches)
+  print(WHO .. ": " .. named .. " at " .. short(head) .. ", " .. #commits .. " commits not on origin/main at " .. short(verify("origin/main")))
+  local counts = {}
+  local weak = 0
+  for c in commits do
+    local state = "upstream"
+    if c.mark == "+" then state = state_of(c.hash, c.subject, where, up_subjects, by_subject) end
+    say(state, c.hash, c.subject)
+    incr(counts, kind_of(state))
+    if ends_with(state, "(by subject)") then weak = weak + 1 end
+  end
+  print("")
+  print("upstream " .. get(counts, "upstream", 0) .. ", pending " .. get(counts, "pending", 0) .. ", never sent " .. get(counts, "never sent", 0) .. "; " .. weak .. " matched by subject alone")
+  local retire = {}
+  for b in branches do
+    local left = 0
+    for c in cherry("origin/main", b) do
+      if c.mark == "+" then left = left + 1 end
+    end
+    if left == 0 then push(retire, topic(b)) end
+  end
+  if #retire == 0 then
+    print("no fork upstream/* branch is wholly upstream yet")
+  else
+    print("safe to retire, every patch upstream (nothing deleted; on Steve's yes, in a heredoc from ~/showell_repos):")
+    for t in retire do
+      local line = "  " .. t .. ": git_push(\"" .. DIR .. "\", {remote = \"fork\", delete = \"" .. t .. "\"})"
+      if verify("refs/heads/" .. t) ~= nil then line = line .. "; git_branch_delete(\"" .. DIR .. "\", \"" .. t .. "\", {force = true})" end
+      print(line)
+    end
+  end
+end
+
+-- One commit's state, wherever it lives: upstream when origin/main reaches
+-- it or has an equal patch, pending when an `upstream/*` branch does.
+function check_one(given, branches, by_subject)
+  if not re_match(given, "^[0-9a-f]{4,40}$") then fail(WHO .. ": `" .. given .. "` is not a commit hash") end
+  local hash = verify(given)
+  if hash == nil then fail(WHO .. ": " .. DIR .. " has no commit " .. given) end
+  local subject = trim(git({"log", "-1", "--format=%s", hash}).out)
+  local has_parent = verify(hash .. "^") ~= nil
+  local up = ok({"merge-base", "--is-ancestor", hash, "origin/main"})
+  if not up and has_parent then
+    local c = cherry("origin/main", hash, hash .. "^")
+    up = #c == 1 and c[1].mark == "-"
+  end
+  if up then return {state = "upstream", hash = hash, subject = subject} end
+  local where = {}
+  if has_parent then
+    where = pending_in({hash}, branches, hash, hash .. "^")
+  else
+    for b in branches do
+      if ok({"merge-base", "--is-ancestor", hash, b}) then push_at(where, hash, topic(b)) end
+    end
+  end
+  local up_subjects = subjects_in(hash .. "..origin/main")
+  return {state = state_of(hash, subject, where, up_subjects, by_subject), hash = hash, subject = subject}
+end
+
+function check()
+  local branches = upstream_branches()
+  local by_subject = pending_subjects(branches)
+  local refused = {}
+  local n = 0
+  for given in split(COMMITS, ",") do
+    local r = check_one(trim(given), branches, by_subject)
+    say(r.state, r.hash, r.subject)
+    n = n + 1
+    if r.state ~= "never sent" then push(refused, short(r.hash) .. " (" .. r.state .. ")") end
+  end
+  if #refused > 0 then fail(WHO .. ": already sent, leave out of a new PR: " .. join(refused, "; ")) end
+  print(WHO .. ": all " .. n .. " never sent; clear to bundle")
+end
+
+check_remotes()
+fetch()
+if CHECK == 1 then check() else report() end

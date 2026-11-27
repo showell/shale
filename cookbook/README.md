@@ -40,6 +40,14 @@ checkouts, and `<lanes>` the one that holds your lanes.
   `master`, never forces and never deletes. Steve allows this one command
   without asking.
   `cd <repos> && shale cookbook:push_rocco_fork.shale dir=<mount path> branch=<name>`
+- `report_rocco_upstream_status.shale`: for "what of our Rocco work is
+  upstream already?". It fetches Braeden's Rocco and our fork over https and
+  gives each commit of a work branch one state, by patch (then by subject):
+  upstream, pending in a fork `upstream/<topic>` branch, or never sent; and
+  it names each `upstream/*` branch that is wholly upstream, safe to retire.
+  `check=1 commits=<hash,...>` fails on any commit already upstream or
+  pending: run it before bundling a new PR. Read-only, no gh.
+  `cd <repos> && shale cookbook:report_rocco_upstream_status.shale dir=repos:rocco-engine` (`work=` the branch, walk/outdoor-particles unset)
 - `open_pull_request.shale`: for "open a PR from a fork". It opens a pull
   request on any GitHub repository from a branch of one of our forks, with
   the fenced token `keys:github-pr-token`, which `run` hands only to `gh pr
