@@ -90,7 +90,7 @@
 -- left whole. The child run is given its root as `SHALE_ROOT`, so the self-test
 -- passes under a parent run that sets its own.
 --
--- budget: steps=2000000000 reads=1000000 programs=2000
+-- budget: steps=2000000000 reads=1000000 programs=2000 arena_bytes=1000000000
 
 use("./local_main_branch.shale")
 use("./remote_tags.shale")
