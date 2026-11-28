@@ -4,6 +4,7 @@
 -- `retire_checkout.shale` says CLEAR first.
 --
 --   cd ~/build/lanes && shale cookbook:remove_lane.shale dir=apps-list
+--   cd ~/build/lanes && shale cookbook:remove_lane.shale dirs=apps-list,x86-mod
 --   shale cookbook:remove_lane.shale self_test=1
 --
 -- The rule: a lane is removed only after `retire_checkout` clears it. A bare
@@ -89,12 +90,13 @@
 -- left whole. The child run is given its root as `SHALE_ROOT`, so the self-test
 -- passes under a parent run that sets its own.
 --
--- budget: steps=200000000 reads=100000 programs=400
+-- budget: steps=2000000000 reads=1000000 programs=2000
 
 use("./local_main_branch.shale")
 use("./remote_tags.shale")
 
 const DIR = arg("dir", "")
+const DIRS = arg("dirs", "")
 const SELF_TEST = arg("self_test", 0)
 
 function git(dir_os, args)
@@ -553,8 +555,35 @@ function self_test()
   return nil
 end
 
+-- Several lanes in one launch (`dirs=a,b,c`): each is removed as `dir=`
+-- removes it, in turn, and one refused stops none of the others. The
+-- outcome is each lane's line, then a count; the run fails when any was
+-- refused, naming them.
+function remove_lanes(names)
+  local refused = {}
+  for name in names do
+    local r = attempt(remove_lane, {root = ".", dir = name, env = {}})
+    if r.ok then
+      print(r.value)
+    else
+      push(refused, name)
+      print("refused: " .. name .. ": " .. r.error)
+    end
+  end
+  print("remove_lane: " .. (#names - #refused) .. " of " .. #names .. " removed")
+  if #refused > 0 then fail("remove_lane: refused " .. #refused .. ": " .. join(refused, ", ")) end
+  return nil
+end
+
 if SELF_TEST == 1 then
   self_test()
+elseif DIRS ~= "" then
+  if DIR ~= "" then fail("remove_lane: give `dir=` or `dirs=`, not both") end
+  local names = {}
+  for n in split(DIRS, ",") do
+    if trim(n) ~= "" then push(names, trim(n)) end
+  end
+  remove_lanes(names)
 else
   print(remove_lane({root = ".", dir = DIR, env = {}}))
 end
