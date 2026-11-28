@@ -150,8 +150,10 @@ A door launched at the top level is the one that reads its secret: a nested
 - `merge_conflicts.shale` (library): parses the markers git leaves in a
   conflicted file, so a resolution is a few lines; `resolve_held(path)` resolves
   held counts two branches both moved (a line ending `-- held: additive`) as
-  ours + theirs − base, printing each sum, and refuses `-- held: measured`
-  and unmarked ones. `use("cookbook:merge_conflicts.shale")`
+  ours + theirs − base, printing each sum; a `-- held: measured` line it
+  leaves to be measured (a placeholder value, marked `(to be measured)`, so
+  the gate fails and prints the real one), and it refuses unmarked lines and
+  a file still holding that marker. `use("cookbook:merge_conflicts.shale")`
 - `prune_merged_branches.shale`: finds the work branches merged into the
   default branch, and with `delete=1` deletes them. `shale cookbook:prune_merged_branches.shale`
 - `read_wants.shale`: reads back the log of shell escapes past the gate, with

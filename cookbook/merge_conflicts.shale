@@ -9,7 +9,16 @@
 --
 -- `resolve_held(path)` (at the end) resolves the hunks where two branches
 -- each moved a held count, a line marked `-- held: additive`, by arithmetic,
--- printing each sum; a `-- held: measured` line, or an unmarked one, it refuses.
+-- printing each sum. A `-- held: measured` line it leaves to be measured:
+-- ours' line with a placeholder value and the marker `-- held: measured (to
+-- be measured)`, so the file parses and the gate that holds the value fails,
+-- printing the real one. An unmarked line it refuses.
+--
+-- Clearing the marker: run the gate that holds the value; it fails, printing
+-- the measured number (or string). Put that in as the line's value and drop
+-- the parenthesis, so the line ends `-- held: measured` again. resolve_held
+-- refuses a file that still holds a `(to be measured)` marker, so a
+-- placeholder never survives a second merge.
 
 -- The kind of marker a line is: "open", "base", "split", "close", or "" for
 -- none. A CR before the newline is ignored, so CRLF files read the same.
@@ -207,13 +216,47 @@ end
 --
 -- (`#` and `//` comments are read too.) An additive count resolves as
 -- base + (ours - base) + (theirs - base); a measured one (an instruction
--- total, an allocation count) is emergent, so it never resolves by itself.
+-- total, an allocation count) is emergent, so it never resolves by itself:
+-- its value is the last `= <value>` on the line, before the marker, and the
+-- placeholder is the base's value when that is an integer, ours' when it is
+-- a string. Either way the `(to be measured)` marker is what flags it.
 
--- A held line's kind: "additive", "measured", or "" for a line with no marker.
+-- A held line's kind: "additive", "measured", "pending" for a measured line
+-- still marked `(to be measured)`, or "" for a line with no marker.
 function held_kind(line)
-  local m = re_find(trim(line), "(?:--|#|//) held: (additive|measured)$")
+  local l = trim(line)
+  if re_find(l, "(?:--|#|//) held: measured \\(to be measured\\)$") ~= nil then return "pending" end
+  local m = re_find(l, "(?:--|#|//) held: (additive|measured)$")
   if m == nil then return "" end
   return m.group
+end
+
+-- A measured line's value: `{kind, at, text}`, kind "number" or "string",
+-- `at` where the value starts and `text` the value as written; nil when the
+-- line's last `=` before its marker holds neither.
+function held_value(line)
+  local marks = find_all(line, " held: measured")
+  local head = sub(line, 1, marks[#marks] - 1)
+  local m = re_find(head, "= *(\"(?:[^\"\\\\]|\\\\.)*\"|[0-9]+)[ ,;})\\]]*(?:--|#|//)$")
+  if m == nil then return nil end
+  local kind = "number"
+  if starts_with(m.group, "\"") then kind = "string" end
+  return {kind = kind, at = m.at + find(m.text, m.group) - 1, text = m.group}
+end
+
+-- A measured line left to be measured: `ours` with the base's integer in
+-- place of its own (a string value kept as ours has it), and its marker
+-- `held: measured (to be measured)`. `at` names the line in a refusal.
+function held_placeholder(ours, base, at)
+  local vo = held_value(ours)
+  local vb = held_value(base)
+  if vo == nil or vb == nil then fail(at .. ": a measured line whose value is neither an integer nor a string after its last `=`") end
+  if vo.kind ~= vb.kind then fail(at .. ": a measured value that is a " .. vb.kind .. " in the base and a " .. vo.kind .. " in ours") end
+  local line = ours
+  if vo.kind == "number" then line = sub(ours, 1, vo.at - 1) .. vb.text .. sub(ours, vo.at + #vo.text) end
+  local marks = find_all(line, " held: measured")
+  local end_at = marks[#marks] + #" held: measured"
+  return sub(line, 1, end_at - 1) .. " (to be measured)" .. sub(line, end_at)
 end
 
 -- A line cut at its digit runs: `{texts, ints}`, one more text than ints,
@@ -246,7 +289,13 @@ function held_lines(side)
   return out
 end
 
--- Whether a hunk's three sides are the same lines but for their integers.
+-- Whether each of a hunk's lines is measured on all three sides.
+function held_all_measured(o, b, t)
+  return held_kind(o) == "measured" and held_kind(b) == "measured" and held_kind(t) == "measured"
+end
+
+-- Whether a hunk's three sides are the same lines but for their integers
+-- (a line measured on all three sides may differ anywhere).
 function held_shaped(h)
   local o = held_lines(h.ours)
   local b = held_lines(h.base)
@@ -254,7 +303,7 @@ function held_shaped(h)
   if #o == 0 or #o ~= #b or #o ~= #t then return false end
   for i = 1, #o do
     local shape = join(held_cut(o[i]).texts, "#")
-    if join(held_cut(b[i]).texts, "#") ~= shape or join(held_cut(t[i]).texts, "#") ~= shape then return false end
+    if not held_all_measured(o[i], b[i], t[i]) and (join(held_cut(b[i]).texts, "#") ~= shape or join(held_cut(t[i]).texts, "#") ~= shape) then return false end
   end
   return true
 end
@@ -269,6 +318,15 @@ function held_hunk(h, where)
   local notes = {}
   for i = 1, #o do
     local at = where .. ":" .. (h.line + i)
+    if held_all_measured(o[i], b[i], t[i]) then
+      if o[i] == b[i] and t[i] == b[i] then
+        push(out, o[i])
+      else
+        push(out, held_placeholder(o[i], b[i], at))
+        push(notes, {index = i, measured = true, text = ""})
+      end
+      continue
+    end
     local co = held_cut(o[i])
     local cb = held_cut(b[i])
     local ct = held_cut(t[i])
@@ -284,7 +342,7 @@ function held_hunk(h, where)
     local name = held_name(join(slice(co.texts, 1, k), "#"), h.line + i)
     local kind = held_kind(o[i])
     if kind == "" then fail(at .. ": " .. name .. " differs on each side and has no marker: end the line with `-- held: additive` or `-- held: measured`") end
-    if kind == "measured" then fail(where .. ": " .. name .. " is measured: rerun its tier and re-freeze") end
+    if kind == "measured" then fail(at .. ": " .. name .. " is marked measured on ours alone: mark it on all three sides") end
     if #moved > 1 then fail(at .. ": " .. name .. " is one of " .. #moved .. " integers that differ on the line; an additive line holds one") end
     local base = tonumber(cb.ints[k])
     local ours = tonumber(co.ints[k])
@@ -300,17 +358,24 @@ function held_hunk(h, where)
     end
     push(parts, co.texts[#co.texts])
     push(out, join(parts, ""))
-    push(notes, {index = i, text = name .. " " .. base .. " + (" .. ours .. " − " .. base .. ") + (" .. theirs .. " − " .. base .. ") = " .. sum})
+    push(notes, {index = i, measured = false, text = name .. " " .. base .. " + (" .. ours .. " − " .. base .. ") + (" .. theirs .. " − " .. base .. ") = " .. sum})
   end
   return {lines = out, notes = notes}
 end
 
 -- The text with its held hunks resolved: `{text, resolutions, left}`.
 -- `resolutions` is one line a count, `<where>:<line>: NAME base + (ours -
--- base) + (theirs - base) = sum`, the line the count's in the new text;
--- `left` is the hunks it left as they were, `{line, why}`. A refusal (a
--- measured count, an unmarked one, a held line with no base) stops the run.
+-- base) + (theirs - base) = sum`, the line the count's in the new text, or
+-- `measured: <where>:<line> left to be measured` for a measured line given
+-- its placeholder; `left` is the hunks it left as they were, `{line, why}`.
+-- A refusal (an unmarked count, a held line with no base, a `(to be
+-- measured)` marker left from an earlier merge) stops the run.
 function resolve_held_text(text, where)
+  local n = 0
+  for l in lines(text) do
+    n = n + 1
+    if held_kind(l) == "pending" then fail(where .. ":" .. n .. ": a `(to be measured)` marker left from an earlier merge: run the gate that holds it, put in the value it prints and drop the parenthesis, then resolve") end
+  end
   local segments = conflict_segments(text, where)
   local out = {}
   local resolutions = {}
@@ -340,7 +405,13 @@ function resolve_held_text(text, where)
       continue
     end
     local r = held_hunk(s, where)
-    for n in r.notes do push(resolutions, where .. ":" .. (at_line + n.index) .. ": " .. n.text) end
+    for n in r.notes do
+      if n.measured then
+        push(resolutions, "measured: " .. where .. ":" .. (at_line + n.index) .. " left to be measured")
+      else
+        push(resolutions, where .. ":" .. (at_line + n.index) .. ": " .. n.text)
+      end
+    end
     for l in r.lines do push(out, l .. "\n") end
     at_line = at_line + #r.lines
   end
@@ -349,7 +420,8 @@ function resolve_held_text(text, where)
 end
 
 -- A file's held counts resolved and written back. Each resolution is
--- printed, and each hunk left alone; it gives `{resolutions, left}`, so the
+-- printed (a measured line's as left to be measured), and each hunk left
+-- alone; it gives `{resolutions, left}`, so the
 -- caller can put the resolutions in the merge commit's message. A file with
 -- no hunk left must hold no marker. The full gate still confirms the sums.
 function resolve_held(path)

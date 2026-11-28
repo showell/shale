@@ -61,6 +61,48 @@ const VERSIONED = "versioned: 31 loops, 770 instructions" -- held: measured
 >>>>>>> lane
 ]=]
 
+const HELD_MEASURED_NUMBER = [=[
+top
+<<<<<<< HEAD
+const INSTRUCTIONS = 777 -- held: measured
+||||||| base
+const INSTRUCTIONS = 760 -- held: measured
+=======
+const INSTRUCTIONS = 770 -- held: measured
+>>>>>>> lane
+end
+]=]
+
+-- A measured string whose sides differ in more than integers.
+const HELD_MEASURED_WORDS = [=[
+<<<<<<< HEAD
+SPEED = "fast" # held: measured
+||||||| base
+SPEED = "slow" # held: measured
+=======
+SPEED = "slower" # held: measured
+>>>>>>> lane
+]=]
+
+-- An additive hunk and a measured one (a table row) in one file.
+const HELD_BOTH = [=[
+<<<<<<< HEAD
+const EXPECTS = 12 -- held: additive
+||||||| base
+const EXPECTS = 10 -- held: additive
+=======
+const EXPECTS = 11 -- held: additive
+>>>>>>> lane
+mid
+<<<<<<< HEAD
+  {name = "sat", total = 900}, -- held: measured
+||||||| base
+  {name = "sat", total = 950}, -- held: measured
+=======
+  {name = "sat", total = 940}, -- held: measured
+>>>>>>> lane
+]=]
+
 const HELD_UNMARKED = [=[
 <<<<<<< HEAD
 const EXPECTS = 330
@@ -198,7 +240,19 @@ function self_test()
   expect_same(wrong, "held additive", a.text, "top\nconst EXPECTS = 331 -- held: additive\nend\n")
   expect_same(wrong, "held arithmetic", join(a.resolutions, "|"), "x86/fib.shale:2: EXPECTS 249 + (330 − 249) + (250 − 249) = 331")
   expect_same(wrong, "held nothing left", tostring(#a.left), "0")
-  expect_stop(wrong, "held measured", attempt(held_of, HELD_MEASURED), "case: VERSIONED is measured: rerun its tier and re-freeze")
+  local ms = resolve_held_text(HELD_MEASURED, "case")
+  expect_same(wrong, "measured string", ms.text, "const VERSIONED = \"versioned: 32 loops, 777 instructions\" -- held: measured (to be measured)\n")
+  expect_same(wrong, "measured string says", join(ms.resolutions, "|"), "measured: case:1 left to be measured")
+  local mw = resolve_held_text(HELD_MEASURED_WORDS, "case")
+  expect_same(wrong, "measured words", mw.text, "SPEED = \"fast\" # held: measured (to be measured)\n")
+  local mn = resolve_held_text(HELD_MEASURED_NUMBER, "x86/sat.shale")
+  expect_same(wrong, "measured number", mn.text, "top\nconst INSTRUCTIONS = 760 -- held: measured (to be measured)\nend\n")
+  expect_same(wrong, "measured number says", join(mn.resolutions, "|"), "measured: x86/sat.shale:2 left to be measured")
+  local mb = resolve_held_text(HELD_BOTH, "case")
+  expect_same(wrong, "additive and measured", mb.text, "const EXPECTS = 13 -- held: additive\nmid\n  {name = \"sat\", total = 950}, -- held: measured (to be measured)\n")
+  expect_same(wrong, "additive and measured say", join(mb.resolutions, "|"), "case:1: EXPECTS 10 + (12 − 10) + (11 − 10) = 13|measured: case:3 left to be measured")
+  expect_same(wrong, "pending kind", held_kind(split(mb.text, "\n")[3]), "pending")
+  expect_stop(wrong, "leftover marker", attempt(held_of, mn.text .. HELD_ADDITIVE), "case:2: a `(to be measured)` marker left from an earlier merge")
   expect_stop(wrong, "held unmarked", attempt(held_of, HELD_UNMARKED), "case:2: EXPECTS differs on each side and has no marker: end the line with `-- held: additive` or `-- held: measured`")
   expect_stop(wrong, "held two-way", attempt(held_of, HELD_TWO_WAY), "case:1: a held line in a two-way conflict: no base means no arithmetic")
   expect_stop(wrong, "held no conflict", attempt(held_of, "plain\n"), "no conflict in case")
