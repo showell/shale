@@ -161,7 +161,7 @@ A door launched at the top level is the one that reads its secret: a nested
 - `remote_tags.shale` (library): asks a remote for the tags that hold a
   branch's commits on no remote branch, as a branch parked as
   `parked/<name>` and its tag pushed is, and records what it has
-  (`refs/remote-tags/`); `retire_checkout.shale` counts those commits on a
+  (under the git ref namespace remote-tags); `retire_checkout.shale` counts those commits on a
   remote by the records, and `remove_lane.shale` asks first and then
   deletes such a branch.
   `use("cookbook:remote_tags.shale")`
