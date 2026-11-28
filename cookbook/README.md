@@ -31,7 +31,8 @@ checkouts, and `<lanes>` the one that holds your lanes.
 - `remove_lane.shale`: for "remove that finished lane". It runs
   `retire_checkout.shale` on the lane and goes on only at a plain CLEAR;
   then it removes the worktree (or a standalone clone's folder) and deletes
-  the lane's branch, here and on origin, once it is merged. Use it in place
+  the lane's branch, here and on origin, once it is merged (or, unmerged,
+  once a tag on origin holds it, as a parked lane's does). Use it in place
   of a bare `git worktree remove`.
   `cd <lanes> && shale cookbook:remove_lane.shale dir=<lane>`
 - `push_rocco_fork.shale`: for "push that branch to our Rocco fork". It
@@ -157,6 +158,11 @@ A door launched at the top level is the one that reads its secret: a nested
   counts by kind, tag and session. `shale cookbook:read_wants.shale since=<date>`
 - `read_zulip_topic.shale`: prints a Zulip topic's newest messages.
   `shale cookbook:read_zulip_topic.shale --args-stdin` (site, email, key, stream, topic, num)
+- `remote_tags.shale` (library): whether a remote's tag holds a branch's
+  commits that are on no remote branch, as a branch parked as
+  `parked/<name>` and its tag pushed is; `retire_checkout.shale` counts them
+  on a remote by it, and `remove_lane.shale` deletes such a branch.
+  `use("cookbook:remote_tags.shale")`
 - `rename_words.shale`: renames a word across a project's files, whole words
   only. `shale cookbook:rename_words.shale from=fetchUser to=loadUser in=src ext=ts,tsx`
 - `retire_checkout.shale`: says whether a checkout can be deleted, CLEAR or

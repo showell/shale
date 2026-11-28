@@ -1,0 +1,120 @@
+-- This library holds the rule for a commit that is on a remote by a tag
+-- alone: a branch parked as a tag (`parked/<name>`), the tag pushed to
+-- origin and the branch then deleted. Such a commit counts as on a remote,
+-- as one on a remote branch does, only when the remote has the tag and the
+-- tag there is the local one: each tag that holds a commit on no remote
+-- branch is asked of each remote (`git fetch -q --no-tags --no-auto-gc
+-- <remote> refs/tags/<tag>`, its object compared with the local tag's in
+-- FETCH_HEAD). A tag only local, or one the remote has at another object,
+-- covers nothing, and a fetch that fails (no such tag there, no network)
+-- covers nothing either, so a doubt keeps the commit.
+--
+-- The fetch writes FETCH_HEAD and nothing else. Over ssh it runs
+-- unconfined, as the git prelude's `git_fetch` does (`git_remote_over_ssh`).
+--
+-- `retire_checkout.shale` counts a branch's commits on no remote by it, and
+-- `remove_lane.shale` deletes a lane's unmerged branch only when it covers
+-- every such commit.
+--
+--   use("cookbook:remote_tags.shale")
+--   local c = tags_cover("build:lanes/x", real("build:lanes/x"), "HEAD")
+--   -- c.alone == 0 and c.covered == 3, c.said "origin's tag parked/x"
+
+function tags_git(dir_os, args)
+  local argv = {"git", "-C", dir_os}
+  for a in args do push(argv, a) end
+  return run(argv, {timeout_ms = 60000, whole = 4000000, want = "nonzero: said by the caller"})
+end
+
+function tags_git_ok(dir_os, args)
+  local r = tags_git(dir_os, args)
+  if r.code ~= 0 then fail("remote_tags: `git -C " .. dir_os .. " " .. join(args, " ") .. "` exited " .. r.code .. ": " .. trim(r.out)) end
+  return r
+end
+
+-- Whether the remote `remote` has the tag `tag` at the local tag's object:
+-- `{on, why}`, `why` (when not on) git's first line for a fetch that failed
+-- for another reason than a tag not there, else "". `repo` is the
+-- checkout's Shale path, `dir_os` its OS path.
+function tags_on_remote(repo, dir_os, remote, tag)
+  local want = trim(tags_git_ok(dir_os, {"rev-parse", "refs/tags/" .. tag}).out)
+  local argv = {"git", "-C", dir_os, "-c", "color.ui=never", "fetch", "-q", "--no-tags", "--no-auto-gc", remote, "refs/tags/" .. tag}
+  local o = {timeout_ms = 60000, whole = 100000, env = {GIT_TERMINAL_PROMPT = "0"}, want = "nonzero: the tag is not there, said by the caller"}
+  if git_remote_over_ssh(repo, remote, false) then o.unconfined = "remote_tags: ssh reads the user's key, outside the mounts" end
+  local r = run(argv, o)
+  if r.ended ~= "exit" or r.code ~= 0 then
+    local said = lines(trim(r.out))
+    local first = "it " .. r.ended
+    if #said > 0 then first = said[1] end
+    if contains(r.out, "couldn't find remote ref") then first = "" end
+    return {on = false, why = first}
+  end
+  local got = tags_git(dir_os, {"rev-parse", "-q", "--verify", "FETCH_HEAD"})
+  return {on = got.code == 0 and trim(got.out) == want, why = ""}
+end
+
+-- What covers `ref`'s commits that are on no remote branch: `{alone,
+-- covered, said, local_only}`. `alone` counts those on no remote's tag
+-- either; `covered` those a remote's tag holds; `said` names the covering
+-- tags (`origin's tag parked/x`), "" when none; `local_only` the tags that
+-- hold such a commit and that no remote has as they are here, each with
+-- why a remote could not be asked when one could not (`parked/x (origin:
+-- fatal: ...)`).
+function tags_cover(repo, dir_os, ref)
+  local found = {}
+  local parents = {}
+  for l in lines(tags_git_ok(dir_os, {"rev-list", "--parents", ref, "--not", "--remotes"}).out) do
+    if l ~= "" then
+      local ws = words(l)
+      found[ws[1]] = true
+      push(parents, ws)
+    end
+  end
+  local none = {alone = 0, covered = 0, said = "", local_only = {}}
+  if #parents == 0 then return none end
+  -- A tag that holds any of these commits holds one with no parent among
+  -- them, so those few are asked about.
+  local tags = {}
+  for ws in parents do
+    local first = true
+    local i = 2
+    while i <= #ws do
+      if get(found, ws[i], false) then first = false end
+      i = i + 1
+    end
+    if first then
+      for t in lines(tags_git_ok(dir_os, {"for-each-ref", "--format=%(refname:strip=2)", "--contains", ws[1], "refs/tags"}).out) do
+        if t ~= "" then push(tags, t) end
+      end
+    end
+  end
+  tags = unique(tags)
+  sort(tags)
+  local remotes = {}
+  for l in lines(tags_git_ok(dir_os, {"remote"}).out) do
+    if l ~= "" then push(remotes, l) end
+  end
+  local cover = {}
+  local named = {}
+  local local_only = {}
+  for t in tags do
+    local on = ""
+    local unasked = {}
+    for remote in remotes do
+      if on == "" then
+        local a = tags_on_remote(repo, dir_os, remote, t)
+        if a.on then on = remote elseif a.why ~= "" then push(unasked, remote .. ": " .. a.why) end
+      end
+    end
+    if on == "" then
+      if #unasked > 0 then push(local_only, t .. " (" .. join(unasked, "; ") .. ")") else push(local_only, t) end
+    else
+      push(cover, "refs/tags/" .. t)
+      push(named, on .. "'s tag " .. t)
+    end
+  end
+  local args = {"rev-list", "--count", ref, "--not", "--remotes"}
+  for c in cover do push(args, c) end
+  local alone = parse_int(trim(tags_git_ok(dir_os, args).out))
+  return {alone = alone, covered = #parents - alone, said = join(named, ", "), local_only = local_only}
+end
