@@ -56,8 +56,8 @@
 --    default branch itself is never deleted, nor a detached HEAD's commit,
 --    which has no branch. **A branch parked as a tag** is deleted unmerged
 --    (`git branch -D`): one whose every commit on no remote branch a
---    remote's tag holds, by `remote_tags.shale`'s rule, asked before the
---    worktree goes, said as `deleted local x: 3 commits on origin's tag
+--    remote's tag holds, by `remote_tags.shale`'s rule (origin asked for
+--    each tag holding the lane's commits before step 2), said as `deleted local x: 3 commits on origin's tag
 --    parked/x`. One with a commit only here never gets this far:
 --    `retire_checkout` blocks it.
 -- 5. **Delete its remote branch** (`git_push(lane, {delete = branch})`,
@@ -291,6 +291,12 @@ function remove_lane(cfg)
   else
     print("remove_lane: " .. repo_os .. " has no remote: nothing fetched, and its branch is judged merged against its local main branch")
   end
+  -- A tag holding the lane's commits is asked of origin here, a run of its
+  -- own (a child run cannot fetch over ssh), and recorded for
+  -- retire_checkout to read (`remote_tags.shale`).
+  if has_origin and branch ~= "" then
+    for l in tags_record(path, lane_os, "origin", "HEAD") do print("remove_lane: asked origin for the tag " .. l) end
+  end
   require_clear(cfg.root, dir, cfg.env)
   local main = lane_base(repo_os, path, has_origin)
   local no_remote_said = "no remote branch " .. branch .. " on origin"
@@ -302,10 +308,8 @@ function remove_lane(cfg)
     local subs = submodule_check(lane_os, repo_os, branch, main)
     local remote_said = no_remote_said
     if branch ~= "" and has_remote_branch(repo_os, branch) then remote_said = settle_branch(repo_os, branch, main, "remote", path) end
-    -- Asked from the lane while it is there (a fetch over ssh runs from a
-    -- Shale path).
     local cover = nil
-    if branch ~= "" and has_origin then cover = tags_cover(path, lane_os, "refs/heads/" .. branch) end
+    if branch ~= "" and has_origin then cover = tags_cover(lane_os, "refs/heads/" .. branch) end
     if subs.count > 0 then
       git_ok(repo_os, {"worktree", "remove", "--force", lane_os})
     else
@@ -357,12 +361,10 @@ function self_test()
   local T = fresh_dir("scratch:", "remove_lane_self_test")
   local Tos = real(T)
   for d in {"lanes", "build", "tools", "memory"} do mkdir(T .. "/" .. d) end
-  -- `main` holds the main checkout, whose .git the lanes' git reads (and
-  -- writes, a tag's question its FETCH_HEAD, so it is not `ro`), and
-  -- `origin` the bare origin that question reads: a
+  -- `main` holds the main checkout, whose .git the lanes' git reads: a
   -- program runs confined to the root and the mounts, as the box's lanes
   -- reach theirs through the `repos` mount.
-  create(T .. "/mounts", "cookbook = " .. real("cookbook:") .. " ro\nbuild = " .. Tos .. "/build\ntools = " .. Tos .. "/tools ro\nmemory = " .. Tos .. "/memory ro\nmain = " .. Tos .. "/main\norigin = " .. Tos .. "/origin.git ro\nsolo = " .. Tos .. "/solo ro\nsuper = " .. Tos .. "/super ro\n")
+  create(T .. "/mounts", "cookbook = " .. real("cookbook:") .. " ro\nbuild = " .. Tos .. "/build\ntools = " .. Tos .. "/tools ro\nmemory = " .. Tos .. "/memory ro\nmain = " .. Tos .. "/main ro\nsolo = " .. Tos .. "/solo ro\nsuper = " .. Tos .. "/super ro\n")
   local env = {SHALE_MOUNTS = Tos .. "/mounts"}
   local L = T .. "/lanes"
   local Los = real(L)

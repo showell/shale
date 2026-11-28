@@ -23,12 +23,14 @@
 --    unwanted. The remotes are as the last fetch saw them: fetch first when
 --    a remote may have changed since. **A commit a remote's tag holds is on
 --    a remote too**, as a branch parked as `parked/<name>` and its tag
---    pushed is: each tag holding such a commit is asked of each remote, and
---    counts only when the remote has it as it is here (`remote_tags.shale`,
---    the rule's one home; the question is a fetch that writes FETCH_HEAD
---    alone). A branch its tags cover wholly is said in its check line, `x:
---    3 commits on origin's tag parked/x`; a tag only local, or a remote's
---    tag behind the branch, leaves the rest blocking, said.
+--    pushed is, by the records of the last question asked of the remote
+--    (`refs/remote-tags/<remote>/<tag>`; `remote_tags.shale` is the rule's
+--    one home, and `remove_lane.shale` asks before it runs this; a plain
+--    `git fetch` records no tag). This recipe asks nothing: it reads the
+--    records, as it reads the remote branches. A branch the records cover
+--    wholly is said in its check line, `x: 3 commits on origin's tag
+--    parked/x`; a tag with no record (only local, or never asked), or a
+--    remote's tag behind the branch, leaves the rest blocking, said.
 -- 3. **Worktrees**: a linked worktree registered in it (deleting the main
 --    checkout strands it), or, when it is itself a linked worktree, its
 --    branch with commits on no remote (by 2's rule, tags included). Remove a worktree with `git -C <main>
@@ -282,8 +284,8 @@ end
 -- them all (said in `v.checks` as `<label>: 3 commits on origin's tag
 -- parked/x`), else the reason's words, which say what a tag covers and
 -- which tags are only local.
-function tags_said(v, path, os, ref, label, count)
-  local c = tags_cover(path, os, ref)
+function tags_said(v, os, ref, label, count)
+  local c = tags_cover(os, ref)
   if c.alone == 0 then
     push(v.checks, label .. ": " .. plural(count, "commit", "commits") .. " on " .. c.said)
     return ""
@@ -296,7 +298,7 @@ end
 
 -- 2: local branches, and a detached HEAD, with commits on no remote: on no
 -- remote branch, and on no tag a remote has (`tags_said`).
-function check_branches(v, path, os)
+function check_branches(v, os)
   local remotes = {}
   for l in lines(git_ok(os, {"remote"}).out) do
     if l ~= "" then push(remotes, l) end
@@ -320,7 +322,7 @@ function check_branches(v, path, os)
         add_reason(v, "branch", label .. " has " .. plural(count, "commit", "commits") .. " on no remote (it has none)")
         unpushed = unpushed + 1
       else
-        local said = tags_said(v, path, os, ref, label, count)
+        local said = tags_said(v, os, ref, label, count)
         if said ~= "" then
           add_reason(v, "branch", label .. " has " .. said)
           unpushed = unpushed + 1
@@ -358,7 +360,7 @@ end
 
 -- 3, for a linked worktree: its branch, with commits on no remote (on
 -- no remote branch, and on no tag a remote has: `tags_said`).
-function check_worktree_branch(v, path, os)
+function check_worktree_branch(v, os)
   local common = trim(git_ok(os, {"rev-parse", "--path-format=absolute", "--git-common-dir"}).out)
   local main = common
   if ends_with(main, "/.git") then main = sub(main, 1, #main - 5) end
@@ -382,7 +384,7 @@ function check_worktree_branch(v, path, os)
   local count = parse_int(trim(git_ok(os, {"rev-list", "--count", "HEAD", "--not", "--remotes"}).out))
   push(v.checks, "worktree: a linked worktree of " .. main .. " on " .. branch .. ", " .. plural(count, "commit", "commits") .. " on no remote branch; its main's branches are not this folder's")
   if count > 0 then
-    local said = tags_said(v, path, os, "HEAD", branch, count)
+    local said = tags_said(v, os, "HEAD", branch, count)
     if said ~= "" then add_reason(v, "worktree", "a worktree of " .. main .. ", its " .. branch .. " with " .. said) end
   end
   push(v.notes, "it is a worktree: delete it with `git -C " .. main .. " worktree remove " .. os .. "`, never rm")
@@ -508,12 +510,12 @@ function judge(dir_arg, cfg)
   if exists(path .. "/.git/HEAD") then
     v.kind = "a checkout"
     check_changes(v, os, false)
-    check_branches(v, path, os)
+    check_branches(v, os)
     check_worktrees_of(v, os)
   elseif exists(path .. "/.git") then
     v.kind = "a linked worktree"
     check_changes(v, os, true)
-    check_worktree_branch(v, path, os)
+    check_worktree_branch(v, os)
   else
     v.kind = "not a git checkout"
     add_reason(v, "not-git", "it is not a git checkout, so nothing in it is in any history")
@@ -659,6 +661,7 @@ function self_test()
     commit_file(os[name], R .. "/" .. name, "b.txt", "b\n")
     if name ~= "tag-older" then git_ok(os[name], {"tag", "-a", "-m", "parked", "parked/" .. name}) end
     if name ~= "tag-local" then git_ok(os[name], {"push", "-q", "origin", "refs/tags/parked/" .. name}) end
+    tags_record(R .. "/" .. name, os[name], "origin", "refs/heads/side")
   end
   -- 3: a linked worktree of has-wt, outside the root; worktrees of a main
   -- outside the root, one with its branch a commit past every remote.
@@ -674,6 +677,7 @@ function self_test()
   commit_file(Ros .. "/wt-tagged", R .. "/wt-tagged", "p.txt", "p\n")
   git_ok(Ros .. "/wt-tagged", {"tag", "-a", "-m", "parked", "parked/wt-parked"})
   git_ok(Ros .. "/wt-tagged", {"push", "-q", "origin", "refs/tags/parked/wt-parked"})
+  tags_record(R .. "/wt-tagged", Ros .. "/wt-tagged", "origin", "HEAD")
   -- 3, with no remote: worktrees of a main with none, one merged into its
   -- local main, one a commit past it.
   local local_os = plant(T, "local-main", "elsewhere")
