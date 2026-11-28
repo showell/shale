@@ -6,6 +6,10 @@
 -- diff3 (`<<<<<<<`, `|||||||`, `=======`, `>>>>>>>`) and the two-way one
 -- with no base section. A marker out of order, or a hunk never closed,
 -- stops the run, naming its line.
+--
+-- `resolve_held(path)` (at the end) resolves the hunks where two branches
+-- each moved a held count, a line marked `-- held: additive`, by arithmetic,
+-- printing each sum; a `-- held: measured` line, or an unmarked one, it refuses.
 
 -- The kind of marker a line is: "open", "base", "split", "close", or "" for
 -- none. A CR before the newline is ignored, so CRLF files read the same.
@@ -42,11 +46,12 @@ function conflict_segments(text, where?)
     local whole = piece
     if i < #pieces then whole = piece .. "\n" end
     local kind = conflict_marker_kind(piece)
+    if hunk ~= nil then push(hunk.raw, whole) end
     if hunk == nil then
       if kind == "open" then
         if #plain > 0 then push(segments, {kind = "text", text = join(plain, "")}) end
         plain = {}
-        hunk = {kind = "hunk", line = i, style = "two-way", ours_label = conflict_marker_label(piece), theirs_label = "", ours = {}, base = {}, theirs = {}}
+        hunk = {kind = "hunk", line = i, style = "two-way", ours_label = conflict_marker_label(piece), theirs_label = "", ours = {}, base = {}, theirs = {}, raw = {whole}}
         part = "ours"
       elseif kind == "base" or kind == "close" then
         fail(at .. ":" .. i .. ": a `" .. sub(piece, 1, 7) .. "` marker outside any conflict")
@@ -68,6 +73,7 @@ function conflict_segments(text, where?)
       hunk.ours = join(hunk.ours, "")
       hunk.base = join(hunk.base, "")
       hunk.theirs = join(hunk.theirs, "")
+      hunk.raw = join(hunk.raw, "")
       push(segments, hunk)
       hunk = nil
     else
@@ -80,9 +86,10 @@ function conflict_segments(text, where?)
 end
 
 -- Each hunk in the text, in order: `{line, style, ours, base, theirs,
--- ours_label, theirs_label}`. `line` is its `<<<<<<<` line's number, `style`
--- is "diff3" or "two-way", and a two-way hunk's `base` is "". Each side's
--- text is its lines whole, newlines and all.
+-- ours_label, theirs_label, raw}`. `line` is its `<<<<<<<` line's number,
+-- `style` is "diff3" or "two-way", and a two-way hunk's `base` is "". Each
+-- side's text is its lines whole, newlines and all; `raw` is the whole hunk
+-- as the file has it, markers included.
 function conflict_hunks(text, where?)
   local hunks = {}
   for s in conflict_segments(text, where) do
@@ -189,4 +196,167 @@ function keep_side_file(path, side)
   local text = keep_side(read(path), side, path)
   assert_resolved(text, path)
   replace(path, text)
+end
+-- Held counts. A test tier often holds a count exactly (`const EXPECTS =
+-- 343`), and two lanes that each add tests conflict on its line. A held
+-- line says its kind with a trailing comment, in the file's own comment
+-- syntax, as the last thing on the line:
+--
+--   const EXPECTS = 343 -- held: additive
+--   const VERSIONED = "versioned: 32 loops, 777 instructions" -- held: measured
+--
+-- (`#` and `//` comments are read too.) An additive count resolves as
+-- base + (ours - base) + (theirs - base); a measured one (an instruction
+-- total, an allocation count) is emergent, so it never resolves by itself.
+
+-- A held line's kind: "additive", "measured", or "" for a line with no marker.
+function held_kind(line)
+  local m = re_find(trim(line), "(?:--|#|//) held: (additive|measured)$")
+  if m == nil then return "" end
+  return m.group
+end
+
+-- A line cut at its digit runs: `{texts, ints}`, one more text than ints,
+-- so texts[1] .. ints[1] .. texts[2] ... is the line again.
+function held_cut(line)
+  local texts = {}
+  local ints = {}
+  local at = 1
+  for m in re_find_all(line, "[0-9]+") do
+    push(texts, sub(line, at, m.at - 1))
+    push(ints, m.text)
+    at = m.at + #m.text
+  end
+  push(texts, sub(line, at))
+  return {texts = texts, ints = ints}
+end
+
+-- The name a held integer goes by: the last `NAME =` (or `["key"] =`)
+-- before it, else "line N".
+function held_name(before, line_no)
+  local found = re_find_all(before, "([A-Za-z_][A-Za-z0-9_]*|\\[\"[^\"]*\"\\]) *=")
+  if #found == 0 then return "line " .. line_no end
+  return found[#found].group
+end
+
+-- A side's lines, each without its newline.
+function held_lines(side)
+  local out = split(side, "\n")
+  if #out > 0 and out[#out] == "" then out = slice(out, 1, #out - 1) end
+  return out
+end
+
+-- Whether a hunk's three sides are the same lines but for their integers.
+function held_shaped(h)
+  local o = held_lines(h.ours)
+  local b = held_lines(h.base)
+  local t = held_lines(h.theirs)
+  if #o == 0 or #o ~= #b or #o ~= #t then return false end
+  for i = 1, #o do
+    local shape = join(held_cut(o[i]).texts, "#")
+    if join(held_cut(b[i]).texts, "#") ~= shape or join(held_cut(t[i]).texts, "#") ~= shape then return false end
+  end
+  return true
+end
+
+-- One held-shaped hunk resolved: `{lines, notes}`, each note
+-- `{index, text}` for the line it resolved. A refusal stops the run.
+function held_hunk(h, where)
+  local o = held_lines(h.ours)
+  local b = held_lines(h.base)
+  local t = held_lines(h.theirs)
+  local out = {}
+  local notes = {}
+  for i = 1, #o do
+    local at = where .. ":" .. (h.line + i)
+    local co = held_cut(o[i])
+    local cb = held_cut(b[i])
+    local ct = held_cut(t[i])
+    local moved = {}
+    for k = 1, #co.ints do
+      if co.ints[k] ~= cb.ints[k] or ct.ints[k] ~= cb.ints[k] then push(moved, k) end
+    end
+    if #moved == 0 then
+      push(out, o[i])
+      continue
+    end
+    local k = moved[1]
+    local name = held_name(join(slice(co.texts, 1, k), "#"), h.line + i)
+    local kind = held_kind(o[i])
+    if kind == "" then fail(at .. ": " .. name .. " differs on each side and has no marker: end the line with `-- held: additive` or `-- held: measured`") end
+    if kind == "measured" then fail(where .. ": " .. name .. " is measured: rerun its tier and re-freeze") end
+    if #moved > 1 then fail(at .. ": " .. name .. " is one of " .. #moved .. " integers that differ on the line; an additive line holds one") end
+    local base = tonumber(cb.ints[k])
+    local ours = tonumber(co.ints[k])
+    local theirs = tonumber(ct.ints[k])
+    local sum = base + (ours - base) + (theirs - base)
+    if sum < 0 then fail(at .. ": " .. name .. " would be " .. sum .. ", below zero") end
+    local ints = slice(co.ints, 1, #co.ints)
+    ints[k] = tostring(sum)
+    local parts = {}
+    for j = 1, #ints do
+      push(parts, co.texts[j])
+      push(parts, ints[j])
+    end
+    push(parts, co.texts[#co.texts])
+    push(out, join(parts, ""))
+    push(notes, {index = i, text = name .. " " .. base .. " + (" .. ours .. " − " .. base .. ") + (" .. theirs .. " − " .. base .. ") = " .. sum})
+  end
+  return {lines = out, notes = notes}
+end
+
+-- The text with its held hunks resolved: `{text, resolutions, left}`.
+-- `resolutions` is one line a count, `<where>:<line>: NAME base + (ours -
+-- base) + (theirs - base) = sum`, the line the count's in the new text;
+-- `left` is the hunks it left as they were, `{line, why}`. A refusal (a
+-- measured count, an unmarked one, a held line with no base) stops the run.
+function resolve_held_text(text, where)
+  local segments = conflict_segments(text, where)
+  local out = {}
+  local resolutions = {}
+  local left = {}
+  local at_line = 0
+  local hunks = 0
+  for s in segments do
+    if s.kind == "text" then
+      push(out, s.text)
+      at_line = at_line + #find_all(s.text, "\n")
+      continue
+    end
+    hunks = hunks + 1
+    local why = ""
+    if s.style ~= "diff3" then
+      for l in held_lines(s.ours .. s.theirs) do
+        if held_kind(l) ~= "" then fail(where .. ":" .. s.line .. ": a held line in a two-way conflict: no base means no arithmetic (merge with merge.conflictStyle diff3)") end
+      end
+      why = "two-way, with no held line"
+    elseif not held_shaped(s) then
+      why = "its sides differ in more than integers"
+    end
+    if why ~= "" then
+      push(left, {line = at_line + 1, why = why})
+      push(out, s.raw)
+      at_line = at_line + #find_all(s.raw, "\n")
+      continue
+    end
+    local r = held_hunk(s, where)
+    for n in r.notes do push(resolutions, where .. ":" .. (at_line + n.index) .. ": " .. n.text) end
+    for l in r.lines do push(out, l .. "\n") end
+    at_line = at_line + #r.lines
+  end
+  if hunks == 0 then fail("resolve_held: no conflict in " .. where) end
+  return {text = join(out, ""), resolutions = resolutions, left = left}
+end
+
+-- A file's held counts resolved and written back. Each resolution is
+-- printed, and each hunk left alone; it gives `{resolutions, left}`, so the
+-- caller can put the resolutions in the merge commit's message. A file with
+-- no hunk left must hold no marker. The full gate still confirms the sums.
+function resolve_held(path)
+  local r = resolve_held_text(read(path), path)
+  for n in r.resolutions do print(n) end
+  for h in r.left do print(path .. ":" .. h.line .. ": a conflict left alone: " .. h.why) end
+  if #r.left == 0 then assert_resolved(r.text, path) end
+  if #r.resolutions > 0 then replace(path, r.text) end
+  return {resolutions = r.resolutions, left = r.left}
 end

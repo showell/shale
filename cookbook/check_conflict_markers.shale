@@ -38,6 +38,79 @@ theirs
 b
 ]=]
 
+-- Held counts: each case is a diff3 conflict, as two lanes leave one.
+const HELD_ADDITIVE = [=[
+top
+<<<<<<< HEAD
+const EXPECTS = 330 -- held: additive
+||||||| base
+const EXPECTS = 249 -- held: additive
+=======
+const EXPECTS = 250 -- held: additive
+>>>>>>> lane
+end
+]=]
+
+const HELD_MEASURED = [=[
+<<<<<<< HEAD
+const VERSIONED = "versioned: 32 loops, 777 instructions" -- held: measured
+||||||| base
+const VERSIONED = "versioned: 31 loops, 760 instructions" -- held: measured
+=======
+const VERSIONED = "versioned: 31 loops, 770 instructions" -- held: measured
+>>>>>>> lane
+]=]
+
+const HELD_UNMARKED = [=[
+<<<<<<< HEAD
+const EXPECTS = 330
+||||||| base
+const EXPECTS = 249
+=======
+const EXPECTS = 250
+>>>>>>> lane
+]=]
+
+-- A held hunk, a hunk of other text (left alone), and two marked lines in
+-- one hunk, one of them a negative delta (theirs removed two tests).
+const HELD_MIXED = [=[
+<<<<<<< HEAD
+const EXPECTS = 12 -- held: additive
+||||||| base
+const EXPECTS = 10 -- held: additive
+=======
+const EXPECTS = 11 -- held: additive
+>>>>>>> lane
+<<<<<<< HEAD
+local name = "ours"
+||||||| base
+local name = "base"
+=======
+local name = "theirs"
+>>>>>>> lane
+mid
+<<<<<<< HEAD
+  {root = "a.roc", count = 21}, -- held: additive
+  {root = "b.roc", count = 9}, -- held: additive
+||||||| base
+  {root = "a.roc", count = 20}, -- held: additive
+  {root = "b.roc", count = 9}, -- held: additive
+=======
+  {root = "a.roc", count = 20}, -- held: additive
+  {root = "b.roc", count = 7}, -- held: additive
+>>>>>>> lane
+]=]
+
+const HELD_TWO_WAY = [=[
+<<<<<<< HEAD
+const EXPECTS = 330 -- held: additive
+=======
+const EXPECTS = 250 -- held: additive
+>>>>>>> lane
+]=]
+
+function held_of(text) return resolve_held_text(text, "case") end
+
 function hunks_of(text) return conflict_hunks(text, "case") end
 function keep_of(text, side) return keep_side(text, side, "case") end
 function resolve_of(text, sides) return resolve_hunks(text, sides, "case") end
@@ -120,6 +193,27 @@ function self_test()
   expect_same(wrong, "file kept", read(f), keep_side(DIFF3, "theirs"))
   assert_file_resolved(f)
   remove_tree(dir)
+
+  local a = resolve_held_text(HELD_ADDITIVE, "x86/fib.shale")
+  expect_same(wrong, "held additive", a.text, "top\nconst EXPECTS = 331 -- held: additive\nend\n")
+  expect_same(wrong, "held arithmetic", join(a.resolutions, "|"), "x86/fib.shale:2: EXPECTS 249 + (330 − 249) + (250 − 249) = 331")
+  expect_same(wrong, "held nothing left", tostring(#a.left), "0")
+  expect_stop(wrong, "held measured", attempt(held_of, HELD_MEASURED), "case: VERSIONED is measured: rerun its tier and re-freeze")
+  expect_stop(wrong, "held unmarked", attempt(held_of, HELD_UNMARKED), "case:2: EXPECTS differs on each side and has no marker: end the line with `-- held: additive` or `-- held: measured`")
+  expect_stop(wrong, "held two-way", attempt(held_of, HELD_TWO_WAY), "case:1: a held line in a two-way conflict: no base means no arithmetic")
+  expect_stop(wrong, "held no conflict", attempt(held_of, "plain\n"), "no conflict in case")
+  local m = resolve_held_text(HELD_MIXED, "case")
+  local other = between(HELD_MIXED, "lane\n", "mid\n")
+  expect_same(wrong, "held mixed", m.text, "const EXPECTS = 13 -- held: additive\n" .. other .. "mid\n  {root = \"a.roc\", count = 21}, -- held: additive\n  {root = \"b.roc\", count = 7}, -- held: additive\n")
+  expect_same(wrong, "held mixed arithmetic", join(m.resolutions, "|"), "case:1: EXPECTS 10 + (12 − 10) + (11 − 10) = 13|case:10: count 20 + (21 − 20) + (20 − 20) = 21|case:11: count 9 + (9 − 9) + (7 − 9) = 7")
+  expect_same(wrong, "held left alone", #m.left .. " " .. m.left[1].line .. " " .. m.left[1].why, "1 2 its sides differ in more than integers")
+
+  local hf = path_under(fresh_dir("scratch:", "held"), "fib.shale")
+  create(hf, HELD_ADDITIVE)
+  local got = resolve_held(hf)
+  expect_same(wrong, "held file", read(hf), a.text)
+  expect_same(wrong, "held file gives", tostring(#got.resolutions) .. " " .. #got.left, "1 0")
+  remove_tree(dirname(hf))
 
   for w in wrong do print("wrong: " .. w) end
   if #wrong > 0 then fail("conflicts self-test: " .. #wrong .. " wrong") end
